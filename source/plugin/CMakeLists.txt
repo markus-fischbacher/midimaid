@@ -1,12 +1,17 @@
 # Plugin targets. Format-specific decisions live only in cmake/Formats.cmake (MIDIMAID_FORMATS).
 option(MIDIMAID_COPY_PLUGINS "Copy built plugins into the user plugin folders (needed for auval)" OFF)
 
+# Format/host capability logic without JUCE, so it can be unit-tested (SPEC 2.4).
+add_library(mm_host_capabilities STATIC HostCapabilities.cpp)
+target_include_directories(mm_host_capabilities PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(mm_host_capabilities PRIVATE mm_warnings)
+
 # Code shared by both variants. Plugin-specific defines come from the juce_add_plugin targets.
-add_library(mm_plugin_common STATIC ProcessorBase.cpp PlaceholderEditor.cpp)
+add_library(mm_plugin_common STATIC ProcessorBase.cpp PlaceholderEditor.cpp HostDetection.cpp)
 target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(
     mm_plugin_common
-    PUBLIC mm_core juce::juce_audio_processors
+    PUBLIC mm_core mm_host_capabilities juce::juce_audio_processors
     PRIVATE mm_warnings juce::juce_recommended_config_flags)
 
 set(_mm_plugin_defines JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)

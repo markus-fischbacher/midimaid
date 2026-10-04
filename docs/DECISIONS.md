@@ -152,3 +152,21 @@ pluginval, Live-Version.
 Nicht geprüft: `windows-debug`/`windows-release` in `CMakePresets.json` setzen `cl` als Compiler und gehen davon aus,
 dass CLion bzw. die Developer-Eingabeaufforderung die Visual-Studio-Umgebung lädt. `linux-*` ist ebenfalls noch
 ungeprüft (kommt mit der Linux-CI).
+
+## Host-Fähigkeiten (Annahmen, Stand 04.10.2026)
+
+`HostCapabilities` (`source/plugin/HostCapabilities.{h,cpp}`) leitet aus Format, Host und Variante die Fähigkeiten
+ab (SPEC §2.4). Grundsatz: **unbekannt = nicht verfügbar**. Folgende Werte sind **Annahmen**, die die
+Host-Verifikation in Phase 0 bestätigen muss; bei einem negativen Ergebnis wird die Tabelle in
+`HostCapabilities.cpp` samt Test angepasst.
+
+| Host | MIDI-Ausgang | MIDI-FX-Slot | Kopplung im selben Prozess | Drag & Drop nach außen | Tasten-Weiterleitung |
+|---|---|---|---|---|---|
+| Standalone | ja | nein | nein | ja | ja |
+| Live (VST3, AU Instrument) | ja | nein | ja (Annahme) | ja (Annahme) | nein (ungemessen) |
+| Logic (AU `aumi`) | ja | ja | ja (Annahme) | ja (Annahme) | nein (ungemessen) |
+| Logic (AU Instrument) | nein | nein | ja (Annahme) | ja (Annahme) | nein (ungemessen) |
+| Reaper, Bitwig (VST3 Instrument) | ja | nein | nein (ungeprüft, Bitwig kann Plugins auslagern) | nein | nein |
+| unbekannt, CLAP/LV2/AAX | nein | nein | nein | nein | nein |
+
+Nur `detectHostCapabilities` (`HostDetection.cpp`) liest JUCEs `wrapperType` und `PluginHostType`.
