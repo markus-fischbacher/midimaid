@@ -20,7 +20,7 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
 - [x] Plugin-Targets: Instrument (VST3, AU, Standalone) und MIDI-FX (AU `aumi`), gemeinsame Kern-Bibliothek
 - [x] `HostCapabilities`-Schicht (Format, Host, Fähigkeiten) mit Tests
 - [x] Minimal-Plugin spielt ein fest codiertes 1-Takt-Pattern synchron zum Transport
-- [ ] Drag & Drop eines fest codierten .mid aus dem Plugin
+- [x] Drag & Drop eines fest codierten .mid aus dem Plugin
 - [ ] GitHub-Actions-CI: macOS und Windows (Build, Tests, pluginval), Linux (core-Tests, VST3-Kompiliertest)
 - [ ] **Host-Verifikation** (manuell, Ergebnisse in `DECISIONS.md`):
   - [ ] Live 12 macOS VST3 und AU, Windows VST3: MIDI From → MidiMaid-Spur. **Bestätigen**, dass Live beim

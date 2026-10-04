@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/PatternPlayer.h"
+#include "plugin/MidiExporter.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -32,6 +33,11 @@ public:
     const juce::String getProgramName(int index) override;
     void changeProgramName(int index, const juce::String& newName) override;
 
+    /// Export for drag & drop (SPEC 3.4).
+    MidiExporter& midiExporter();
+    /// Last tempo reported by the host (120 until the host reported one). Safe to read from any thread.
+    double lastKnownBpm() const;
+
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
@@ -41,6 +47,8 @@ private:
     juce::String name_;
     mm::engine::PatternPlayer player_;
     mm::engine::MidiEventList events_;
+    std::atomic<double> lastBpm_{120.0};
+    MidiExporter exporter_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProcessorBase)
 };

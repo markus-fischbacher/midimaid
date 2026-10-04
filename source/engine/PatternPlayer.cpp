@@ -7,13 +7,6 @@ namespace mm::engine {
 
 namespace {
 
-constexpr std::array<PatternNote, 4> kPlaceholderNotes{{
-    {2 * 240, 360, 1, 33, 100},
-    {6 * 240, 360, 1, 33, 100},
-    {10 * 240, 360, 1, 33, 100},
-    {14 * 240, 360, 1, 33, 124},
-}};
-
 /// Sample offset within the block: `base` plus the rounded distance, kept inside [0, numSamples - 1].
 int clampOffset(int base, double samples, int numSamples) {
     const auto offset = static_cast<long long>(base) + static_cast<long long>(std::llround(samples));
@@ -21,10 +14,6 @@ int clampOffset(int base, double samples, int numSamples) {
 }
 
 } // namespace
-
-PatternView placeholderPattern() {
-    return {kPlaceholderNotes.data(), kPlaceholderNotes.size(), 4 * kTicksPerQuarter};
-}
 
 bool MidiEventList::push(const MidiEvent& event) {
     if (full()) {
