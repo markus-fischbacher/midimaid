@@ -11,7 +11,7 @@ add_library(mm_plugin_common STATIC ProcessorBase.cpp PlaceholderEditor.cpp Host
 target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(
     mm_plugin_common
-    PUBLIC mm_core mm_host_capabilities juce::juce_audio_processors
+    PUBLIC mm_core mm_engine mm_host_capabilities juce::juce_audio_processors
     PRIVATE mm_warnings juce::juce_recommended_config_flags)
 
 set(_mm_plugin_defines JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
