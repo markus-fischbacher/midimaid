@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+  PLUGINVAL_VERSION: v1.0.4
+  # SHA-256 of the pluginval release archives (pinned; empty = print only, fill in after the first run)
+  PLUGINVAL_SHA256_MACOS: 3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f
+  PLUGINVAL_SHA256_WINDOWS: ""
+
+jobs:
+  macos:
+    name: macOS (build, tests, pluginval, auval)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: .cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake', 'cmake/CPM.cmake') }}
+      - name: Toolchain versions
+        run: |
+          echo "image: ${ImageVersion:-unknown}"
+          sw_vers
+          xcodebuild -version
+          clang --version | head -1
+          cmake --version | head -1
+          ninja --version
+      - name: Configure
+        run: cmake --preset macos-debug -DMIDIMAID_COPY_PLUGINS=ON
+      - name: Build
+        run: cmake --build --preset macos-debug
+      - name: Test
+        run: ctest --preset macos-debug
+      - name: Install pluginval
+        run: |
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip"
+          echo "${PLUGINVAL_SHA256_MACOS}  pluginval.zip" | shasum -a 256 -c -
+          unzip -q pluginval.zip
+          echo "PLUGINVAL=$PWD/pluginval.app/Contents/MacOS/pluginval" >> "$GITHUB_ENV"
+      - name: pluginval (VST3, AU, AU MIDI-FX)
+        run: |
+          "$PLUGINVAL" --version
+          for plugin in "$HOME/Library/Audio/Plug-Ins/VST3/MidiMaid.vst3" \
+                        "$HOME/Library/Audio/Plug-Ins/Components/MidiMaid.component" \
+                        "$HOME/Library/Audio/Plug-Ins/Components/MidiMaid MIDI.component"; do
+            "$PLUGINVAL" --strictness-level 10 --validate-in-process --validate "$plugin"
+          done
+      - name: auval
+        run: |
+          killall -9 AudioComponentRegistrar || true
+          sleep 2
+          auval -v aumu Mdmi Klrw
+          auval -v aumi Mdmf Klrw
+
+  windows:
+    name: Windows (build, tests, pluginval)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: x64
+      - uses: actions/cache@v6
+        with:
+          path: .cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake', 'cmake/CPM.cmake') }}
+      - name: Toolchain versions
+        run: |
+          echo "image: $env:ImageVersion"
+          cl 2>&1 | Select-Object -First 1
+          cmake --version | Select-Object -First 1
+          ninja --version
+      - name: Configure
+        run: cmake --preset windows-debug
+      - name: Build
+        run: cmake --build --preset windows-debug
+      - name: Test
+        run: ctest --preset windows-debug
+      - name: Install pluginval
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/$env:PLUGINVAL_VERSION/pluginval_Windows.zip" -OutFile pluginval.zip
+          $hash = (Get-FileHash pluginval.zip -Algorithm SHA256).Hash.ToLower()
+          echo "pluginval_Windows.zip sha256: $hash"
+          if ($env:PLUGINVAL_SHA256_WINDOWS -ne "" -and $hash -ne $env:PLUGINVAL_SHA256_WINDOWS) { throw "pluginval checksum mismatch" }
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+      - name: pluginval (VST3)
+        run: |
+          .\pluginval\pluginval.exe --version
+          .\pluginval\pluginval.exe --strictness-level 10 --validate-in-process --validate "build\windows-debug\source\plugin\MidiMaid_artefacts\Debug\VST3\MidiMaid.vst3"
+
+  linux:
+    name: Linux (build, tests, VST3 compile)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: .cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake', 'cmake/CPM.cmake') }}
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build libasound2-dev libfreetype-dev \
+            libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev \
+            libxrandr-dev libxrender-dev libgl-dev xvfb
+      - name: Toolchain versions
+        run: |
+          echo "image: ${ImageVersion:-unknown}"
+          lsb_release -d
+          g++ --version | head -1
+          cmake --version | head -1
+          ninja --version
+      - name: Configure
+        run: cmake --preset linux-debug
+      - name: Build (includes the VST3 compile test)
+        run: cmake --build --preset linux-debug
+      - name: Test
+        run: xvfb-run -a ctest --preset linux-debug
