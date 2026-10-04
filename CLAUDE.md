@@ -64,7 +64,7 @@ Offene Punkte in `docs/DECISIONS.md` unter „Offen“ eintragen.
   prozessweiten Kanal, den Audio-Threads lesen dürfen (SPEC §6.5).
 
 ### Ausgabestufe
-- Groove, Transposition, Slide-Überlappung und Kick-Freiraum strikt in der Reihenfolge aus SPEC §4.2a.
+- Transposition, Groove, Slide-Überlappung und Kick-Freiraum strikt in der Reihenfolge aus SPEC §4.2a.
 - Host-Parameter nie aus dem Audio-Thread setzen (`setValueNotifyingHost` nur auf dem Message-Thread).
 
 ### Threading
@@ -75,6 +75,8 @@ Offene Punkte in `docs/DECISIONS.md` unter „Offen“ eintragen.
 ### Sicherheit & Datenschutz
 - API-Keys **nur** im Schlüsselbund des Betriebssystems (SPEC §8.5).
 - Keys nie im Plugin-State, in Logs, Fehlermeldungen oder Testdaten.
+- Referenz-Beispiele und importierte Stimmen gehen an Cloud-Provider nur mit Zustimmung pro Provider
+  (SPEC §3.20, D-86); Prompts und Nutzerinhalte nicht ins Log, außer mit „Prompts protokollieren“ (SPEC §10).
 - Keine Telemetrie.
 
 ### Code

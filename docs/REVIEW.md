@@ -188,3 +188,66 @@ Blick auf den Studioalltag in Live und Logic: Wo hakt es beim Arbeiten, unabhän
 - Eigene Sub-Bass-Stimme, automatisch aus dem Bass abgeleitet (Grundtöne lang, eine Oktave tiefer); die
   Architektur für weitere Stimmen ist vorhanden (D-52)
 - Plugin-Hosting, damit in Live eine Spur pro Stimme reicht
+
+
+---
+
+# Teil 4 – Externe Prüfung (04.10.2026)
+
+Ein externes Sprachmodell hat alle Dokumente geprüft und eine konsolidierte Arbeitsliste geliefert
+(ehemals `REVIEW_GPT.md`, im Git-Verlauf erhalten). Jeder Punkt wurde gegen den Stand der Dokumente
+geprüft. Status: **übernommen**, **präzisiert** (übernommen mit Änderungen), **abgelehnt**, **Aufgabe**
+(in der Roadmap eingeplant), **offen** (`DECISIONS.md`). Entscheidungen: D-83 bis D-93, offen: O-22.
+
+## A. Vorgeschlagene Konsolidierungsentscheidungen
+| # | Vorschlag | Bewertung | Status |
+|---|---|---|---|
+| C-1 | Wahrscheinlichkeit, Live-Transponieren, Evolve-Ebene, Chord Memory und mehrere Referenz-Sets nach v1.0, weil „spätere Entscheidungen Vorrang haben“ | Fehllesung: D-74 ist die spätere Entscheidung und legt genau diese Funktionen nach v1.1. Das Review widerspricht sich zudem selbst („bereits konsolidiert: v1.0 ohne Chord Memory … Live-Transposition“). Berechtigter Kern: Den älteren Entscheidungen fehlten Verweise auf D-74. | abgelehnt (D-84), Verweise in `DECISIONS.md` ergänzt |
+| C-2 | v1.0-Umfang bleibt, C-1 kommt obenauf | Mit C-1 entfällt der Zusatz; der Umfang nach D-74 bleibt. | erledigt |
+| C-3 | Drum-Capture und Offline-Verfeinern bleiben gestrichen | entspricht D-75 | übernommen (Verweise an D-47, D-48, D-50) |
+| C-4 | Rückfrage beim Import einer eigenen Stimme: unverändert oder angepasst | Kostet im häufigsten Studiofall bei jedem Import einen Dialog. Der Widerspruch zum Qualitätsversprechen lässt sich sauberer im Versprechen selbst auflösen. | abgelehnt (D-85), SPEC §1 präzisiert |
+| C-5 | Scheitern alle 8 Kandidaten, bleibt das alte Pattern | sinnvoll; vorher lohnen weitere Runden, weil der Kopierschutz allein viele Kandidaten verwerfen kann | präzisiert (D-88) |
+| C-6 | Kopierschutz über normalisierte Intervall- und Rhythmusfolgen | Grundidee richtig; Rolle, Akkorde, Fenster und Längenunterschiede fehlten | präzisiert (D-87) |
+| C-7 | Pattern-Wechsel beendet alle alten Noten, kein Slide über die Grenze | löst den Widerspruch zwischen SPEC §4.2 und §6.2 | übernommen (D-89) |
+| C-8 | Nur das neueste ausstehende Pattern bleibt | nur je Wechselart, sonst würde ein neues Ergebnis einen geplanten Slot-Wechsel verdrängen | präzisiert (D-89) |
+| C-9 | Referenzen und importierte Stimmen nur mit Freigabe pro Anfrage | Ziel richtig, Rückfrage bei jeder Anfrage zu schwerfällig | präzisiert: einmalige Zustimmung pro Provider (D-86) |
+| C-10 | „Verfeinern“ gilt als Zustimmung für das aktuelle Pattern | sinnvoll; importierte Stimmen bleiben geschützt | übernommen (D-86) |
+| C-11 | Mindestvorlauf als Experteneinstellung, Standard 150 ms | sinnvoll; es fehlte, ab welchem Punkt gemessen wird | präzisiert (D-90) |
+| C-12 | Formatunabhängiger State, aber kein Formatwechsel in der DAW versprochen | korrigiert ein Überversprechen in SPEC §2.4 | übernommen (D-91) |
+
+## B. Befunde
+| # | Befund | Bewertung | Status |
+|---|---|---|---|
+| A1 | Keine verbindliche Release-Matrix | `FEATURES.md` ist die Matrix (D-74). Widersprüche gab es nur in älteren Entscheidungen ohne Verweis. | übernommen: Verweise, D-84 |
+| A2 | Echtzeitvertrag unvollständig (Pool, Überlauf, ABA, Eventzahl, Lebenszyklus) | berechtigt | übernommen: SPEC §6.3 „Echtzeit-Vertrag“ |
+| A3 | Transport- und Wechselsemantik unvollständig | berechtigt; Grundregeln direkt festgelegt (Sprung, fehlende Host-Daten, Tempo, Taktart). Der Zustandsautomat folgt vor der Engine. | präzisiert (SPEC §3.4, §6.1), Aufgabe Phase 1b, O-22 |
+| A4 | Qualitätsversprechen nicht abnehmbar | Struktur jetzt festgelegt; Zahlen entstehen im Hörtest, nicht am Schreibtisch | präzisiert (SPEC §4.4, §12, STYLES §1.14) |
+| A5 | Datenmodell und Schema nicht verbindlich | Typen, Noten-IDs, Phrasen bei 1/2/4 Takten, Kick-Raster pro Phrase, `GenerationInfo`, Schema-Felder und Wertebereiche ergänzt. Die Rollen-Zuordnung war eindeutig, steht jetzt aber explizit da. | übernommen (SPEC §3.7, §5, §7.3) |
+| B1 | `chord_memory: true` im STYLES-Beispiel | gewollt (v1.1-Feld steht schon im Profil), aber unkommentiert; außerdem fehlte `acid_siren` | übernommen (Hinweis, `acid_siren`) |
+| B2 | Host-Annahmen ohne Negativpfad | berechtigt | übernommen (ROADMAP Phase 0, Tabelle der Ersatzwege) |
+| B3 | Parameter- und Formatkompatibilität zu abstrakt | berechtigt | übernommen (SPEC §3.13 Parameter-Register, D-91, D-93) |
+| B4 | Offene Musiksemantik | berechtigt | übernommen (D-92, SPEC §3.9, §3.16, §3.18, §7.3, STYLES §1.17) |
+| B5 | Provider-Unterschiede und Abbruch | berechtigt | übernommen (SPEC §7.1, §7.2) |
+| B6 | Datenschutz und Logging | berechtigt | übernommen (D-86, SPEC §10) |
+| B7 | Offline-Bounce nur teilweise definiert | Bounce ohne Trigger und mit gespeichertem Slot war geregelt; offen waren eintreffende Ergebnisse und der Bounce ohne Hub | präzisiert (SPEC §3.13), O-22 |
+| C1 | v1.0-Umfang sehr groß | Umfang ist bewusst entschieden (D-74, C-2); jede Phase hat eine Abnahme | zur Kenntnis, keine Änderung |
+| C2 | Musikalische Qualität nur teilweise testbar | berechtigt | übernommen (Eigenschaftstests, Hörtest-Protokoll, SPEC §12) |
+| C3 | Testkorpus der Referenzanalyse unpräzise | berechtigt; das Rollen-Ziel gehört zu v1.1 | übernommen (SPEC §12) |
+| C4 | CI-Abnahme nicht reproduzierbar | berechtigt | übernommen (Toolchains in SPEC §12, Versionen in `DECISIONS.md`) |
+
+## C. Eigene Zusatzbefunde
+| # | Befund | Folge |
+|---|---|---|
+| Z-1 | SPEC §6.1 und §3.13 widersprachen sich bei Sprüngen nach vorn: einmal Wechselzeitpunkt, einmal Songraster | Sprung = jede PPQ-Unstetigkeit, danach Songraster (D-89) |
+| Z-2 | Note-Offs in `releaseResources` und im Destruktor sind unmöglich, dort gibt es keinen MIDI-Ausgang | nachgeholt im ersten Block nach `prepareToPlay`; Entfernen während der Wiedergabe in der Testmatrix |
+| Z-3 | Gewinner-Seed war als v1.1 markiert, wird aber schon in v1.0 gebraucht: Der Kopierschutz macht die Auswahl vom Set-Inhalt abhängig | D-88 |
+| Z-4 | Der Kopierschutz hätte einfache Muster (rollende Grundton-Bassline) gegen fast jede Bass-Referenz verworfen | nur markante Einträge geschützt (D-87) |
+| Z-5 | Progressionen uneinheitlich notiert (Melodic `VI`, Peak Time `♭VI` für denselben Akkord); Zeitpunkt der Akkordwechsel im Schema offen | D-92, STYLES §1.17, SPEC §5, §7.3 |
+| Z-6 | `acid_siren` fehlte im STYLES-JSON; SPEC §12 verlangte Rollen-Erkennung ≥ 95 %, die erst v1.1 kommt | behoben |
+| Z-7 | Nicht aktive Parameter lassen sich in VST3 und AU nicht zuverlässig ausblenden | D-93, Prüfung in Phase 0 |
+| Z-8 | Slot-Automation im Hub erreicht Voices bei versetzt gerechneten Spuren, Einzelspur-Bounce oder Freeze womöglich nicht rechtzeitig; das betrifft auch den Start mitten im Arrangement | O-22, Messungen in Phase 0 |
+| Z-9 | Bearbeitungen in der Piano-Roll wären als quantisierter Pattern-Wechsel behandelt worden (Verzögerung, abgeschnittene Noten) | Bearbeitungen wirken sofort (D-89) |
+| Z-10 | `juce::MidiBuffer` kann im Audio-Thread allozieren | in `prepareToPlay` reservieren (SPEC §6.3) |
+| Z-11 | SPEC §10 „Keys und vollständige Prompts nur auf Debug-Level und nie Keys“ war in sich widersprüchlich | neu gefasst (D-86) |
+| Z-12 | Bei Patterns über 8 Takten fehlte im KI-Schema die Darstellung der Motive | SPEC §7.3 (`motif_bars`) |
+| Z-13 | Überholte Begründungen: D-34 (KI-Vorlagen-Analyse), D-45 (kombinierter Export), SPEC §4.2 („damit kombinierte Exporte eindeutig bleiben“), Reihenfolge der Ausgabestufe in `CLAUDE.md` | Verweise bzw. Text angepasst |

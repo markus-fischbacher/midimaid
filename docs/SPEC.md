@@ -19,6 +19,8 @@ Das Plugin erzeugt keinen Klang, sondern steuert die Synthesizer des Nutzers.
 **Qualitätsanspruch:** Jedes Ergebnis ist sofort musikalisch nutzbar, also in Tonart, im Groove und
 stiltypisch. Auch wenn die KI schlechte oder ungültige Antworten liefert, darf das Plugin nie
 unbrauchbares MIDI ausgeben, hängende Noten erzeugen oder die DAW instabil machen.
+Das Versprechen gilt für alles, was MidiMaid erzeugt (Generieren, Variation, Verfeinern). Eine importierte
+eigene Stimme (§3.18) bleibt so, wie der Produzent sie geschrieben hat (D-85).
 
 ### 1.1 Abgrenzung zum Wettbewerb
 Live 12 bringt regelbasierte Generatoren mit, Captain Plugins und Scaler arbeiten akkordzentriert,
@@ -96,7 +98,8 @@ Die AU-Instrument-Variante wird trotzdem gebaut und getestet.
 ### 2.3 Phase-0-Spike (verpflichtend)
 Bevor Features gebaut werden, wird das Host-Verhalten mit einem Minimal-Plugin verifiziert:
 MIDI-Out-Routing in Live 12 (macOS und Windows, VST3 und AU), MIDI-FX in Logic, Drag & Drop in beiden
-DAWs und Transport-Sync. Die Ergebnisse kommen nach `DECISIONS.md`.
+DAWs und Transport-Sync. Die Ergebnisse kommen nach `DECISIONS.md`. Für jede Host-Annahme legt
+`ROADMAP.md` (Phase 0) einen Ersatzweg fest, falls der Test negativ ausfällt.
 
 ### 2.4 Format- und Plattform-Architektur
 Ziel: Neue Formate und Linux kommen später per Build-Konfiguration und Validierung dazu, nicht per Umbau.
@@ -125,8 +128,10 @@ Ziel: Neue Formate und Linux kommen später per Build-Konfiguration und Validier
 - **Formatliste per CMake-Variable** `MIDIMAID_FORMATS` (Standard v1.0: `VST3;AU;Standalone` auf macOS,
   `VST3;Standalone` auf Windows und Linux; die MIDI-FX-Variante nur als AU). Ein neues
   Format = Eintrag ergänzen, Validierung einrichten, testen.
-- **Plugin-State formatunabhängig:** gleiche Struktur und `stateVersion` in allen Formaten, damit ein
-  Projekt das Format wechseln kann (z. B. VST3 → AU) und die Daten erhalten bleiben
+- **Plugin-State formatunabhängig:** gleiche Struktur und `stateVersion` in allen Formaten; jede Variante
+  liest den State jeder anderen. Einen direkten Formatwechsel innerhalb der DAW verspricht MidiMaid
+  nicht, weil DAWs keinen State zwischen Formaten übertragen. Slots wandern über die Bibliothek
+  (Slot-Set speichern und laden) (D-91).
 - **Parameter-IDs formatunabhängig:** feste String-IDs, keine Legacy-Parameter-IDs
 - **IDs aller Zielformate jetzt reserviert** (§2.2), damit sie sich später nicht ändern
 - **Hub & Voices** koppeln nur Instanzen desselben Formats im selben Prozess (§6.5); `HostCapabilities`
@@ -188,9 +193,12 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
   - „Neustart“ ist nur an Taktgrenzen erlaubt. Bei Quantisierung „nächster Schlag“ gilt automatisch
     „Legato“, sonst läge Schritt 0 des Patterns nicht mehr auf der Eins und Kick-Raster, Phrasen und
     Akzente wären verschoben.
-  - **Geplante Wechsel:** Jeder Wechsel bekommt einen PPQ-Zeitstempel. Ist der nächste
-    Quantisierungspunkt weniger als 150 ms entfernt, wird der übernächste gewählt. So erreichen Wechsel
-    auch Voices auf anderen Spuren rechtzeitig (§6.5).
+  - **Geplante Wechsel:** Jeder Wechsel bekommt einen PPQ-Zeitstempel. Liegt der nächste
+    Quantisierungspunkt näher als der **Mindestvorlauf** (Standard 150 ms, Einstellung in der
+    Experten-Ebene, D-90), wird der übernächste gewählt. Gemessen wird ab der am weitesten
+    fortgeschrittenen Position aller Instanzen der Gruppe (jede Instanz meldet ihre zuletzt verarbeitete
+    PPQ-Position, §6.5); die Zeit wird mit dem aktuellen Tempo in PPQ umgerechnet. So erreichen Wechsel
+    auch Voices auf anderen Spuren rechtzeitig. Für Slot-Automation in Hub-Gruppen siehe O-22.
 - **Clip:** Das Pattern wird per Drag & Drop als .mid-Datei aus dem Plugin in die DAW gezogen, eine
   Datei pro Stimme.
   - Die Datei enthält **das aktuelle DAW-Tempo** als Tempo-Event sowie Taktart und Spurname
@@ -213,7 +221,9 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
 - **Akzent ist ein eigenes Merkmal der Note** (Flag), nicht aus der Velocity abgeleitet. Bei der Ausgabe
   bekommt eine Akzent-Note die Akzent-Velocity. Die Akzent-Schwelle wird nur beim Import und bei der
   Analyse von fremdem MIDI benutzt, um Akzente zu erkennen.
-- Rasterung (1/4 bis 1/32, Triolen optional), Ausrichtung immer an Skala oder Chromatik umschaltbar
+- Rasterung (1/4 bis 1/32, Triolen optional), Ausrichtung immer an Skala oder Chromatik umschaltbar.
+  Triolen liegen als Ticks im Datenmodell (960 PPQ, 16tel-Triole = 160 Ticks); Groove und Swing
+  verschieben sie nicht (§3.9).
 - Rückgängig und Wiederholen (`juce::UndoManager`)
 - Velocity-Spur unter den Noten (Balken ziehen, mehrere gleichzeitig)
 - **Stimme sperren:** Eine gesperrte Stimme bleibt bei Generieren und Variieren unverändert
@@ -242,7 +252,11 @@ Algorithmische Mutationen, deterministisch über einen Seed, in zwei Gruppen:
 Patterns sind 1, 2, 4, 8 oder 16 Takte lang ([Backlog]: bis 64 Takte). Längere Abläufe entstehen in der
 DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen** zusammengesetzt:
 - Ein Abschnitt besteht aus Phrasen zu 4, 8 oder 16 Takten (z. B. A A' A B)
+- Phrasen decken das Pattern lückenlos und ohne Überschneidung ab. Patterns mit 1, 2 oder 4 Takten haben
+  genau eine Phrase in Pattern-Länge mit der Rolle Hauptmotiv.
 - Pro Phrase gibt es eine Rolle: Hauptmotiv, Variation, Steigerung, Ausdünnung, Antwort
+  (im Code `Main`, `Variation`, `Build`, `Breakdown`, `Answer`)
+- Optional hat eine Phrase ein eigenes Kick-Raster, z. B. `halftime` im Breakdown (STYLES.md §1.2)
 - **[v1.1] Turnaround** ist keine Rolle, sondern ein Merkmal einer Phrase: Ihr letzter Takt wird als
   Turnaround variiert (nur bei 8- und 16-Takt-Phrasen, STYLES.md §1.12)
 - Die KI liefert Motive und einen Formplan, der Algorithmus erzeugt daraus die Varianten
@@ -273,6 +287,8 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
   in der Engine und beim Export (Drag & Drop). Die Piano-Roll kann die Groove-Positionen als Vorschau
   zeigen. Ein Schalter „Groove beim Export einrechnen“ ist standardmäßig an.
 - Slide-Überlappungen bleiben auch mit Groove erhalten.
+- Groove-Versatz und Swing gelten nur für Noten, die auf einem 16tel-Schritt beginnen. Triolen und frei
+  gesetzte Noten bleiben zeitlich unverändert.
 
 ### 3.10 Pattern-Slots
 - **16 Slots pro Instanz.** Jeder Slot ist ein vollständiges Pattern inklusive Archetypen, Groove,
@@ -308,24 +324,31 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
 Automatisierbare Host-Parameter (`AudioProcessorValueTreeState`), über DAW-Automation und das
 MIDI-Mapping der DAW steuerbar:
 
-| Parameter | Typ | Hinweis | Aktiv ab |
-|---|---|---|---|
-| Slot | 1–16 (diskret) | Wechsel quantisiert, beim Start sofort | v1.0 |
-| Mute Stimme 1 … 8 | Schalter | sofort, mit Note-Off; aktiv: 1 = Bass, 2 = Melodie | v1.0 |
-| Transponieren | −12 … +12 | §3.16 | v1.1 |
-| Generieren | Trigger | Flanke 0 → 1 löst aus | v1.1 |
-| Variation Stimme 1 … 8 / Alle | Trigger | Flanke 0 → 1 löst aus | v1.1 |
-| Auto-Evolve | Schalter | an/aus (§6.7) | v1.1 |
-| Evolve behalten | Trigger | übernimmt die klingende Stufe in den Slot | v1.1 |
-| Kreativität, Energie | 0–100 % | wirken erst bei der nächsten Generierung | Backlog |
+**Parameter-Register (normativ, D-93).** IDs sind feste Strings, `versionHint` ist 1 für alle hier
+angelegten Parameter.
 
-Alle Parameter werden **schon in v1.0 mit fester ID angelegt**; nicht aktive sind ausgeblendet und ohne
-Wirkung.
+| ID | Parameter | Typ, Bereich | Standard | Hinweis | Aktiv ab |
+|---|---|---|---|---|---|
+| `slot` | Slot | ganzzahlig 1–16 | 1 | Wechsel quantisiert, beim Start und nach Sprüngen sofort | v1.0 |
+| `mute_1` … `mute_8` | Mute Stimme 1 … 8 | Schalter | aus | sofort, mit Note-Off; aktiv: 1 = Bass, 2 = Melodie | v1.0 |
+| `transpose` | Transponieren | ganzzahlig −12 … +12 | 0 | §3.16 | v1.1 |
+| `generate` | Generieren | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
+| `variation_1` … `variation_8` | Variation Stimme 1 … 8 | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
+| `variation_all` | Variation alle | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
+| `evolve` | Auto-Evolve | Schalter | aus | §6.7 | v1.1 |
+| `evolve_keep` | Evolve behalten | Trigger (Schalter) | aus | übernimmt die klingende Stufe in den Slot | v1.1 |
+| `creativity` | Kreativität | 0–100 % | 40 % | wirkt erst bei der nächsten Generierung (§7.6) | Backlog |
+| `energy` | Energie | 0–100 % | 50 % (Startwert) | wirkt erst bei der nächsten Generierung | Backlog |
+
+Alle Parameter werden **schon in v1.0 mit fester ID angelegt**. Nicht aktive Parameter sind ohne Wirkung
+und als nicht automatisierbar markiert; VST3 und AU können Parameter nicht zuverlässig ausblenden, deshalb
+tragen sie schon ihren späteren Namen. Wie Live und Logic sie anzeigen, prüft Phase 0.
 
 - Trigger werden im Audio-Thread nur als atomares Flag erkannt und auf dem Message-Thread ausgeführt
 - **Parameter für 8 Stimmen werden schon in v1 angelegt** (inaktive ausgeblendet), weil Parameter-IDs
   später nicht mehr hinzugefügt werden sollten, ohne Automationen zu gefährden
-- In einer Voice wirken Mute und Transponieren auf die eigene Stimme, Trigger werden an den Hub weitergereicht
+- In einer Voice wirken Mute und Transponieren auf die eigene Stimme, Trigger werden an den Hub weitergereicht.
+  Der Slot-Parameter einer Voice ist in v1.0 ohne Wirkung; die Voice folgt dem Hub (D-41, offen: O-22).
 - **Start mitten im Arrangement:** Beim Start der Wiedergabe und nach jedem Sprung gilt der Wert des
   Slot-Parameters **sofort**, ohne Quantisierung. Wer bei Takt 37 startet, hört direkt den dort
   automatisierten Slot. Die Position im Pattern richtet sich dann am Taktraster des Songs aus (§6.1);
@@ -333,6 +356,9 @@ Wirkung.
 - **Offline-Rendern / Bounce (non-realtime):** Generieren- und Variations-Trigger werden ignoriert,
   weil KI-Anfragen weder schnell noch reproduzierbar sind. Slot-Wechsel und Mute funktionieren
   deterministisch. Empfohlener Workflow für Arrangements: Ergebnisse in Slots ablegen und Slots automatisieren.
+  Gespielt wird der aktuelle Stand der Slots im Speicher, also das, was auch beim Abspielen klingt
+  (ohne Evolve-Ebene). Ergebnisse von KI-Anfragen oder anderen Hintergrundjobs, die während des
+  Renderns eintreffen, werden erst danach übernommen.
 - Die Parameter-IDs sind ab dem ersten produktiven Einsatz fixiert, weil sonst Automationen in
   DAW-Projekten verloren gehen
 - [v1.1] Beim Offline-Rendern ist Live-Transponieren per Tastatur inaktiv; MIDI aus Regionen/Clips auf
@@ -369,7 +395,10 @@ Zweck: ein gutes Ergebnis gezielt anpassen, statt neu zu würfeln („weniger No
   funktioniert. Neu generieren setzt den Kontext zurück.
 - Jede Note trägt eine stabile ID (§5). Die KI muss IDs unveränderter oder geänderter Noten
   beibehalten und neue Noten ohne ID liefern. Gesperrte Dimensionen werden anhand der ID
-  wiederhergestellt; fehlt eine gesperrte Note in der Antwort, wird sie wieder eingefügt.
+  wiederhergestellt; fehlt eine gesperrte Note in der Antwort, wird sie wieder eingefügt. Unbekannte
+  oder doppelte IDs gelten als neue Noten (Regeln für Noten-IDs in §5).
+- Die KI erhält das Pattern ohne importierte Stimmen, außer der Nutzer hat für den Provider zugestimmt
+  (§3.20, D-86); das Absenden von „Verfeinern“ gilt als Zustimmung für die übrigen Stimmen.
 - Danach laufen Constraint-Schicht und Qualitätsbewertung wie immer (ohne Wiederholungsschutz, STYLES.md §1.14)
 - Jede Verfeinerung landet im Verlauf und ist rückgängig zu machen
 - Bei Patterns über 8 Takten wird auf Motiv- bzw. Phrasenebene verfeinert (§3.7)
@@ -387,7 +416,9 @@ Zweck: das laufende Pattern im Live-Set per Keyboard transponieren, wie bei eine
   Taste gedrückt ist, danach zurück auf 0)
 - **Zeitpunkt:** ab der nächsten Note (Standard), nächster Schlag oder nächster Takt
 - **Ziel:** Bass, Melodie oder beide (Standard: beide). In einer Hub-Gruppe wird die Transposition geteilt.
-- Verlässt eine Stimme durch die Transposition ihren Tonumfang, wird sie oktaviert
+- Verlässt eine Stimme durch die Transposition ihren Tonumfang, wird die ganze Stimme um eine Oktave
+  verschoben, damit die Kontur erhalten bleibt; Noten, die danach noch außerhalb liegen, werden einzeln
+  oktaviert
 - Nicht-destruktiv wie der Groove: wirkt auf die Ausgabe, nicht auf die gespeicherten Noten. Export per
   Drag & Drop übernimmt die aktuelle Transposition (abschaltbar).
 - Auch als Host-Parameter automatisierbar (§3.13), damit Bounces reproduzierbar sind
@@ -420,7 +451,16 @@ Zweck: Der häufigste Fall im Studio: „Ich habe schon eine Bassline, gib mir e
   Halbtakt). Diese bilden den harmonischen Kontext für die übrigen Stimmen.
 - Generieren, Variieren und Verfeinern betreffen dann nur die anderen Stimmen
 - Importiertes Material wird **nicht** von der Constraint-Schicht verändert (kein Einrasten, keine
-  Kick-Aussparung). Es bleibt so, wie der Produzent es geschrieben hat. Die anderen Stimmen richten sich danach.
+  Kick-Aussparung) und es gibt keine Rückfrage dazu (D-85). Es bleibt so, wie der Produzent es geschrieben
+  hat. Die anderen Stimmen richten sich danach.
+- **Grenzen des Imports:** nur 4/4 (sonst Hinweis, kein Import). Die Länge wird auf die nächste erlaubte
+  Pattern-Länge aufgerundet (1, 2, 4, 8, 16 Takte; der Rest bleibt leer), von längerem Material zählen nur
+  die ersten 16 Takte (mit Hinweis). Positionen werden tickgenau übernommen, auch Triolen; quantisiert wird
+  nur für die Analyse.
+- Die erkannte Tonart ersetzt die Tonart des Slots bzw. der Hub-Gruppe und ist in der UI korrigierbar. Sind
+  mehrere Stimmen importiert, wird der Kontext aus allen gemeinsam ermittelt.
+- An einen Cloud-Provider geht eine importierte Stimme nur mit Zustimmung (§3.20, D-86); ohne sie erhält
+  die KI nur den abgeleiteten Kontext.
 - Optional „Sperre lösen“: Danach behandelt MidiMaid die Stimme wie eine generierte (Variationen möglich)
 
 ### 3.19 [v1.1] Wahrscheinlichkeit und Bedingungen pro Note
@@ -496,10 +536,21 @@ Die folgenden Unterpunkte beschreiben den Zielzustand nach v1.1.
 - Pro Anfrage bis zu 3 Einträge des aktiven Sets als Beispiele: gleiche Rolle, ähnlichste Energie und
   Dichte, höchste Gewichtung; je Beispiel höchstens 4 Takte, damit der Prompt klein bleibt
 
-**Kopierschutz**
+**Kopierschutz** (D-87)
 - Ein generiertes Ergebnis (Algorithmus und KI) darf keinem Eintrag des Sets in Rhythmus und
   Tonhöhenfolge zu mehr als 85 % gleichen. Solche Kandidaten werden verworfen bzw. bei der KI als
   Ergebnis unterhalb der Mindestbewertung angezeigt.
+- **Metrik:** Verglichen wird jede erzeugte Stimme mit jedem aktiven Eintrag derselben Rolle. Beide werden
+  auf das 16tel-Raster gebracht und als Folge von Einsätzen dargestellt; pro Einsatz zählt die Linie (bei
+  Akkorden der höchste Ton, beim Bass der tiefste) als Intervall zum vorherigen Einsatz in Halbtönen.
+  Absolute Tonhöhe, Notenlänge und Velocity zählen nicht, der Vergleich ist also transpositionsunabhängig.
+- Ähnlichkeit = Zahl der Einsätze, die in beiden auf demselben Schritt liegen und dasselbe Intervall haben,
+  geteilt durch die größere der beiden Einsatzzahlen. Verglichen werden Fenster in der Länge des kürzeren
+  Materials, die in ganzen Takten gegeneinander verschoben werden; maßgeblich ist das ähnlichste Fenster.
+- **Nur markante Einträge** sind geschützt: mindestens 3 verschiedene Tonhöhenklassen und mindestens
+  4 Tonhöhenwechsel je 2 Takte. Einfache Muster aus Grundton, Quinte und Oktave (z. B. eine rollende
+  Grundton-Bassline) sind Allgemeingut; sonst würde der Schutz fast jeden Bass-Kandidaten verwerfen.
+- Dieselbe Metrik nutzt der Wiederholungsschutz [v1.1] (STYLES.md §1.14).
 - Ziel ist der eigene Stil, nicht die Kopie alter Tracks. Wer eine bestehende Linie unverändert nutzen
   will, importiert sie direkt in eine Stimme (§3.18).
 
@@ -507,7 +558,11 @@ Die folgenden Unterpunkte beschreiben den Zielzustand nach v1.1.
 - Set-Übersicht mit Zusammenfassung („häufigste Progression i–♭VI–♭VII, bevorzugter Bass-Archetyp
   rolling16, typische Dichte …“), Profil eines Sets zurücksetzen bzw. neu berechnen
 - Referenzen liegen lokal im Datenordner (Originaldateien, Analysen, Set-Definitionen), nicht im Projekt
-- Beispiele gehen nur an den gewählten KI-Provider; abschaltbar (Standard an, Hinweis beim ersten Mal)
+- **Zustimmung (D-86):** Referenz-Beispiele und importierte Stimmen (§3.18) gehen an einen Cloud-Provider
+  nur, wenn der Nutzer für diesen Provider einmal ausdrücklich zugestimmt hat (Opt-in beim ersten Bedarf,
+  widerrufbar in den Einstellungen). Lokale Provider (Basis-URL auf `localhost` bzw. `127.0.0.1`) sind
+  ausgenommen. Ohne Zustimmung erhält die KI nur den abgeleiteten Kontext (Tonart, Skala, Akkordfolge),
+  und die Anfrage läuft trotzdem.
 - Jedes Pattern speichert Set-ID und einen Schnappschuss der angewendeten Abweichungen; neue Referenzen
   verändern alte Ergebnisse nicht (§4.3)
 
@@ -550,13 +605,13 @@ Prompt / Referenzen / importierte Stimme / Parameter
 - Tonhöhen auf die Skala quantisieren, gesteuert über den Chromatik-Anteil (§3.8). **Die Töne des
   aktuell klingenden Akkords sind immer erlaubt** (Akkord-Skalen-Prinzip), z. B. der Leitton im V-Akkord
   einer harmonisch-moll-Progression oder die kleine Sexte eines ♭VI-Akkords bei Moll-Pentatonik.
-  Ausnahme: Chord-Memory-Stabs (STYLES.md §1.10)
+  Ausnahme [v1.1]: Chord-Memory-Stabs (STYLES.md §1.10)
 - Tonumfang pro Stimme als **MIDI-Nummern** (Standard: Bass 28–52, Melodie 55–88, Stabs 55–79),
   zuzüglich Oktav-Offset pro Stimme (STYLES.md §1.6)
 - Notenanfänge aufs Raster, Länge mindestens ein Rasterschritt, nichts über das Pattern-Ende hinaus
 - Keine überlappenden Noten gleicher Tonhöhe auf demselben Kanal
-- Jede Stimme hat einen eigenen MIDI-Kanal (Standard Bass 1, Melodie 2), damit kombinierte Exporte
-  eindeutig bleiben; doppelte Kanäle lässt die UI nicht zu
+- Jede Stimme hat einen eigenen MIDI-Kanal (Standard Bass 1, Melodie 2), damit eine spätere mehrkanalige
+  Ausgabe (D-63) eindeutig bleibt; doppelte Kanäle lässt die UI nicht zu
 - Bass nicht auf Kick-Schritten des gewählten Kick-Rasters (STYLES.md §1.2), außer der Archetyp erlaubt es
 - **Kick-Freiraum:** Bassnoten enden vor dem nächsten Kick-Schritt (STYLES.md §1.7)
 - **Intervall- und Registerregeln** zwischen Bass und Melodie (STYLES.md §1.6, §1.8)
@@ -567,7 +622,9 @@ Prompt / Referenzen / importierte Stimme / Parameter
 - **Slides (303-Style):** Eine Note mit `slide = true` überlappt die folgende Note um einen festen
   Betrag (Standard 1/64, einstellbar). Andere Tonhöhe auf demselben Kanal ist dabei erlaubt. Kein
   Pitchbend. Der Ziel-Synth muss im Mono/Legato-Modus mit Glide laufen; die UI zeigt dazu einen Hinweis.
-  Ein Slide auf der letzten Note eines Patterns gleitet in die erste Note des nächsten Durchlaufs.
+  Ein Slide auf der letzten Note eines Patterns gleitet in die erste Note des nächsten Durchlaufs
+  **desselben** Patterns. Beim Wechsel zu einem anderen Pattern oder Slot endet die Note ohne Überlappung
+  (§6.2, D-89).
   **Slide auf dieselbe Tonhöhe** ist ein Haltebogen: Die beiden Noten werden zu einer zusammengeführt.
 
 ### 4.2a Ausgabestufe (Reihenfolge)
@@ -591,16 +648,33 @@ Der Algorithmus erzeugt bei gleichem Seed und gleichen Eingaben **bitgenau** das
 - [v1.1] Wahrscheinlichkeiten werden per Hash aus Seed, Noten-ID und Durchlauf entschieden, nicht per laufendem
   Zufallszustand (§3.19)
 - Set-ID (v1.0) und Schnappschuss des Referenz-Profils ([v1.1], §3.20) sind Teil der Eingaben und werden im Pattern gespeichert
-- **[v1.1] Wiederholungsschutz und Determinismus:** Der Wiederholungsschutz hängt vom Verlauf ab und würde
-  „gleicher Seed → gleiches Ergebnis“ verletzen. Deshalb wird der **Seed des gewählten Kandidaten**
-  gespeichert. Die Wiedergabe eines gespeicherten Seeds erzeugt genau diesen Kandidaten, ohne Auswahl
-  und ohne Verlauf.
+- **Gewinner-Seed (ab v1.0, D-88):** Gespeichert wird der **Seed des gewählten Kandidaten**. Die
+  Wiedergabe eines gespeicherten Seeds erzeugt genau diesen Kandidaten, ohne Auswahl. Das ist schon in
+  v1.0 nötig, weil der Kopierschutz die Auswahl vom Inhalt des Referenz-Sets abhängig macht, und der
+  kann sich unter derselben Set-ID ändern.
+- **[v1.1] Wiederholungsschutz und Determinismus:** Der Wiederholungsschutz hängt zusätzlich vom Verlauf
+  ab; auch hier sichert der Gewinner-Seed „gleicher Seed → gleiches Ergebnis“.
 
 ### 4.4 Qualitätsbewertung
 Jedes Ergebnis (Algorithmus und KI) wird bewertet, siehe STYLES.md §1.14. Der Algorithmus erzeugt
 mehrere Kandidaten und wählt den besten, mit Kopierschutz gegenüber dem aktiven Referenz-Set (§3.20)
 und ab v1.1 mit Wiederholungsschutz gegenüber dem Verlauf. Die Bewertung
 ist in `core` implementiert und vollständig getestet.
+
+- **Harte Kriterien** verwerfen einen Kandidaten: Kopierschutz, [v1.1] Wiederholungsschutz. Alle übrigen
+  Regeln setzt die Constraint-Schicht schon vorher durch.
+- **Weiche Kriterien** (STYLES.md §1.14) ergeben je einen Wert von 0 bis 100; der Gesamtwert ist ihr
+  gewichteter Mittelwert (0–100, ganzzahlig). Gewichte und **Mindestbewertung** stehen im Stilprofil
+  (JSON) und werden im Hörtest von Phase 1a kalibriert, so dass Fehlschläge selten bleiben (Ziel: unter
+  1 % der Generierungen in den `mmgen`-Serien).
+- **Gültig** ist ein Kandidat, der alle harten Kriterien erfüllt und die Mindestbewertung erreicht. Der
+  beste gültige Kandidat gewinnt.
+- **Kein gültiger Kandidat (D-88):** bis zu 2 weitere Runden mit je 8 Kandidaten, deren Seeds
+  deterministisch aus dem Ausgangs-Seed abgeleitet sind. Bleibt es ohne gültigen Kandidaten, bleibt das
+  bisherige Pattern aktiv und die UI meldet „kein ausreichendes Ergebnis“ (nicht blockierend, §7.9); ein
+  unterwertiger Kandidat wird nie automatisch übernommen.
+- KI-Ergebnisse unterhalb der Mindestbewertung werden angezeigt, nicht still ersetzt; der Nutzer
+  entscheidet (STYLES.md §1.14).
 
 ---
 
@@ -651,18 +725,52 @@ struct Track {
     bool              muted = false;
 };
 
-struct HarmonicContext {
-    PitchClass        root;
-    ScaleType         scale;
-    std::vector<Chord> progression; // pro Takt oder Halbtakt
+using PitchClass = uint8_t;         // 0–11, 0 = C
+
+enum class ChordQuality { Major, Minor, Diminished, Sus2, Sus4 };
+
+struct Chord {                      // Symbol nach STYLES.md §1.17, z. B. "bVI" = {8, Major}
+    uint8_t      rootOffset;        // Halbtöne über dem Grundton der Tonart (0–11)
+    ChordQuality quality;           // Septimen und Optionen kommen aus den Akkordfarben (Voicing)
 };
+
+struct ChordEvent {
+    Chord    chord;
+    uint32_t startHalfBar;          // Position in halben Takten ab Pattern-Anfang
+    uint32_t lengthHalfBars;        // 1 = halber Takt, 2 = ein Takt …
+};
+
+struct HarmonicContext {
+    PitchClass              root;
+    std::string             scaleId;     // aus der Skalentabelle in core, z. B. "natural_minor"
+    std::vector<ChordEvent> progression; // lückenlos über das Pattern, zu jedem Zeitpunkt genau ein Akkord
+};
+
+enum class PhraseRole { Main, Variation, Build, Breakdown, Answer };
+                                    // Hauptmotiv, Variation, Steigerung, Ausdünnung, Antwort
 
 struct Phrase {
     uint32_t   startBar;
-    uint32_t   lengthBars;          // 4, 8 oder 16
-    PhraseRole role;                // Main, Variation, Build, Breakdown, Answer
-    bool       turnaround = false;  // letzter Takt als Turnaround (nur 8/16)
+    uint32_t   lengthBars;          // 4, 8 oder 16; bei 1/2/4-Takt-Patterns = Pattern-Länge
+    PhraseRole role;
+    std::optional<std::string> kickGridId;  // überschreibt Pattern::kickGridId (STYLES.md §1.2)
+    bool       turnaround = false;  // [v1.1] letzter Takt als Turnaround (nur 8/16)
     bool       locked = false;
+};
+
+struct GenerationInfo {
+    std::string source;             // "algorithm", "ai", "variation", "refine", "import", "edit"
+    uint64_t    seed = 0;           // Ausgangs-Seed
+    uint64_t    winnerSeed = 0;     // Seed des gewählten Kandidaten (§4.3)
+    uint32_t    styleProfileVersion = 0;
+    uint8_t     creativityPct = 40, energyPct = 50;  // Parameter zum Zeitpunkt der Erzeugung
+    std::string prompt;             // Nutzerprompt bzw. Anweisung beim Verfeinern
+    uint32_t    promptVersion = 0;  // nur KI (§7.4)
+    std::string providerId, modelId;   // nur KI
+    std::string rawResponse;        // nur KI, unverändert
+    std::string referenceSetId;     // leer = ohne Set
+    // [v1.1] Schnappschuss des Referenz-Profils (§3.20); Feld wird in v1.1 ergänzt, ohne Migration
+    int64_t     createdUnixMs = 0;
 };
 
 enum class PolymeterPhase { RestartAtPattern, FreeRunning };
@@ -687,11 +795,23 @@ struct Pattern {
     HarmonicContext context;
     VoicingSettings voicing;
     std::vector<Track> voices;      // v1: genau 2 (Bass, Melodie), nie fest verdrahtet
-    float           qualityScore = 0.f;
-    GenerationInfo  info;           // Seed, Stil, Parameter, Prompt, Provider, Rohantwort, Zeit,
-                                    // Referenz-Set-ID + Schnappschuss des Profils (§3.20)
+    uint8_t         qualityScore = 0;   // 0–100 (§4.4)
+    uint32_t        nextNoteId = 1;     // Zähler für Noten-IDs dieses Slots
+    uint64_t        version = 0;        // fortlaufend pro Instanz, für Übergabe und Anzeige (§6.3)
+    GenerationInfo  info;
 };
 ```
+
+**Noten-IDs:** eindeutig innerhalb eines Slots, vergeben aus `Pattern::nextNoteId` (nur aufsteigend, nie
+wiederverwendet). Bearbeiten, Variieren und Verfeinern behalten die ID einer Note, solange sie als
+dieselbe Note gilt (verschoben, Tonhöhe, Länge oder Velocity geändert); neue Noten bekommen neue IDs.
+Kopieren eines Slots übernimmt IDs und Zähler. Werden Noten zusammengeführt (Slide auf gleiche Tonhöhe,
+§4.2), behält das Ergebnis die ID der ersten. IDs aus einer KI-Antwort, die unbekannt sind oder doppelt
+vorkommen, werden verworfen; die Note gilt dann als neu.
+
+**Serialisierung:** `core` serialisiert Patterns als JSON (ohne JUCE), in derselben Form für Plugin-State
+und Bibliothek. Felder für v1.1 werden ab v1.0 mit Standardwerten geschrieben; unbekannte Felder werden
+beim Laden ignoriert. Jede Änderung am Format erhöht `stateVersion` und bekommt eine Migrationsfunktion.
 
 **Offene Stimmenzahl:** Code iteriert immer über `voices`, statt Bass und Melodie fest anzusprechen.
 Regeln zwischen Stimmen (Intervalle, Register) gelten paarweise relativ zur Stimme mit Rolle Bass.
@@ -708,18 +828,39 @@ Echtzeit-Übergabe lock-free bleibt.
 - Pro Block den Playhead auslesen: PPQ-Position, BPM, isPlaying, Loop-Bereich, Taktart
 - Noten emittieren, deren Start in `[ppqBlockStart, ppqBlockEnd)` liegt, mit sample-genauem Offset
 - Pattern-Position = (PPQ − Wechselzeitpunkt) modulo Pattern-Länge. Der Wechselzeitpunkt ist der
-  Taktanfang, an dem das Pattern übernommen wurde (Modus „Neustart“, §3.4). Beim Projektstart oder nach
-  einem Sprung vor diesen Zeitpunkt richtet sich die Position am Taktraster des Songs aus.
+  Taktanfang, an dem das Pattern während der Wiedergabe übernommen wurde (Modus „Neustart“, §3.4).
+- **Sprung** ist jede Unstetigkeit der PPQ-Position zwischen zwei Blöcken: nach vorn, nach hinten und der
+  Loop-Rücksprung. Nach dem Start und nach jedem Sprung gilt der Slot-Parameter sofort, und die Position
+  richtet sich am Taktraster des Songs aus (Wechselzeitpunkt = PPQ 0), wie in §3.13 (D-66, D-89). So
+  klingt dieselbe Song-Position immer gleich, auch beim Bounce.
+- Ein Loop-Rücksprung innerhalb eines Blocks wird über den Loop-Bereich des Playheads erkannt und
+  sample-genau behandelt.
+- **Fehlende Host-Daten:** Meldet der Host keine PPQ-Position oder kein Tempo, gibt MidiMaid keine neuen
+  Noten aus und sendet ausstehende Note-Offs (wie bei Stop).
+- **Tempo und Taktart** gelten pro Block (Wert am Blockanfang); Änderungen innerhalb eines Blocks wirken
+  ab dem nächsten. Gerechnet wird in PPQ, daher bleibt das Raster auch bei Tempoautomation korrekt.
+  v1.0 spielt 4/4: Meldet der Host eine andere Taktart, rechnet MidiMaid im 4/4-Raster ab PPQ 0 weiter
+  und zeigt einen Hinweis.
+- Der vollständige Zustandsautomat (Stop, Start, Sprung, Loop, quantisierter Wechsel, geplanter
+  Gruppenwechsel) mit testbaren Beispielen wird vor der Engine-Implementierung hier ergänzt (ROADMAP
+  Phase 1b).
 - [v1.1] Im Modus „Legato“ bleibt die Position beim Wechsel erhalten
 
 ### 6.2 Note-Off-Garantie
 - Aktiv-Tabelle 16 × 128 (fest allokiert). Gespeichert wird die tatsächlich gesendete Tonhöhe
   (nach Transposition, §3.16)
-- Note-Offs senden bei: Stop, Rücksprung oder Loop-Sprung (PPQ springt), Pattern-Wechsel, Bypass,
-  Stummschalten einer Stimme, `releaseResources`, Destruktor
+- Note-Offs senden bei: Stop, Sprung (§6.1), Pattern-Wechsel, Bypass (`processBlockBypassed`),
+  Stummschalten einer Stimme, fehlenden Host-Daten
+- `releaseResources` und der Destruktor haben keinen MIDI-Ausgang. Klingende Noten bleiben deshalb in der
+  Aktiv-Tabelle stehen, ihre Note-Offs folgen im ersten Block nach dem nächsten `prepareToPlay`. Beim
+  Entfernen des Plugins während der Wiedergabe hängt das Verhalten vom Host ab (Testmatrix).
 - Zusätzlich auf Wunsch „All Notes Off“ (CC 123) bei Stop
-- Slide-Überlappungen: Die Reihenfolge Note-On (neu) vor Note-Off (alt) wird eingehalten, auch über
-  Block- und Loop-Grenzen hinweg. Bei Stop und Sprüngen werden alle überlappenden Noten beendet.
+- **Pattern- und Slot-Wechsel:** Alle klingenden Noten des alten Patterns erhalten am Wechselzeitpunkt
+  ihr Note-Off, und zwar vor den Note-Ons des neuen Patterns. Slides werden nicht über die Pattern-Grenze
+  fortgesetzt (D-89).
+- Slide-Überlappungen innerhalb eines Patterns: Die Reihenfolge Note-On (neu) vor Note-Off (alt) wird
+  eingehalten, auch über Block- und Loop-Grenzen hinweg. Bei Stop und Sprüngen werden alle überlappenden
+  Noten beendet.
 
 ### 6.3 Lock-freie Pattern-Übergabe
 - Message-Thread erzeugt ein neues unveränderliches Pattern
@@ -728,6 +869,28 @@ Echtzeit-Übergabe lock-free bleibt.
 - Der Audio-Thread übernimmt zum eingestellten Quantisierungszeitpunkt (§3.4) und legt das alte Pattern
   in eine lock-freie Rückgabe-Queue
 - Freigabe des alten Patterns **nur** auf dem Message-Thread (Timer), nie im Audio-Thread
+
+**Echtzeit-Vertrag (D-89)**
+- **Ausstehende Wechsel:** Pro Instanz gibt es ein aktives Pattern und höchstens einen ausstehenden
+  Wechsel je Art (Slot-Wechsel, neues Ergebnis, [v1.1] Evolve-Stufe). Die Übergabe nutzt `exchange` auf
+  einem atomaren Zeiger; damit entsteht kein ABA-Problem. Trifft ein neueres Ergebnis ein, bevor das
+  ausstehende übernommen wurde, ersetzt es dieses; das ältere landet nur im Verlauf und wird vom
+  Message-Thread freigegeben. Am Quantisierungspunkt entscheidet der Vorrang nach §6.8.
+- **Rückgabe-Queue:** SPSC mit fester Kapazität (Engine-Konstante). Ist sie voll, verschiebt der
+  Audio-Thread den Wechsel auf den nächsten Quantisierungspunkt; er gibt nie selbst frei. Ein Engine-Test
+  erzwingt diesen Fall.
+- **Version:** Jedes Pattern trägt eine fortlaufende Version (`Pattern::version`). Der Audio-Thread meldet
+  die aktive Version per Atomic an UI und Hub.
+- **Bearbeitungen** in der Piano-Roll sind keine quantisierten Wechsel: Sie werden zum nächsten Block
+  übernommen, ohne Neustart der Position. Klingende Noten, die im neuen Stand fehlen oder sich geändert
+  haben, erhalten sofort ihr Note-Off.
+- **MIDI-Ausgabe:** Der Ausgabepuffer (`juce::MidiBuffer`) wird in `prepareToPlay` für die maximale
+  Ereigniszahl pro Block reserviert, weil er sonst im Audio-Thread wächst. Die Obergrenze ergibt sich aus
+  Blockgröße, maximaler Notendichte und den Note-Offs der Aktiv-Tabelle; wird sie dennoch erreicht, haben
+  Note-Offs Vorrang und neue Note-Ons entfallen.
+- **Lebenszyklus:** Der Destruktor bricht Hintergrundjobs ab, wartet auf sie (§7.1) und gibt aktive und
+  ausstehende Patterns sowie die Rückgabe-Queue auf dem Message-Thread frei; der Audio-Thread läuft dann
+  laut Host-Vertrag nicht mehr.
 
 ### 6.4 [v1.1] Polymeter
 - Phasenverhalten: Neustart am Pattern-Anfang ([Backlog]: frei laufend)
@@ -786,9 +949,14 @@ Kanalkonflikte (D-63).
   Fehlt der Hub, spielt eine Voice ihre Stimme unverändert weiter und zeigt „Hub nicht gefunden“. Weil sie
   alle Stimmen kennt, kann sie bei Bedarf Hub werden.
 - **Geplante Wechsel:** Slot-, Pattern- und Transpositionswechsel verteilt der Hub mit PPQ-Zeitstempel und
-  Mindestvorlauf (§3.4). Jede Instanz führt sie in ihrem Audio-Thread zum selben PPQ aus. Der
+  Mindestvorlauf (§3.4, D-90). Jede Instanz führt sie in ihrem Audio-Thread zum selben PPQ aus. Der
   Zeitstempel wird über einen lock-freien, prozessweiten Kanal gelesen; die Registry selbst bleibt
-  Message-Thread-only.
+  Message-Thread-only. Über denselben Kanal meldet jede Instanz ihre zuletzt verarbeitete PPQ-Position;
+  der Hub plant ab der weitesten. Liegt einer Voice zum Zeitstempel das zugehörige Pattern noch nicht vor,
+  wechselt sie am nächsten Quantisierungspunkt, an dem es vorliegt, und protokolliert den Versatz.
+- **Slot-Automation und Start mitten im Arrangement in Gruppen:** Voices erfahren eine Slot-Automation erst,
+  wenn der Hub den betreffenden Block verarbeitet hat. Ob das bei versetzt gerechneten Spuren,
+  Einzelspur-Bounce und Freeze reicht, ist offen (O-22, Messung in Phase 0).
 - **Mute** wirkt doppelt: Mute im Hub für Stimme X oder Mute in der Voice selbst schaltet die Stimme stumm.
 - Wird der Hub gelöscht, bietet die älteste Voice an, Hub zu werden (keine stille Übernahme)
 - **Gleiches Format:** Globale Daten werden zwischen AU- und VST3-Instanzen nicht zuverlässig geteilt.
@@ -850,6 +1018,12 @@ public:
     virtual std::future<ConnectionStatus> testConnection() = 0;
 };
 ```
+- **Abbruch:** Jede Anfrage läuft als abbrechbarer Job in einem Hintergrund-Thread (kein `std::async`).
+  Der `CancellationToken` bricht auch die laufende Netzwerkverbindung ab (abbrechbarer HTTP-Stream,
+  Verbindungsaufbau mit eigenem kurzen Timeout). Ergebnisse abgebrochener Jobs werden verworfen.
+- **Plugin schließen:** Der Destruktor bricht alle Jobs ab und wartet auf ihr Ende (Ziel unter 1 s);
+  danach greift kein Job mehr auf das Plugin zu.
+- v1.0 nutzt keine Streaming-Antworten.
 
 ### 7.2 Provider v1
 | Provider | Anbindung | Strukturierte Ausgabe |
@@ -870,8 +1044,11 @@ schemakonformes JSON zentral, deshalb bleibt der native Anthropic-Provider.
 Backend. Beispiel: Ollama setzt ab Version 0.5 lokal ein JSON-Schema über die kompatible Schnittstelle
 durch, Ollama Cloud nimmt es dagegen an, ohne es durchzusetzen. Deshalb gilt:
 - Jede Voreinstellung trägt eine **Fähigkeitsstufe**: *Schema erzwungen* (`json_schema`), *nur JSON*
-  (`json_object`) oder *nur Prompt*. Die Stufe steht in `models.json` und lässt sich per Verbindungstest
-  ermitteln (Testanfrage mit Schema, Ergebnis prüfen).
+  (`json_object`) oder *nur Prompt*. Maßgeblich ist die Stufe aus `models.json`. Der Verbindungstest
+  (Testanfrage mit Schema, Ergebnis prüfen) kann sie nur herabstufen, nie heraufsetzen, weil eine
+  einzelne gelungene Antwort nicht beweist, dass das Backend das Schema durchsetzt. Für eigene
+  Basis-URLs ohne Voreinstellung ermittelt der Test höchstens *nur JSON*; *Schema erzwungen* nur per
+  manueller Einstellung (Experte).
 - Unabhängig von der Stufe wird jede Antwort validiert; Constraint-Schicht und Qualitätsbewertung
   laufen immer (§4.1, §4.4). Eine schwächere Stufe kostet höchstens Reparaturversuche, nie MIDI-Qualität.
 - Über OpenRouter lassen sich weitere Modelle anbinden (auch Claude); für Claude bleibt der native
@@ -894,7 +1071,7 @@ möglich, aus der Modellliste des Anbieters geladen (bei Ollama die installierte
   "context": {
     "root": "A",
     "scale": "natural_minor",
-    "progression": ["i", "i", "VI", "VII"]
+    "progression": ["i", "i", "bVI", "bVII"]
   },
   "phrases": [{ "start_bar": 0, "bars": 8, "role": "main", "turnaround": true }],
   "voices": [
@@ -909,19 +1086,33 @@ möglich, aus der Modellliste des Anbieters geladen (bei Ollama die installierte
 ```
 - `voices` ist eine Liste mit Rollen (offene Stimmenzahl, D-52); Akkorde = mehrere Noten auf demselben `step`
 - `id` nur bei bestehenden Noten (Verfeinern); neue Noten ohne `id`
-- `ratchet`, `chance`, `cond` werden ab v1.1 ausgewertet; in v1.0 ignoriert der Parser sie
-- `step`: Position im 16tel-Raster (0 bis Takte × 16 − 1)
-- `degree`: Skalenstufe ab 1, `alt`: Alteration in Halbtönen (−1, 0, +1) für skalenfremde Töne,
-  `octave` relativ zur Grundlage der Stimme
+- `ratchet`, `chance`, `cond` werden ab v1.1 ausgewertet. In v1.0 sendet MidiMaid ein Schema ohne diese
+  Felder. Der Parser ignoriert unbekannte Felder und Felder späterer Versionen ohne Fehler; die Rohantwort
+  wird unverändert gespeichert.
+- `step`: Position im 16tel-Raster (0 bis Takte × 16 − 1); `len` in 16teln (1 bis Pattern-Ende);
+  `vel` 1–127
+- `degree`: Skalenstufe 1 … n der Skala aus `context.scale` (n = Tonzahl, bei Pentatonik 5). Größere Werte
+  werden mit Oktavübertrag umgerechnet, 0 und negative Werte sind ungültig. `alt`: Alteration in
+  Halbtönen (−1, 0, +1) für skalenfremde Töne, z. B. der erhöhte Leitton als Stufe 7 mit `alt: 1` in
+  natürlich Moll
+- `octave` relativ zur **Grundlage der Stimme** = tiefster Ton mit der Tonhöhenklasse des Grundtons
+  innerhalb ihres Tonumfangs (Bass, Grundton A, Umfang 28–52: MIDI 33)
+- `progression`: Akkordsymbole nach STYLES.md §1.17 (`b`/`#` statt ♭/♯), ein Eintrag pro Takt; `"i|bVII"`
+  teilt einen Takt in zwei Halbtakte. Ist die Liste kürzer als das Pattern, wiederholt sie sich; ihre
+  Länge muss die Taktzahl teilen.
+- Werte außerhalb der Bereiche werden begrenzt, Noten mit ungültiger Position verworfen; danach greift
+  ohnehin die Constraint-Schicht.
 - Bei Patterns über 8 Takte liefert die KI Motive (4–8 Takte) und einen Formplan, nicht die
-  vollständige Notenfolge (§3.7)
+  vollständige Notenfolge (§3.7): `voices[].notes` enthält dann nur das Motiv (Schritte ab Takt 0, Länge in
+  `"motif_bars"`), `phrases` legt die Rolle jeder Phrase fest, und der Algorithmus leitet die Phrasen daraus
+  ab.
 - Bei ungültigem JSON: ein Reparaturversuch („gib nur gültiges JSON zurück“), danach Rückfall nach §4.1
 
 ### 7.4 Prompts
 - Versionierte Vorlagen unter `resources/prompts/v1/` (System-Prompt allgemein, je Stil ein Zusatz,
   Generieren, Verfeinern)
 - Eine Vorlage enthält: Rolle, Stilprofil, Regeln, Schema, 1–2 Beispiele, Nutzerprompt, ggf. importierte
-  Stimme und Referenz-Beispiele als kompakte Notenliste
+  Stimme und Referenz-Beispiele als kompakte Notenliste (bei Cloud-Providern nur mit Zustimmung, §3.20)
 - Prompt-Version wird im Pattern gespeichert
 - **Gegen generische Ergebnisse:** Jede Vorlage enthält das vollständige Stilprofil als Regeln,
   Archetyp-Beschreibungen, Motivik-Regeln (STYLES.md §1.11) und eine Ausschlussliste typischer
@@ -1067,7 +1258,9 @@ Cmd steht für Ctrl unter Windows und Linux. Kürzel greifen nur bei Fokus im Pl
 ### 8.4 Einstellungen
 Provider aktivieren, Key eingeben (maskiert), Modell wählen, Verbindung testen, Timeouts, Temperatur,
 Max-Tokens, MIDI-Kanäle, Slide-Überlappung, Akzent-Velocity, Kick-Freiraum, Oktav-Offset pro Stimme,
-Drum-Zuordnung (Liste), Referenz-Beispiele an die KI an/aus,
+Drum-Zuordnung (Liste), Zustimmung pro Cloud-Provider für Referenz-Beispiele und importierte Stimmen
+(anzeigen, widerrufen; §3.20), Mindestvorlauf geplanter Wechsel (Experte, §3.4), „Prompts protokollieren“
+(§10),
 [v1.1] Sprache, Notennamen-Konvention (C3 = 60 oder C4 = 60), Transponieren (Referenznote, Modus,
 Verhalten, Zeitpunkt, Ziel, Kanal), MIDI Thru, Favoriten zusätzlich ins aktive Set, Export-Modus für
 Wahrscheinlichkeiten, Tonumfänge, Standardstil, Quantisierung beim Wechsel, Logging an/aus.
@@ -1099,7 +1292,8 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
   zugeordnete Stimme, Ausgabemodus, gewählter Provider und Modell, **keine Keys**
 - Instanzübergreifende Einstellungen (Drum-Zuordnung, Provider-Konfiguration, Notennamen-Konvention)
   liegen in den globalen Einstellungen (§9.2), nicht im Projekt
-- Format: `juce::ValueTree` → XML, mit `stateVersion` und Migrationsfunktionen
+- Format: `juce::ValueTree` → XML, mit `stateVersion` und Migrationsfunktionen; Patterns sind darin als
+  JSON aus `core` eingebettet (§5, dieselbe Form wie in der Bibliothek)
 - Laden eines Projekts aus einer neueren Plugin-Version darf nicht abstürzen
 
 ### 9.2 Bibliothek und Einstellungen
@@ -1115,7 +1309,12 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
 ## 10. Logging und Fehlerbehandlung
 - Logdatei im Datenordner, rotierend (5 × 1 MB), Level einstellbar
 - Nie aus dem Audio-Thread loggen (falls nötig: lock-free Ringpuffer, den der Message-Thread leert)
-- Keys und vollständige Prompts nur auf Debug-Level und nie Keys
+- API-Keys nie, auf keinem Level
+- Prompts, KI-Antworten und Nutzerinhalte (Referenzen, importierte Stimmen, Patterns) werden
+  standardmäßig nicht protokolliert, auch nicht auf Debug-Level. Dort stehen Metadaten: Provider, Modell,
+  Dauer, Tokens, Statuscode, Schemafehler mit Pfad (D-86).
+- Vollständige Prompts und Antworten nur mit der eigenen Option „Prompts protokollieren“ (Standard aus,
+  gedacht für die Prompt-Entwicklung)
 
 ---
 
@@ -1136,15 +1335,29 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
 ## 12. Tests
 - **Unit (Catch2):** Skalen, Quantisierung, Constraints, Generatoren pro Stil (Eigenschaften und Golden
   Files), Variationen, Schema-Parsing inklusive kaputter und bösartiger KI-Antworten, State-Migration
-- **Engine:** simulierte Playheads (Start, Stop, Loop, Tempowechsel, Blockgrößen 16 bis 4096) und Prüfung
-  auf hängende Noten
-- **KI:** Mock-Provider; optional manuell auszulösende Integrationstests gegen echte APIs
-- **Referenz-Analyse:** Testkorpus mit bekannter Tonart, Rolle und Akkordfolge (eigene Testdateien,
-  keine fremden Songs); Zielwerte: Tonart ≥ 90 %, Rolle ≥ 95 % richtig; Kopierschutz-Tests
+- **Eigenschaftstests** über Seed-Serien (z. B. 1000 Seeds je Stil und Archetyp): Tonumfang, keine
+  Bassnote auf Kick-Schritten (außer der Archetyp erlaubt es), Kick-Freiraum, Intervallregeln auf
+  betonten Schritten, keine Überlappung gleicher Tonhöhe, Motiv-Wiederholung, Dichte im Zielband der
+  Energie, Anteil von Nicht-Akkordtönen bei Linien-Archetypen, Grenzfälle des Kopierschutzes
+- **Engine:** simulierte Playheads (Start, Stop, Loop, Sprünge vor und zurück, Tempowechsel, fehlende
+  Host-Daten, Blockgrößen 16 bis 4096), volle Rückgabe-Queue, Bearbeitung während der Wiedergabe und
+  Prüfung auf hängende Noten
+- **KI:** Mock-Provider (auch Abbruch während der Anfrage und Schließen des Plugins); optional manuell
+  auszulösende Integrationstests gegen echte APIs
+- **Referenz-Analyse:** Testkorpus mit bekannter Tonart, Rolle und Akkordfolge (eigene oder synthetisch
+  erzeugte Testdateien, keine fremden Songs): mindestens 20 Dateien je Stil, automatisch in alle 12
+  Tonarten transponiert, dazu Varianten mit Swing, unquantisiert (±20 Ticks), mehrstimmig und mehrspurig.
+  Eine Tonart gilt als richtig, wenn Grundton und Skala stimmen; Verwechslungen mit der Paralleltonart
+  zählen als falsch und werden getrennt ausgewiesen. Zielwerte: Tonart ≥ 90 %, [v1.1] Rolle ≥ 95 %
+  (automatische Rollen-Erkennung); Kopierschutz-Tests
 - **Host:** pluginval (Strictness 10), auval, manuelle Testmatrix (`ROADMAP.md`, Anhang)
 - **Hörtest-Werkzeug `mmgen`:** Kommandozeilenprogramm auf Basis von `core`, erzeugt .mid-Dateien pro
   Stil, Archetyp, Energie und Seed (auch Serien, z. B. 20 Seeds je Archetyp) in einen Ordner. Damit
   lassen sich Stilprofile schon in Phase 1a in der DAW abhören, bevor es ein Plugin gibt.
+- **Hörtest-Protokoll:** je Stil und Archetyp 20 Seeds bei drei Energiewerten (0,3 / 0,6 / 0,9), jedes
+  Ergebnis bewertet als „sofort nutzbar“, „nachbearbeiten“ oder „unbrauchbar“. Startziel je Stil:
+  mindestens 80 % sofort nutzbar. Ergebnisse, Profiländerungen und kalibrierte Bewertungsgewichte kommen
+  nach STYLES.md.
 - **Referenz-Instrumente:** Hörtests, Testmatrix und DAW-Vorlagen nutzen **nur Live- bzw. Logic-eigene
   Instrumente**, damit Ergebnisse überall reproduzierbar sind. Anforderungen und Kandidaten (Eignung in
   Phase 0 bestätigen):
@@ -1159,6 +1372,11 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
   (§8.6) eingeht.
 - **CI:** GitHub Actions: macOS und Windows für Build, Tests und pluginval; Linux für die `core`-Tests
   (Determinismus mit einer dritten Standardbibliothek) und als reiner Kompiliertest des VST3-Plugins
+  - Toolchains: macOS arm64 (AppleClang, libc++), Windows x64 (MSVC), Linux x64 (GCC, libstdc++). Die
+    Golden Files müssen auf allen drei identisch sein; die `core`-Tests laufen auf macOS zusätzlich als
+    x86_64 unter Rosetta (Universal Binary).
+  - Versionen von Runner-Image, Xcode, MSVC, GCC und pluginval sind in der Workflow-Datei festgeschrieben
+    und stehen in `DECISIONS.md`.
 
 ---
 
