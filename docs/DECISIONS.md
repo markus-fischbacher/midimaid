@@ -117,3 +117,33 @@ Entscheidungen beschreiben teils den Zielzustand; ihr Release steht im Verweis.
   (deterministisch auch bei Einzelspur-Bounce, aber doppelte Pflege);
   (c) die eigene Automation einer Voice hat Vorrang, sonst folgt sie dem Hub.
   Entscheidung nach den Messungen in Phase 0, vor Phase 1b.
+
+## Entwicklungsumgebung (Stand 04.10.2026)
+
+Dokumentiert nach CLAUDE.md „Entwicklungsumgebung“ (ROADMAP Phase 0). Der Mac wird zuerst eingerichtet,
+Windows folgt, sobald der Mac-Teil von Phase 0 fertig ist (Entscheidung des Entwicklers); bis dahin gilt
+Windows als **offen**.
+
+### macOS (Entwicklungsrechner)
+| Bereich | Version |
+|---|---|
+| macOS | 27.0 (Build 26A428), arm64 |
+| Compiler | Apple clang 21.0.0 (Xcode-Kommandozeilenwerkzeuge, kein vollständiges Xcode installiert) |
+| CMake | 4.4.4 (Homebrew; Anforderung ≥ 3.25) |
+| Ninja | 1.13.2 (Homebrew) |
+| clang-format | 23.1.2 (Homebrew) |
+| pluginval | 1.0.4 (`/Applications/pluginval.app`, Symlink `/opt/homebrew/bin/pluginval`; ZIP-SHA-256 `3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f`) |
+| auval | vorhanden (`/usr/bin/auval`) |
+| git / gh | 2.54.0 / 2.102.0 (gh angemeldet, SSH) |
+| Ableton Live | 12 Suite 12.4.6 |
+| Logic Pro | 12.3.1 |
+
+Anmerkungen:
+- Es sind nur die Kommandozeilenwerkzeuge aktiv (`xcodebuild` fehlt). Für Builds mit CMake und Ninja reicht
+  das; ein vollständiges Xcode wird erst für Signierung und Notarisierung (Phase 7) relevant.
+- Aufgaben mit Bedarf an Xcode, Rosetta-Test (x86_64) und Universal Binary werden bei der jeweiligen
+  Roadmap-Aufgabe geprüft.
+
+### Windows
+Offen. Zu dokumentieren: Windows-Version, Visual Studio 2022 Build Tools (MSVC), CMake, Ninja, `gh`,
+pluginval, Live-Version.
