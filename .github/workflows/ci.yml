@@ -5,7 +5,17 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Windows and Linux are built on demand only: Actions tab -> CI -> Run workflow (or `gh workflow run ci.yml`).
   workflow_dispatch:
+    inputs:
+      windows:
+        description: Build and test Windows
+        type: boolean
+        default: false
+      linux:
+        description: Build and test Linux
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -68,6 +78,7 @@ jobs:
 
   windows:
     name: Windows (build, tests, pluginval)
+    if: github.event_name == 'workflow_dispatch' && inputs.windows
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
@@ -104,6 +115,7 @@ jobs:
 
   linux:
     name: Linux (build, tests, VST3 compile)
+    if: github.event_name == 'workflow_dispatch' && inputs.linux
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
