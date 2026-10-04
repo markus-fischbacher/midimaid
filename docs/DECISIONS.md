@@ -102,6 +102,7 @@ Entscheidungen beschreiben teils den Zielzustand; ihr Release steht im Verweis.
 - **D-91** Plugin-State: formatunabhängig und in jeder Variante lesbar. Einen direkten Formatwechsel innerhalb der DAW verspricht MidiMaid nicht; Slots wandern über die Bibliothek (SPEC §2.4).
 - **D-92** Akkordsymbole einheitlich als römische Ziffern relativ zur Dur-Tonleiter auf dem Grundton (z. B. i–♭VI–♭VII), in Profilen, KI-Schema und Code (STYLES.md §1.17).
 - **D-93** Parameter-Register mit festen String-IDs, Typ, Bereich und Standard ist normativ (SPEC §3.13). Nicht aktive Parameter sind ohne Wirkung und als nicht automatisierbar markiert, weil VST3 und AU kein zuverlässiges Ausblenden kennen.
+- **D-94** Abhängigkeiten über CPM, Versionen gepinnt: JUCE **8.0.15**, Catch2 3.16.0, nlohmann/json 3.12.0, CPM.cmake v0.43.2 (im Repo unter `cmake/CPM.cmake`, SHA-256 `49a3bef91ceb65bb66d57255e12d1ffd22abc2f6408fa9fe4534c544a2f232aa`). JUCE 9 (seit 21.07.2026, aktuell 9.0.3) wird vorerst nicht verwendet, weil SPEC und Roadmap JUCE 8 voraussetzen; ein Wechsel braucht eine eigene Entscheidung. Der CPM-Cache liegt unter `~/.cache/CPM`. Warnungen als Fehler gelten nur für eigene Targets (Interface-Bibliothek `mm_warnings`).
 
 ## Offen
 
