@@ -11,19 +11,56 @@ const juce::String ProcessorBase::getName() const {
     return name_;
 }
 
-void ProcessorBase::prepareToPlay(double, int) {}
+void ProcessorBase::prepareToPlay(double, int) {
+    // Keeps the active-note table: sounding notes get their note-off in the first block afterwards.
+    player_.invalidateTransport();
+}
 
 void ProcessorBase::releaseResources() {}
 
 void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
     audio.clear();
-    midi.clear();
+    midi.clear(); // incoming MIDI is not evaluated in v1.0 and not passed through
+
+    mm::engine::TransportInfo transport;
+    if (auto* playHead = getPlayHead()) {
+        if (auto position = playHead->getPosition()) {
+            transport.isPlaying = position->getIsPlaying();
+            transport.isLooping = position->getIsLooping();
+            const auto ppq = position->getPpqPosition();
+            const auto bpm = position->getBpm();
+            if (ppq.hasValue() && bpm.hasValue()) {
+                transport.hasPosition = true;
+                transport.ppq = *ppq;
+                transport.bpm = *bpm;
+            }
+            if (const auto loop = position->getLoopPoints()) {
+                transport.loopStartPpq = loop->ppqStart;
+                transport.loopEndPpq = loop->ppqEnd;
+            }
+        }
+    }
+
+    player_.process(transport, audio.getNumSamples(), getSampleRate(), events_);
+    writeEvents(midi);
 }
 
 void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi) {
     audio.clear();
     midi.clear();
+    events_.clear();
+    player_.releaseAll(events_, 0);
+    player_.invalidateTransport();
+    writeEvents(midi);
+}
+
+void ProcessorBase::writeEvents(juce::MidiBuffer& midi) const {
+    for (const auto& event : events_) {
+        midi.addEvent(event.noteOn ? juce::MidiMessage::noteOn(event.channel, event.pitch, event.velocity)
+                                   : juce::MidiMessage::noteOff(event.channel, event.pitch, event.velocity),
+                      event.sampleOffset);
+    }
 }
 
 bool ProcessorBase::acceptsMidi() const {

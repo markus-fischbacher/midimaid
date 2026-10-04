@@ -1,11 +1,13 @@
 #pragma once
 
+#include "engine/PatternPlayer.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace mm::plugin {
 
-/// Shared base of both plugin variants (instrument and MIDI-FX). Placeholder behaviour for Phase 0:
-/// the processor outputs silence and no MIDI. Pattern playback follows in later roadmap items.
+/// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
+/// audio and a hard-coded one-bar pattern played in sync with the host transport.
 class ProcessorBase : public juce::AudioProcessor {
 public:
     ProcessorBase(const BusesProperties& buses, juce::String name);
@@ -34,7 +36,11 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
 private:
+    void writeEvents(juce::MidiBuffer& midi) const;
+
     juce::String name_;
+    mm::engine::PatternPlayer player_;
+    mm::engine::MidiEventList events_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProcessorBase)
 };
