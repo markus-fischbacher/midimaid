@@ -34,6 +34,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
                 transport.hasPosition = true;
                 transport.ppq = *ppq;
                 transport.bpm = *bpm;
+                lastBpm_.store(*bpm);
             }
             if (const auto loop = position->getLoopPoints()) {
                 transport.loopStartPpq = loop->ppqStart;
@@ -61,6 +62,14 @@ void ProcessorBase::writeEvents(juce::MidiBuffer& midi) const {
                                    : juce::MidiMessage::noteOff(event.channel, event.pitch, event.velocity),
                       event.sampleOffset);
     }
+}
+
+MidiExporter& ProcessorBase::midiExporter() {
+    return exporter_;
+}
+
+double ProcessorBase::lastKnownBpm() const {
+    return lastBpm_.load();
 }
 
 bool ProcessorBase::acceptsMidi() const {
