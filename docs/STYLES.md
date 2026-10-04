@@ -40,7 +40,8 @@ Der Bass orientiert sich an einem wählbaren Kick-Raster oder an einer Drum-Refe
 Ist eine Drum-Referenz vorhanden, wird `custom` automatisch vorgeschlagen.
 
 Regel: Bassnoten beginnen nie auf einem Kick-Schritt. Ausnahme ist nur, wenn der Archetyp es ausdrücklich
-erlaubt. Das Kick-Raster ist pro Pattern einstellbar und optional pro Phrase (z. B. `halftime` im Breakdown).
+erlaubt. Das Kick-Raster ist pro Pattern einstellbar und optional pro Phrase (z. B. `halftime` im Breakdown;
+Feld `Phrase::kickGridId`, SPEC §5).
 
 ### 1.3 [v1.1] Polymeter-Sequenzen
 - Sequenzlänge ungleich Taktlänge: 3, 5, 6, 7, 9 oder 10 Sechzehntel bzw. 5 oder 7 Achtel
@@ -82,7 +83,7 @@ Auf betonten Schritten (0, 4, 8, 12) gilt für gleichzeitig klingende Töne von 
 - auf unbetonten Schritten gelten keine Einschränkungen (Durchgänge)
 - die Quarte über dem Bass gilt hier bewusst als konsonant (im klassischen Satz wäre sie eine Dissonanz);
   im Techno-Kontext ist das üblich
-- **Chord-Memory-Stabs** sind von der Skalen-Quantisierung ausgenommen, nicht aber von dieser Regel: Ein
+- **[v1.1] Chord-Memory-Stabs** sind von der Skalen-Quantisierung ausgenommen, nicht aber von dieser Regel: Ein
   Stab, der auf einem betonten Schritt verbotene Intervalle bildet, wird auf den nächsten Offbeat verschoben
 
 ### 1.9 Akzent und Velocity
@@ -126,14 +127,17 @@ eigene Phrasen-Rolle.
   `sparse_hits` sind sie ohne eigene Entscheidung zulässig
 
 ### 1.14 Qualitätsbewertung und Kandidaten
-- Der Algorithmus erzeugt pro Generierung **8 Kandidaten** und wählt den mit der besten Bewertung
-- Bewertung: Motiv-Wiederholung (§1.11), Tonumfang, **erwartete** Dichte im Zielbereich der Energie
-  (Wahrscheinlichkeiten eingerechnet), keine Kick-Kollisionen, Intervallregeln, rhythmische Abwechslung,
-  [v1.1] Abstand zum Verlauf, [v1.1] Nähe zum aktiven Referenz-Set (gewichtet mit dem Regler „Persönlich“, SPEC §3.20)
-- **Kopierschutz:** Kandidaten, die einem Eintrag des aktiven Referenz-Sets zu mehr als 85 % gleichen,
-  werden verworfen (SPEC §3.20)
-- **[v1.1] Wiederholungsschutz:** Kandidaten, die einem der letzten 20 Ergebnisse zu ähnlich sind (gleiche
-  Rhythmus- und Tonhöhenfolge zu mehr als 85 %), werden verworfen. **Gilt nur für Generieren**, nicht für
+- Der Algorithmus erzeugt pro Generierung **8 Kandidaten** und wählt den besten gültigen (SPEC §4.4)
+- Weiche Kriterien (je 0–100, gewichtet zum Gesamtwert): Motiv-Wiederholung (§1.11), Tonumfang,
+  **erwartete** Dichte im Zielbereich der Energie (Wahrscheinlichkeiten eingerechnet), keine
+  Kick-Kollisionen, Intervallregeln, rhythmische Abwechslung, [v1.1] Abstand zum Verlauf, [v1.1] Nähe zum
+  aktiven Referenz-Set (gewichtet mit dem Regler „Persönlich“, SPEC §3.20). Gewichte und
+  **Mindestbewertung** stehen im Profil (`quality`, §5) und werden im Hörtest von Phase 1a kalibriert.
+- **Kein gültiger Kandidat:** bis zu 2 weitere Runden, danach bleibt das bisherige Pattern (SPEC §4.4)
+- **Kopierschutz:** Kandidaten, die einem markanten Eintrag des aktiven Referenz-Sets zu mehr als 85 %
+  gleichen, werden verworfen (Metrik und „markant“ in SPEC §3.20)
+- **[v1.1] Wiederholungsschutz:** Kandidaten, die einem der letzten 20 Ergebnisse zu mehr als 85 % gleichen
+  (Metrik wie beim Kopierschutz), werden verworfen. **Gilt nur für Generieren**, nicht für
   Variationen und Verfeinern: Eine subtile Variation ist per Definition sehr ähnlich, sonst würde der
   Schutz genau die hypnotische Wiederholung verhindern, die Techno ausmacht.
 - Gespeichert wird der Seed des gewählten Kandidaten (SPEC §4.3)
@@ -154,6 +158,15 @@ eigene Phrasen-Rolle.
 - **Hard/Industrial:** Ratchets und `sparse_hits` mit 40–70 %, Fills mit 4:4 vor Phrasenwechseln
 - Bedingung 4:4 bzw. 8:8 bevorzugt für Turnaround-Noten (§1.12)
 - Höhere Energie → etwas mehr Noten mit Wahrscheinlichkeit; Kreativität → breitere Spanne
+
+### 1.17 Akkordsymbole
+Einheitlich in Profilen, KI-Schema und Code (D-92):
+- Römische Ziffern relativ zur **Dur-Tonleiter auf dem Grundton**; ♭ und ♯ verschieben die Stufe
+  (in JSON `b` und `#`). Damit ist jedes Symbol unabhängig vom Modus eindeutig.
+- Großbuchstaben = Dur, Kleinbuchstaben = Moll, `°` = vermindert (in JSON `o`), Zusatz `sus2` / `sus4`.
+  Septimen und Optionen kommen aus den Akkordfarben des Voicings, nicht aus dem Symbol.
+- Beispiel in A-Moll: `i` = Am, `iv` = Dm, `V` = E, `♭II` = B♭, `♭III` = C, `♭VI` = F, `♭VII` = G
+- Zu jedem Zeitpunkt klingt genau ein Akkord; Wechsel liegen auf Takt- oder Halbtaktgrenzen (SPEC §5).
 
 ---
 
@@ -200,7 +213,7 @@ Moll-Triade 40 % · Quinte (ohne Terz) 30 % · Moll7 20 % · sus2/sus4 10 %
 | Skalen (Gewicht) | Natürlich Moll 3 · Dorisch 2 · Harmonisch Moll 1 · Phrygisch-Dominant 1 |
 | Chromatik-Standard | 0 % |
 | Harmonie | 4-Akkord-Progression 60 % · 2-Akkord-Wechsel 30 % · statisch 10 % |
-| Typische Progressionen | i–VI–III–VII · i–iv–VI–V (harm. Moll) · i–VII–VI–VII · i–VI–iv–VII; Akkordlänge 1–2 Takte |
+| Typische Progressionen | i–♭VI–♭III–♭VII · i–iv–♭VI–V (harm. Moll) · i–♭VII–♭VI–♭VII · i–♭VI–iv–♭VII; Akkordlänge 1–2 Takte |
 | Kick-Standard | `4otf` |
 
 ### Bass – Tonbewegung
@@ -296,12 +309,23 @@ Cluster (mit ♭2) 40 % · Quinte 40 % · Moll-Triade 20 %
       { "id": "hypnotic_motif", "w": 4 },
       { "id": "stabs", "w": 3 },
       { "id": "arp", "w": 2 },
-      { "id": "polymeter_seq", "w": 3 }
+      { "id": "polymeter_seq", "w": 3 },
+      { "id": "acid_siren", "w": 1 }
     ],
     "chord_colors": [{ "id": "min", "w": 40 }, { "id": "fifth", "w": 30 }, { "id": "min7", "w": 20 }, { "id": "sus", "w": 10 }]
+  },
+  "quality": {
+    "min_score": 50,
+    "weights": { "motif": 3, "range": 1, "density": 2, "kick": 2, "intervals": 2, "rhythm_variety": 1 }
   }
 }
 ```
+
+- **Felder späterer Versionen** stehen schon im Profil, damit es später keine Migration braucht:
+  `chord_memory` (Standard ab v1.1, §1.10) und der Archetyp `polymeter_seq` [v1.1]. v1.0 ignoriert
+  `chord_memory` und überspringt Archetypen ohne Implementierung bei der Auswahl.
+- `quality` enthält Mindestbewertung und Gewichte der weichen Kriterien (SPEC §4.4). Die Werte im Beispiel
+  sind Platzhalter und werden im Hörtest von Phase 1a kalibriert.
 
 Archetypen sind Code-Bausteine (eine Klasse pro Archetyp mit gemeinsamer Schnittstelle).
 Die Profile wählen und gewichten sie nur. Neue Stile entstehen so ohne neuen Code, solange sie

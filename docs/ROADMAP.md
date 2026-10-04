@@ -37,9 +37,33 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
   - [ ] Welche Tasten Live und Logic an das Plugin-Fenster weiterleiten (Planung der Kürzel für v1.1)
   - [ ] Referenz-Instrumente: Legato-Glide für Slides und Velocity-Reaktion der Kandidaten prüfen,
         Auswahl pro Rolle festlegen (SPEC §12)
+  - [ ] Versatz zwischen Spuren messen: Wie weit rechnet eine Voice dem Hub voraus oder hinterher? (Logic mit
+        ausgewählter und nicht ausgewählter Spur, Live, Offline-Bounce; Grundlage für Mindestvorlauf und O-22)
+  - [ ] Einzelspur-Bounce bzw. Freeze einer Voice-Spur mit Slot-Automation im Hub (Logic „Bounce in Place“,
+        Freeze): Läuft der Hub mit, folgt die Voice? (O-22)
+  - [ ] Nicht aktive Parameter: Wie zeigen Live und Logic als nicht automatisierbar markierte Parameter an?
+        (SPEC §3.13)
+  - [ ] Versionen von CI-Toolchains und pluginval in `DECISIONS.md` (SPEC §12)
+
+**Host-Annahmen und Ersatzwege.** Fällt eine Prüfung negativ aus, gilt der Ersatzweg; Umfangsänderungen
+brauchen eine neue Entscheidung, bevor Phase 1b beginnt.
+
+| Annahme | Ersatzweg bei negativem Ergebnis |
+|---|---|
+| Live trennt beim Spur-Routing keine Kanäle (D-55) | Keiner nötig, eine Stimme pro Instanz funktioniert in beiden Fällen |
+| Logic lädt den MIDI-FX `aumi`, Sync, Loop und Stop laufen sauber | Logic-Unterstützung zurückstellen, neue Entscheidung zum Umfang |
+| Instanzen einer DAW teilen eine prozessweite Registry | Keine Kopplung in diesem Host: Solo-Instanzen und Hinweis „Kopplung nicht verfügbar“; Kopplung per Prozess-Kommunikation nur per neuer Entscheidung |
+| Geplanter Wechsel trifft bei 150 ms Vorlauf in allen Instanzen denselben PPQ | Standardwert des Mindestvorlaufs anhand der Messung erhöhen (D-90) |
+| Slot-Automation im Hub erreicht Voices rechtzeitig, auch bei Bounce und Freeze | Entscheidung O-22 (Automation vorziehen oder Slot-Automation pro Spur) |
+| Drag & Drop aus dem Plugin in die DAW | Export in einen Ordner mit „Im Finder/Explorer zeigen“, Aufnahme-Workflow |
+| Clip bzw. Region lässt sich ins Plugin ziehen | Import über Dateidialog und Drag aus Finder/Explorer; in Logic vorher als .mid exportieren (Setup-Hilfe) |
+| „Record MIDI to Track Here“ nimmt die Ausgabe hinter MidiMaid auf | Drag & Drop als einziger Weg in Logic, Hinweis in der Setup-Hilfe |
+| Freeze einer nur über „MIDI From“ gespielten Spur ist still (Erwartung) | Setup-Hilfe „erst aufnehmen, dann einfrieren“ (bereits geplant) |
+| Referenz-Instrumente gleiten im Legato-Modus | anderes Live- bzw. Logic-eigenes Instrument je Rolle |
 
 **Abnahme:** Beide DAWs spielen das Test-Pattern taktgenau, ohne hängende Noten bei Stop und Loop.
-pluginval und auval sind grün. Die Host-Ergebnisse sind dokumentiert.
+pluginval und auval sind grün. Die Host-Ergebnisse sind dokumentiert, für negative Ergebnisse ist der
+Ersatzweg beschlossen.
 
 ## Phase 1a – Musikalischer Kern (offline)
 - [ ] Eigener PRNG (PCG32) und Verteilungsfunktionen, plattformübergreifend identische Tests (SPEC §4.3)
@@ -54,7 +78,10 @@ pluginval und auval sind grün. Die Host-Ergebnisse sind dokumentiert.
 - [ ] Velocity-Konturen, Akzent als Flag, Akzent-Velocity (STYLES.md §1.9)
 - [ ] Voicing-Engine: enge Lage, Stimmführung (STYLES.md §1.10)
 - [ ] Motiv-Engine: Motiv zuerst, Wiederholung vor Variation, Durchgangstöne, Auftakte (STYLES.md §1.11)
-- [ ] Qualitätsbewertung, 8 Kandidaten, Kopierschutz-Schnittstelle (STYLES.md §1.14)
+- [ ] Qualitätsbewertung: harte und weiche Kriterien, Mindestbewertung aus dem Profil, 8 Kandidaten,
+      weitere Runden und Fehlschlag-Regel, Gewinner-Seed (SPEC §4.3, §4.4, STYLES.md §1.14)
+- [ ] Kopierschutz-Metrik mit Regel „nur markante Einträge“, mit Grenzfall-Tests (SPEC §3.20)
+- [ ] Akkordsymbole: Parser und Darstellung nach STYLES.md §1.17
 - [ ] Stilprofile als JSON nach `docs/STYLES.md` inklusive Loader und Validierung
 - [ ] Archetyp-Schnittstelle und alle v1.0-Archetypen aus STYLES.md (ohne `polymeter_seq`)
 - [ ] Gewichtete Auto-Auswahl und manuelle Übersteuerung pro Stimme
@@ -66,24 +93,31 @@ pluginval und auval sind grün. Die Host-Ergebnisse sind dokumentiert.
 - [ ] Harmonischer Kontext und Progressions-Generator
 - [ ] Bass- und Melodie-Generator (aufeinander abgestimmt), deterministisch über Seed
 - [ ] Patterns 1/2/4/8/16 Takte, Phrasen und Formplan ab 8 Takten (SPEC §3.7)
-- [ ] Golden-File-Tests pro Stil; Tests mit 3 Test-Stimmen (offene Stimmenzahl)
+- [ ] Golden-File-Tests pro Stil; Eigenschaftstests über Seed-Serien (SPEC §12); Tests mit 3 Test-Stimmen
+      (offene Stimmenzahl)
 - [ ] Hörtest-Werkzeug `tools/mmgen`: .mid pro Stil, Archetyp, Energie, Seed; Serien-Modus (SPEC §12)
-- [ ] **Hörtest-Session** mit dem Entwickler: `mmgen`-Serien in Live mit den Referenz-Instrumenten
-      abhören, Gewichte und Bereiche in STYLES.md anpassen
+- [ ] **Hörtest-Session** mit dem Entwickler nach dem Protokoll in SPEC §12: `mmgen`-Serien in Live mit den
+      Referenz-Instrumenten abhören, Gewichte, Bereiche, Bewertungsgewichte und Mindestbewertung in
+      STYLES.md anpassen
 - [ ] **Blindvergleich** gegen die Live-12-Generatoren (Seed, Shape) bei gleicher Tonart
 
 **Abnahme 1a:** Offline entstehen stiltypische, abgestimmte Patterns. Gleicher Seed ergibt auf allen
 Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind grün.
 
 ## Phase 1b – Engine, Slots, Hub & Voices
-- [ ] Engine: PatternPlayer, lock-freie Übergabe, Note-Off-Tabelle, quantisierter Wechsel mit
-      PPQ-Zeitstempel und Mindestvorlauf, Neustart an Taktgrenzen (SPEC §3.4, §6)
-- [ ] Engine-Tests mit simulierten Playheads (inkl. Wechsel kurz vor Quantisierungspunkt)
+- [ ] **Vorab:** Transport- und Wechsel-Zustandsautomat mit testbaren Beispielen in SPEC §6.1 ergänzen und
+      O-22 entscheiden (auf Basis der Messungen aus Phase 0)
+- [ ] Engine: PatternPlayer, Echtzeit-Vertrag (ausstehende Wechsel je Art, Rückgabe-Queue mit Überlaufregel,
+      reservierter MIDI-Puffer, Bearbeitungen ohne Quantisierung), Note-Off-Tabelle, quantisierter Wechsel
+      mit PPQ-Zeitstempel und Mindestvorlauf, Neustart an Taktgrenzen (SPEC §3.4, §6)
+- [ ] Engine-Tests mit simulierten Playheads (inkl. Wechsel kurz vor Quantisierungspunkt, Sprünge, fehlende
+      Host-Daten, volle Rückgabe-Queue)
 - [ ] 16 Pattern-Slots, Slot sofort bei Start und nach Sprung, Vorrangregeln (SPEC §3.10, §3.13, §6.8)
 - [ ] Hub & Voices: Rollen Hub/Voice/Solo, Ausgabemodus eine Stimme/keine, Registry, lock-freier Kanal
       für geplante Wechsel, eine Gruppe, Persistenz des kompletten Slot-Satzes, Hub-Verlust (SPEC §6.5)
 - [ ] Voice-Oberfläche (SPEC §8.1)
-- [ ] Alle Host-Parameter mit fester ID anlegen; aktiv: Slot, Mute 1–8 (SPEC §3.13)
+- [ ] Alle Host-Parameter nach dem Parameter-Register mit fester ID anlegen; aktiv: Slot, Mute 1–8;
+      nicht aktive als nicht automatisierbar (SPEC §3.13)
 - [ ] Einfache Hub-UI: Stil, Tonart, Skala, Takte, Seed, Generieren, Anzeige (nur lesend), Drag & Drop pro Stimme
 
 **Abnahme 1b:** In beiden DAWs laufen Hub und Voice taktgenau synchron, auch bei Slot-Wechseln
@@ -104,11 +138,15 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
 Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
 
 ## Phase 3 – KI-Anbindung
-- [ ] Provider-Schnittstelle, Abbruch, Timeouts, Backoff
+- [ ] Provider-Schnittstelle, Abbruch inklusive Netzwerkverbindung, Warten beim Schließen, Timeouts,
+      Backoff (SPEC §7.1)
 - [ ] Anthropic-Provider (native API, Structured Outputs)
 - [ ] OpenAI-kompatibler Provider mit Voreinstellungen (OpenAI, Ollama, LM Studio, OpenRouter) und
-      Fähigkeitsstufe pro Backend; Verbindungstest ermittelt die Stufe (SPEC §7.2)
-- [ ] Antwort-Schema v1, Parser und Validierung, ein Reparaturversuch, Nachfrage bei Fehlschlag
+      Fähigkeitsstufe pro Backend; Verbindungstest stuft nur herab (SPEC §7.2)
+- [ ] Antwort-Schema v1 (v1.0-Felder, Stufen, Oktave, Progressionen, Motive bei über 8 Takten), Parser und
+      Validierung, ein Reparaturversuch, Nachfrage bei Fehlschlag (SPEC §7.3)
+- [ ] Zustimmung pro Cloud-Provider für Referenzen und importierte Stimmen; Logging ohne Prompts und
+      Nutzerinhalte, Option „Prompts protokollieren“ (SPEC §3.20, §10)
 - [ ] Prompt-Vorlagen v1 (Generieren, Verfeinern) mit Stilregeln, Motivik und Anti-Klischee-Liste
 - [ ] KI-Ergebnisse durch Constraint-Schicht und Qualitätsbewertung, Anzeige bei Unterschreitung
 - [ ] Verfeinern per Prompt mit Kontext, Noten-IDs und Verlauf (SPEC §3.15)
@@ -127,7 +165,7 @@ mit Wahlmöglichkeit, und die Wiedergabe läuft ungestört weiter.
 - [ ] Analyse: Tonart- und Skalenerkennung, Akkordfolge aus Akkorden bzw. Bass-Grundtönen, Rhythmus,
       Register; tonartunabhängige Speicherung; Testkorpus mit Zielwerten (SPEC §3.20, §12)
 - [ ] Eigene Stimme importieren: Ersetzen, Sperre, harmonischer Kontext, übrige Stimmen passend
-      generieren, „Sperre lösen“ (SPEC §3.18)
+      generieren, „Sperre lösen“, Grenzen (nur 4/4, Länge, höchstens 16 Takte) (SPEC §3.18)
 - [ ] Drum-Referenz per Clip/.mid: GM-Zuordnung plus Liste in den Einstellungen, `custom`-Kick-Raster,
       Hat-Groove, Akzente; kein doppelter Swing (SPEC §3.14, §3.9)
 - [ ] Referenzen v1.0: ein Set pro Stil, Massen-Import (Dateien, Ordner, Clips), Rolle beim Import
@@ -235,7 +273,7 @@ Euklidische Rhythmen als Feature
 
 | Test | Release | Live 12 macOS | Live 12 Win | Logic |
 |---|---|---|---|---|
-| Laden und Entfernen | v1.0 | | | |
+| Laden und Entfernen, auch Entfernen während der Wiedergabe | v1.0 | | | |
 | Sync bei Start mitten im Takt | v1.0 | | | |
 | Loop-Bereich, Rücksprung | v1.0 | | | |
 | Tempowechsel und Automation | v1.0 | | | |
@@ -247,6 +285,8 @@ Euklidische Rhythmen als Feature
 | Slot-Wechsel 50 ms vor Taktgrenze: alle Instanzen gleichzeitig | v1.0 | | | |
 | Start bei Takt 37 mit Slot-Automation | v1.0 | | | |
 | Offline-Rendern / Bounce mit Slot-Automation | v1.0 | | | |
+| Einzelspur-Bounce bzw. Freeze einer Voice mit Slot-Automation (nach O-22) | v1.0 | | | |
+| Piano-Roll-Bearbeitung während der Wiedergabe: kein Versatz, keine hängenden Noten | v1.0 | | | |
 | Bypass während der Wiedergabe | v1.0 | | | |
 | Slides über Loop-Grenze, Synth im Legato-Modus | v1.0 | | | |
 | Groove + Slide + Kick-Freiraum kombiniert: keine Lücken, keine Kick-Überlappung | v1.0 | | | |
