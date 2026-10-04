@@ -8,7 +8,8 @@ add_executable(mm_engine_tests test_pattern_player.cpp)
 target_link_libraries(mm_engine_tests PRIVATE mm_engine Catch2::Catch2WithMain mm_warnings)
 
 add_executable(mm_plugin_glue_tests test_processor_glue.cpp)
-target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catch2WithMain mm_warnings)
+mm_warn_sources(test_processor_glue.cpp)
+target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catch2WithMain)
 
 list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
 include(Catch)

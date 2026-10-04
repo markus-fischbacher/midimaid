@@ -1,6 +1,11 @@
 # Third-party dependencies via CPM, versions pinned. Changing a version needs a decision (docs/DECISIONS.md).
 if(NOT DEFINED CPM_SOURCE_CACHE AND NOT DEFINED ENV{CPM_SOURCE_CACHE})
-    set(CPM_SOURCE_CACHE "$ENV{HOME}/.cache/CPM" CACHE PATH "CPM source cache")
+    if(DEFINED ENV{HOME})
+        set(_mm_home "$ENV{HOME}")
+    else()
+        set(_mm_home "$ENV{USERPROFILE}") # Windows
+    endif()
+    set(CPM_SOURCE_CACHE "${_mm_home}/.cache/CPM" CACHE PATH "CPM source cache")
 endif()
 
 include(CPM)

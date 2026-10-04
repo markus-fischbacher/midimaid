@@ -6,15 +6,26 @@ add_library(mm_host_capabilities STATIC HostCapabilities.cpp)
 target_include_directories(mm_host_capabilities PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(mm_host_capabilities PRIVATE mm_warnings)
 
-# Code shared by both variants. Plugin-specific defines come from the juce_add_plugin targets.
+# JUCE modules are compiled into every consuming target, so all of them need the same JUCE configuration.
+add_library(mm_juce_config INTERFACE)
+target_compile_definitions(mm_juce_config INTERFACE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+target_link_libraries(mm_juce_config INTERFACE juce::juce_recommended_config_flags)
+
+# Warnings as errors for our own files only (the targets below also compile JUCE module sources).
+mm_warn_sources(
+    ProcessorBase.cpp
+    PlaceholderEditor.cpp
+    HostDetection.cpp
+    MidiExporter.cpp
+    InstrumentEntry.cpp
+    MidiFxEntry.cpp)
+
+# Code shared by both variants.
 add_library(mm_plugin_common STATIC ProcessorBase.cpp PlaceholderEditor.cpp HostDetection.cpp MidiExporter.cpp)
 target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(
     mm_plugin_common
-    PUBLIC mm_core mm_engine mm_host_capabilities juce::juce_audio_processors
-    PRIVATE mm_warnings juce::juce_recommended_config_flags)
-
-set(_mm_plugin_defines JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+    PUBLIC mm_core mm_engine mm_host_capabilities mm_juce_config juce::juce_audio_processors)
 
 # Instrument variant: VST3, AU (aumu), Standalone.
 juce_add_plugin(
@@ -31,11 +42,10 @@ juce_add_plugin(
     IS_MIDI_EFFECT FALSE
     COPY_PLUGIN_AFTER_BUILD ${MIDIMAID_COPY_PLUGINS})
 target_sources(MidiMaid PRIVATE InstrumentEntry.cpp)
-target_compile_definitions(MidiMaid PUBLIC ${_mm_plugin_defines})
 target_link_libraries(
     MidiMaid
-    PRIVATE mm_plugin_common mm_warnings
-    PUBLIC juce::juce_audio_utils juce::juce_recommended_config_flags)
+    PRIVATE mm_plugin_common
+    PUBLIC juce::juce_audio_utils)
 
 # MIDI-FX variant: AU (aumi) only.
 if(MIDIMAID_FX_FORMATS)
@@ -53,9 +63,8 @@ if(MIDIMAID_FX_FORMATS)
         IS_MIDI_EFFECT TRUE
         COPY_PLUGIN_AFTER_BUILD ${MIDIMAID_COPY_PLUGINS})
     target_sources(MidiMaidFX PRIVATE MidiFxEntry.cpp)
-    target_compile_definitions(MidiMaidFX PUBLIC ${_mm_plugin_defines})
     target_link_libraries(
         MidiMaidFX
-        PRIVATE mm_plugin_common mm_warnings
-        PUBLIC juce::juce_audio_utils juce::juce_recommended_config_flags)
+        PRIVATE mm_plugin_common
+        PUBLIC juce::juce_audio_utils)
 endif()

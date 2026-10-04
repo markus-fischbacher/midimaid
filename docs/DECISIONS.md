@@ -105,6 +105,7 @@ Entscheidungen beschreiben teils den Zielzustand; ihr Release steht im Verweis.
 - **D-94** Abhängigkeiten über CPM, Versionen gepinnt: JUCE **8.0.15**, Catch2 3.16.0, nlohmann/json 3.12.0, CPM.cmake v0.43.2 (im Repo unter `cmake/CPM.cmake`, SHA-256 `49a3bef91ceb65bb66d57255e12d1ffd22abc2f6408fa9fe4534c544a2f232aa`). JUCE 9 (seit 21.07.2026, aktuell 9.0.3) wird vorerst nicht verwendet, weil SPEC und Roadmap JUCE 8 voraussetzen; ein Wechsel braucht eine eigene Entscheidung. Der CPM-Cache liegt unter `~/.cache/CPM`. Warnungen als Fehler gelten nur für eigene Targets (Interface-Bibliothek `mm_warnings`).
 - **D-95** Phase-0-Engine (`source/engine/PatternPlayer`): reine Standardbibliothek, feste Kapazitäten, keine Allokation im Audio-Thread. Position = Song-PPQ modulo Pattern-Länge (Wechselzeitpunkt PPQ 0, SPEC §6.1). Sprung = PPQ-Abweichung größer als eine Sample-Länge plus 1e-6 PPQ; der Loop-Rücksprung innerhalb eines Blocks wird sample-genau behandelt, endet das Loop-Ende genau auf einer Blockgrenze, folgen die Note-Offs im ersten Sample des nächsten Blocks. `prepareToPlay` lässt die Aktiv-Tabelle bestehen (Note-Offs im ersten Block danach, SPEC §6.2). Note-Offs haben Vorrang vor neuen Note-Ons (Kapazität 1024 Ereignisse pro Block). Das Platzhalter-Pattern ist ein Takt Offbeat-Bass (Schritte 2, 6, 10, 14; A1 = MIDI 33; Akzent auf Schritt 14) und wird durch das Datenmodell aus SPEC §5 ersetzt.
 - **D-96** Drag & Drop in Phase 0: Das Pattern-Primitiv (`PatternNote`, `PatternView`, Platzhalter-Pattern) liegt in `core/PlaybackPattern.h`, die `engine` hängt von `core` ab. Der MIDI-Schreiber `core/MidiFile` erzeugt Standard-MIDI-Dateien im Format 0 (960 PPQ) mit Spurname, Tempo (aktuelles DAW-Tempo), Taktart und End-of-Track am Pattern-Ende. Die Datei entsteht in einem Hintergrund-Thread (`MidiExporter`) in einem Unterordner pro Instanz unter dem Temp-Verzeichnis, wird beim Zerstören der Instanz entfernt, verwaiste Ordner (älter als 1 Tag) beim nächsten Start. Der Editor stößt den Export beim Öffnen und bei Tempoänderung an; der Drag startet nur, wenn die Datei fertig ist. Dateiname: `MidiMaid_Slot1_Bass.mid` (Slots und Stimmen folgen mit dem Datenmodell).
+- **D-97** macOS wird standardmäßig nur für arm64 gebaut (lokal und in der CI). Das Universal Binary (arm64 + x86_64, SPEC §11) und x86_64-Tests unter Rosetta (SPEC §12) laufen nur auf ausdrückliche Anforderung: CMake-Option `MIDIMAID_UNIVERSAL=ON` bzw. die Eingabe „universal“ beim manuellen CI-Start. Spätestens für das Release (Phase 7) ist ein Universal-Lauf Pflicht. Ebenso laufen Windows und Linux in der CI nur auf Zuruf (`workflow_dispatch`); automatisch baut die CI nur macOS.
 
 ## Offen
 
@@ -174,3 +175,12 @@ Host-Verifikation in Phase 0 bestätigen muss; bei einem negativen Ergebnis wird
 | unbekannt, CLAP/LV2/AAX | nein | nein | nein | nein | nein |
 
 Nur `detectHostCapabilities` (`HostDetection.cpp`) liest JUCEs `wrapperType` und `PluginHostType`.
+
+### CI-Toolchains (festgeschrieben in `.github/workflows/ci.yml`, Stand 04.10.2026)
+| Job | Runner | Toolchain | Status |
+|---|---|---|---|
+| macOS (automatisch bei PR und `main`) | `macos-15`, Image 20260907.0337.1, macOS 15.7.9, arm64 | Xcode 16.4, Apple clang 17.0.0, CMake 4.4.3, Ninja 1.13.2, pluginval 1.0.4 | grün: Build, 37 Tests, pluginval Strictness 10 (VST3, AU, AU MIDI-FX), auval `aumu`/`aumi` |
+| Windows (nur auf Zuruf) | `windows-2022` | MSVC über `ilammy/msvc-dev-cmd` (v1.13.0, per SHA gepinnt), pluginval 1.0.4 | noch nie vollständig gelaufen; erster Lauf scheiterte an MSVC C4458 (behoben, ungeprüft). SHA-256 der pluginval-Windows-Archivs nach dem ersten Lauf in `PLUGINVAL_SHA256_WINDOWS` eintragen |
+| Linux (nur auf Zuruf) | `ubuntu-24.04`, Image 20260927.320.1 (Ubuntu 24.04.5) | GCC 13.3.0, CMake 3.31.6 | erster Lauf scheiterte beim Linken ohne `-fPIC` (behoben, ungeprüft) |
+
+Gepinnte Actions: `actions/checkout` v7, `actions/cache` v6 (Tags), `ilammy/msvc-dev-cmd` per Commit-SHA.

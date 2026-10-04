@@ -24,8 +24,8 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
     midi.clear(); // incoming MIDI is not evaluated in v1.0 and not passed through
 
     mm::engine::TransportInfo transport;
-    if (auto* playHead = getPlayHead()) {
-        if (auto position = playHead->getPosition()) {
+    if (auto* host = getPlayHead()) {
+        if (auto position = host->getPosition()) {
             transport.isPlaying = position->getIsPlaying();
             transport.isLooping = position->getIsLooping();
             const auto ppq = position->getPpqPosition();
