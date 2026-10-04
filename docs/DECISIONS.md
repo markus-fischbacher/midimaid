@@ -175,3 +175,12 @@ Host-Verifikation in Phase 0 bestätigen muss; bei einem negativen Ergebnis wird
 | unbekannt, CLAP/LV2/AAX | nein | nein | nein | nein | nein |
 
 Nur `detectHostCapabilities` (`HostDetection.cpp`) liest JUCEs `wrapperType` und `PluginHostType`.
+
+### CI-Toolchains (festgeschrieben in `.github/workflows/ci.yml`, Stand 04.10.2026)
+| Job | Runner | Toolchain | Status |
+|---|---|---|---|
+| macOS (automatisch bei PR und `main`) | `macos-15`, Image 20260907.0337.1, macOS 15.7.9, arm64 | Xcode 16.4, Apple clang 17.0.0, CMake 4.4.3, Ninja 1.13.2, pluginval 1.0.4 | grün: Build, 37 Tests, pluginval Strictness 10 (VST3, AU, AU MIDI-FX), auval `aumu`/`aumi` |
+| Windows (nur auf Zuruf) | `windows-2022` | MSVC über `ilammy/msvc-dev-cmd` (v1.13.0, per SHA gepinnt), pluginval 1.0.4 | noch nie vollständig gelaufen; erster Lauf scheiterte an MSVC C4458 (behoben, ungeprüft). SHA-256 der pluginval-Windows-Archivs nach dem ersten Lauf in `PLUGINVAL_SHA256_WINDOWS` eintragen |
+| Linux (nur auf Zuruf) | `ubuntu-24.04`, Image 20260927.320.1 (Ubuntu 24.04.5) | GCC 13.3.0, CMake 3.31.6 | erster Lauf scheiterte beim Linken ohne `-fPIC` (behoben, ungeprüft) |
+
+Gepinnte Actions: `actions/checkout` v7, `actions/cache` v6 (Tags), `ilammy/msvc-dev-cmd` per Commit-SHA.
