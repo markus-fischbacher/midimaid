@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.25)
 
+# macOS builds arm64 only by default; the universal binary (arm64 + x86_64) is built on explicit request.
+option(MIDIMAID_UNIVERSAL "Build a universal binary on macOS (arm64;x86_64)" OFF)
 if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum macOS version")
-    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Universal binary")
+    if(MIDIMAID_UNIVERSAL)
+        set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures" FORCE)
+    else()
+        set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "macOS architectures" FORCE)
+    endif()
 endif()
 
 project(MidiMaid VERSION 0.0.1 LANGUAGES C CXX)

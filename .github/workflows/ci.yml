@@ -8,6 +8,10 @@ on:
   # Windows and Linux are built on demand only: Actions tab -> CI -> Run workflow (or `gh workflow run ci.yml`).
   workflow_dispatch:
     inputs:
+      universal:
+        description: macOS universal binary (arm64 + x86_64) instead of arm64 only
+        type: boolean
+        default: false
       windows:
         description: Build and test Windows
         type: boolean
@@ -50,7 +54,7 @@ jobs:
           cmake --version | head -1
           ninja --version
       - name: Configure
-        run: cmake --preset macos-debug -DMIDIMAID_COPY_PLUGINS=ON
+        run: cmake --preset macos-debug -DMIDIMAID_COPY_PLUGINS=ON -DMIDIMAID_UNIVERSAL=${{ inputs.universal && 'ON' || 'OFF' }}
       - name: Build
         run: cmake --build --preset macos-debug
       - name: Test
