@@ -87,7 +87,7 @@ jobs:
       - name: Configure
         run: cmake --preset windows-debug
       - name: Build
-        run: cmake --build --preset windows-debug
+        run: cmake --build --preset windows-debug -- -k 0
       - name: Test
         run: ctest --preset windows-debug
       - name: Install pluginval
@@ -127,6 +127,6 @@ jobs:
       - name: Configure
         run: cmake --preset linux-debug
       - name: Build (includes the VST3 compile test)
-        run: cmake --build --preset linux-debug
+        run: cmake --build --preset linux-debug -- -k 0
       - name: Test
         run: xvfb-run -a ctest --preset linux-debug
