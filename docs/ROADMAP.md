@@ -18,7 +18,7 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
 - [x] Formatliste per `MIDIMAID_FORMATS` (macOS `VST3;AU;Standalone`, Windows/Linux `VST3;Standalone`),
       IDs aller Zielformate eingetragen (SPEC §2.2, §2.4)
 - [x] Plugin-Targets: Instrument (VST3, AU, Standalone) und MIDI-FX (AU `aumi`), gemeinsame Kern-Bibliothek
-- [ ] `HostCapabilities`-Schicht (Format, Host, Fähigkeiten) mit Tests
+- [x] `HostCapabilities`-Schicht (Format, Host, Fähigkeiten) mit Tests
 - [ ] Minimal-Plugin spielt ein fest codiertes 1-Takt-Pattern synchron zum Transport
 - [ ] Drag & Drop eines fest codierten .mid aus dem Plugin
 - [ ] GitHub-Actions-CI: macOS und Windows (Build, Tests, pluginval), Linux (core-Tests, VST3-Kompiliertest)
