@@ -148,3 +148,7 @@ Anmerkungen:
 ### Windows
 Offen. Zu dokumentieren: Windows-Version, Visual Studio 2022 Build Tools (MSVC), CMake, Ninja, `gh`,
 pluginval, Live-Version.
+
+Nicht geprüft: `windows-debug`/`windows-release` in `CMakePresets.json` setzen `cl` als Compiler und gehen davon aus,
+dass CLion bzw. die Developer-Eingabeaufforderung die Visual-Studio-Umgebung lädt. `linux-*` ist ebenfalls noch
+ungeprüft (kommt mit der Linux-CI).
