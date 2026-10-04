@@ -1,2 +1,23 @@
+# macOS / Windows
 .DS_Store
+Thumbs.db
+Desktop.ini
 
+# Build output
+build/
+cmake-build-*/
+out/
+compile_commands.json
+CMakeUserPresets.json
+
+# CPM / downloaded dependencies
+.cpm-cache/
+cpm_source_cache/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+
+# Local Claude settings (shared settings.json stays in the repo)
+.claude/settings.local.json
