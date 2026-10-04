@@ -12,7 +12,7 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
 ## Phase 0 – Fundament und Host-Spike
 - [ ] Entwicklungsumgebung auf Mac und Windows prüfen, Versionen (OS, Live, Logic, Compiler) in
       `DECISIONS.md` dokumentieren (CLAUDE.md „Entwicklungsumgebung“)
-- [ ] Repo-Struktur nach `CLAUDE.md`, `.clang-format`, `.gitignore`, `.claude/settings.json`
+- [x] Repo-Struktur nach `CLAUDE.md`, `.clang-format`, `.gitignore`, `.claude/settings.json`
 - [ ] CMake mit CPM: JUCE 8 (gepinnt), Catch2, nlohmann/json
 - [ ] `CMakePresets.json` (macos/windows/linux × debug/release), Warnungen als Fehler
 - [ ] Formatliste per `MIDIMAID_FORMATS` (macOS `VST3;AU;Standalone`, Windows/Linux `VST3;Standalone`),
