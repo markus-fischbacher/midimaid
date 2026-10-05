@@ -31,9 +31,10 @@ concurrency:
 env:
   CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
   PLUGINVAL_VERSION: v1.0.4
-  # SHA-256 of the pluginval release archives (pinned; empty = print only, fill in after the first run)
+  # SHA-256 of the pluginval release archives (pinned). The Windows value is the hash seen on the first download
+  # on the runner (trust on first use); the project publishes no checksums.
   PLUGINVAL_SHA256_MACOS: 3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f
-  PLUGINVAL_SHA256_WINDOWS: ""
+  PLUGINVAL_SHA256_WINDOWS: c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab
 
 jobs:
   macos:
@@ -96,7 +97,7 @@ jobs:
       - name: Toolchain versions
         run: |
           echo "image: $env:ImageVersion"
-          cl 2>&1 | Select-Object -First 1
+          echo "MSVC toolset: $env:VCToolsVersion"
           cmake --version | Select-Object -First 1
           ninja --version
       - name: Configure
