@@ -77,6 +77,11 @@ uint64_t candidateSeed(uint64_t initialSeed, int round, int index);
 SelectionResult selectBest(const CandidateGenerator& generate, uint64_t initialSeed, const QualityProfile& profile,
                            const QualityContext& context, const HardCheck& hardCheck = {});
 
+/// Same, with a context per candidate (the archetypes of a candidate decide `ignoresKick`).
+using ContextFor = std::function<QualityContext(const Pattern&)>;
+SelectionResult selectBest(const CandidateGenerator& generate, uint64_t initialSeed, const QualityProfile& profile,
+                           const ContextFor& contextFor, const HardCheck& hardCheck = {});
+
 /// Stores the quality score and the winner seed in the pattern (`qualityScore`, `info.winnerSeed`).
 void applyResult(Pattern& pattern, const SelectionResult& result);
 
