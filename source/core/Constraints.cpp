@@ -1,6 +1,7 @@
 #include "core/Constraints.h"
 
 #include "core/KickGrid.h"
+#include "core/Register.h"
 
 #include <algorithm>
 #include <array>
@@ -72,6 +73,19 @@ std::optional<int> foldIntoRange(int pitch, int low, int high) {
     return candidate >= low ? std::optional<int>(candidate) : std::nullopt;
 }
 
+/// The effective range of a voice (profile, archetype, octave offset). Without a valid one the range without the
+/// offset is used, so the layer always has a range to work with.
+VoiceConstraints rangeOf(const Pattern& pattern, const Track& track,
+                         const RegisterProfile& profile = RegisterProfile{}) {
+    const auto range = effectiveRange(profile, track.role, track.archetypeId, pattern.voicing, track.octaveOffset);
+    if (range.has_value()) {
+        return {range->low, range->high};
+    }
+    const auto unshifted = effectiveRange(profile, track.role, track.archetypeId, pattern.voicing, 0);
+    const Range fallback = unshifted.value_or(track.role == VoiceRole::Bass ? profile.bass : profile.melody);
+    return {fallback.low, fallback.high};
+}
+
 class Pass {
 public:
     Pass(Pattern& pattern, const ConstraintSettings& settings, bool firstPass, ConstraintReport& report)
@@ -85,17 +99,17 @@ public:
             if (fullyLocked(track)) {
                 continue; // imported or locked voices stay exactly as they are
             }
-            constrainVoice(track, voiceConstraints(v, track.role));
+            constrainVoice(track, voiceConstraints(v, track));
         }
         constrainInteractions();
     }
 
 private:
-    VoiceConstraints voiceConstraints(size_t index, VoiceRole role) const {
+    VoiceConstraints voiceConstraints(size_t index, const Track& track) const {
         if (index < settings_.voices.size()) {
             return settings_.voices[index];
         }
-        return role == VoiceRole::Bass ? VoiceConstraints{28, 52} : VoiceConstraints{55, 88};
+        return rangeOf(pattern_, track);
     }
 
     void skipped() {
@@ -576,7 +590,7 @@ private:
             if (track.role == VoiceRole::Bass || fullyLocked(track)) {
                 continue;
             }
-            const VoiceConstraints range = voiceConstraints(v, track.role);
+            const VoiceConstraints range = voiceConstraints(v, track);
             std::vector<bool> remove(track.notes.size(), false);
             for (size_t i = 0; i < track.notes.size(); ++i) {
                 Note& note = track.notes[i];
@@ -661,9 +675,13 @@ void accumulate(ConstraintReport& total, const ConstraintReport& pass) {
 } // namespace
 
 ConstraintSettings ConstraintSettings::defaultsFor(const Pattern& pattern) {
+    return forPattern(pattern, RegisterProfile{});
+}
+
+ConstraintSettings ConstraintSettings::forPattern(const Pattern& pattern, const RegisterProfile& profile) {
     ConstraintSettings settings;
     for (const Track& track : pattern.voices) {
-        settings.voices.push_back(track.role == VoiceRole::Bass ? VoiceConstraints{28, 52} : VoiceConstraints{55, 88});
+        settings.voices.push_back(rangeOf(pattern, track, profile));
     }
     return settings;
 }
