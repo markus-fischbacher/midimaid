@@ -426,7 +426,7 @@ TEST_CASE("validation: every rule has a violating case", "[core][pattern][valida
     const std::vector<Case> cases = {
         {"lengthBars", [](Pattern& p) { p.lengthBars = 3; }},
         {"timeSig", [](Pattern& p) { p.timeSigNum = 3; }},
-        {"kickRoot", [](Pattern& p) { p.kickRoot = 12; }},
+        {"kickRoot", [](Pattern& p) { p.kickRoot = static_cast<PitchClass>(12); }},
         {"refineHistory", [](Pattern& p) { p.refineHistory.assign(6, "x"); }},
         {"qualityScore", [](Pattern& p) { p.qualityScore = 101; }},
         {"info.creativityPct", [](Pattern& p) { p.info.creativityPct = 101; }},
