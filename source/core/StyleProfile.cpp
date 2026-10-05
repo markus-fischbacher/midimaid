@@ -293,14 +293,14 @@ void readBass(Reader& r, const json& root, BassProfile& bass) {
     r.doubleValue(*object, "swing_default", "bass", true, swing);
     bass.swingDefault = static_cast<float>(swing);
     if (const json* movement = r.objectMember(*object, "movement", "bass", true)) {
-        double root = 0.0, fifth = 0.0, passing = 0.0;
-        r.doubleValue(*movement, "root", "bass.movement", true, root);
-        r.doubleValue(*movement, "fifth_octave", "bass.movement", true, fifth);
-        r.doubleValue(*movement, "passing", "bass.movement", true, passing);
+        double rootShare = 0.0, fifthShare = 0.0, passingShare = 0.0;
+        r.doubleValue(*movement, "root", "bass.movement", true, rootShare);
+        r.doubleValue(*movement, "fifth_octave", "bass.movement", true, fifthShare);
+        r.doubleValue(*movement, "passing", "bass.movement", true, passingShare);
         r.boolValue(*movement, "root_on_chord_change", "bass.movement", false, bass.movement.rootOnChordChange);
-        bass.movement.rootPercent = toPercent(root);
-        bass.movement.fifthOctavePercent = toPercent(fifth);
-        bass.movement.passingPercent = toPercent(passing);
+        bass.movement.rootPercent = toPercent(rootShare);
+        bass.movement.fifthOctavePercent = toPercent(fifthShare);
+        bass.movement.passingPercent = toPercent(passingShare);
     }
     readWeighted(r, *object, "archetypes", "bass", bass.archetypes);
 }
