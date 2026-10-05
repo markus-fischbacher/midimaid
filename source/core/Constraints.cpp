@@ -548,26 +548,7 @@ private:
     /// True if `pitch` for `note` breaks the register rule (melody at least 12 semitones above the bass at a
     /// simultaneous attack) or sounds a tense interval with the bass on a strong step (STYLES.md 1.6, 1.8).
     bool breaksBassRules(const Track& bass, const Note& note, int pitch, bool tensionAllowed) const {
-        for (const Note& b : bass.notes) {
-            if (b.startTick == note.startTick && pitch < b.pitch + 12) {
-                return true;
-            }
-        }
-        if (tensionAllowed) {
-            return false;
-        }
-        const uint32_t firstStrong = (note.startTick + kBeatTicks - 1) / kBeatTicks * kBeatTicks;
-        for (uint32_t tick = firstStrong; tick < endOf(note); tick += kBeatTicks) {
-            for (const Note& b : bass.notes) {
-                if (b.startTick <= tick && tick < endOf(b)) {
-                    const int interval = ((pitch - b.pitch) % 12 + 12) % 12;
-                    if (interval == 1 || interval == 6 || interval == 11) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        return violatesBassRules(bass, note.startTick, note.lengthTicks, pitch, tensionAllowed);
     }
 
     /// The voices other than the bass yield to the bass: a violating note moves to the nearest pitch that is
@@ -673,6 +654,48 @@ void accumulate(ConstraintReport& total, const ConstraintReport& pass) {
 }
 
 } // namespace
+
+bool violatesBassRules(const Track& bass, uint32_t startTick, uint32_t lengthTicks, int pitch, bool tensionAllowed) {
+    for (const Note& b : bass.notes) {
+        if (b.startTick == startTick && pitch < b.pitch + 12) {
+            return true;
+        }
+    }
+    if (tensionAllowed) {
+        return false;
+    }
+    const uint32_t endTick = startTick + lengthTicks;
+    const uint32_t firstStrong = (startTick + kBeatTicks - 1) / kBeatTicks * kBeatTicks;
+    for (uint32_t tick = firstStrong; tick < endTick; tick += kBeatTicks) {
+        for (const Note& b : bass.notes) {
+            if (b.startTick <= tick && tick < b.startTick + b.lengthTicks) {
+                const int interval = ((pitch - b.pitch) % 12 + 12) % 12;
+                if (interval == 1 || interval == 6 || interval == 11) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool soundsWithBass(const Track& bass, uint32_t startTick, uint32_t lengthTicks) {
+    for (const Note& b : bass.notes) {
+        if (b.startTick == startTick) {
+            return true;
+        }
+    }
+    const uint32_t endTick = startTick + lengthTicks;
+    const uint32_t firstStrong = (startTick + kBeatTicks - 1) / kBeatTicks * kBeatTicks;
+    for (uint32_t tick = firstStrong; tick < endTick; tick += kBeatTicks) {
+        for (const Note& b : bass.notes) {
+            if (b.startTick <= tick && tick < b.startTick + b.lengthTicks) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 ConstraintSettings ConstraintSettings::defaultsFor(const Pattern& pattern) {
     return forPattern(pattern, RegisterProfile{});
