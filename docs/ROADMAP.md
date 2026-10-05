@@ -77,7 +77,7 @@ Ersatzweg beschlossen.
 - [x] Register in MIDI-Nummern, Oktav-Offset (STYLES.md §1.6)
 - [x] Velocity-Konturen, Akzent als Flag, Akzent-Velocity (STYLES.md §1.9)
 - [x] Voicing-Engine: enge Lage, Stimmführung (STYLES.md §1.10)
-- [ ] Motiv-Engine: Motiv zuerst, Wiederholung vor Variation, Durchgangstöne, Auftakte (STYLES.md §1.11)
+- [x] Motiv-Engine: Motiv zuerst, Wiederholung vor Variation, Durchgangstöne, Auftakte (STYLES.md §1.11)
 - [ ] Qualitätsbewertung: harte und weiche Kriterien, Mindestbewertung aus dem Profil, 8 Kandidaten,
       weitere Runden und Fehlschlag-Regel, Gewinner-Seed (SPEC §4.3, §4.4, STYLES.md §1.14)
 - [ ] Kopierschutz-Metrik mit Regel „nur markante Einträge“, mit Grenzfall-Tests (SPEC §3.20)
