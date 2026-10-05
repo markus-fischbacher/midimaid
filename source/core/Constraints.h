@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Pattern.h"
+#include "core/Register.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -8,8 +9,8 @@
 
 namespace mm::core {
 
-/// Effective pitch range of one voice as MIDI numbers (SPEC 4.2). The effective range already includes the octave
-/// offset of the voice; the profiles and the octave offset arrive with their own roadmap items.
+/// Effective pitch range of one voice as MIDI numbers (SPEC 4.2), including the octave offset of the voice
+/// (see `effectiveRange` in `core/Register.h`).
 struct VoiceConstraints {
     int rangeLow = 28;
     int rangeHigh = 52;
@@ -28,8 +29,12 @@ struct ConstraintSettings {
     uint32_t slideOverlapTicks = 60;   ///< how far a slide reaches into the next note (1/64)
     bool harshStyle = false;           ///< Hard/Industrial: tense intervals are always allowed (STYLES.md 1.8)
 
-    /// Defaults per voice role (STYLES.md 1.6: bass 28-52, melody 55-88) for every voice of the pattern.
+    /// The effective ranges of every voice of the pattern for the default profile (STYLES.md 1.6: bass 28-52, melody
+    /// 55-88, stabs from `Pattern::voicing`), moved by the octave offset of each voice.
     static ConstraintSettings defaultsFor(const Pattern& pattern);
+
+    /// The same for the ranges of a style profile.
+    static ConstraintSettings forPattern(const Pattern& pattern, const RegisterProfile& profile);
 };
 
 /// Counts the interventions per rule. `skippedByLock` counts fixes that a locked dimension prevented.
