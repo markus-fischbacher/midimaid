@@ -61,6 +61,14 @@ struct ConstraintReport {
     size_t total() const;
 };
 
+/// True if a note of another voice (start, length, pitch) breaks the register rule against `bass` (at least 12
+/// semitones above a simultaneous bass attack) or, unless `tensionAllowed`, sounds a minor second, tritone or major
+/// seventh with the bass on a strong step (STYLES.md 1.6, 1.8). The constraint layer and the quality rating share it.
+bool violatesBassRules(const Track& bass, uint32_t startTick, uint32_t lengthTicks, int pitch, bool tensionAllowed);
+
+/// True if the bass sounds together with a note on a strong step or attacks with it, so that the rules above apply.
+bool soundsWithBass(const Track& bass, uint32_t startTick, uint32_t lengthTicks);
+
 /// SPEC 4.2 (and STYLES.md 1.2, 1.6-1.8): snaps pitches to the scale and the sounding chord (chord-scale principle,
 /// D-57), folds them into the register, puts note starts on the grid, keeps lengths inside the pattern, removes
 /// overlaps of equal pitches, keeps the bass monophonic, merges slides onto the same pitch into ties, removes slides
