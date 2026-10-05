@@ -90,7 +90,7 @@ Ersatzweg beschlossen.
 - [x] Chromatik nach Stil-Standardwerten (SPEC §3.8)
 - [x] Energie als Makro, Kreativität (SPEC §3.3, §7.6)
 - [x] Swing pro Stimme, Groove-Anwendung in der Ausgabestufe (SPEC §3.9)
-- [ ] Harmonischer Kontext und Progressions-Generator
+- [x] Harmonischer Kontext und Progressions-Generator
 - [ ] Bass- und Melodie-Generator (aufeinander abgestimmt), deterministisch über Seed
 - [ ] Patterns 1/2/4/8/16 Takte, Phrasen und Formplan ab 8 Takten (SPEC §3.7)
 - [ ] Golden-File-Tests pro Stil; Eigenschaftstests über Seed-Serien (SPEC §12); Tests mit 3 Test-Stimmen

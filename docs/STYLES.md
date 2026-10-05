@@ -353,7 +353,7 @@ Fehlermeldung mit dem Pfad des Problems; unbekannte Felder werden ignoriert (Fel
   `quality.min_score` 0–100, Gewichte ≥ 0 mit mindestens einem Wert über 0.
 - **Progressionen anderer Länge:** Ein Modus mit Gewicht, für den keine Progression der passenden Länge existiert
   (z. B. `four_chord` in Peak Time), ist zulässig. Der Progressions-Generator leitet sie dann aus vorhandenen ab
-  (O-25).
+  (D-119): zwei Akkorde = die ersten zwei, vier Akkorde = A B A B (aus zwei) bzw. A B C B (aus drei).
 - **Startwerte, die §2–4 nicht nennen** (mit dem Hörtest der Phase 1a zu kalibrieren): Bass-Bewegung Melodic
   (35/30/35 %, `root_on_chord_change`), Bass-Bewegung Hard (90/5/5 %), Swing-Standards (Peak Bass 0,52 und Melodie
   0,55; Melodic 0,50 und 0,52; Hard 0,50 und 0,50), Akkordlängen Hard (4–8 Takte), Akkordfarben-IDs und ihre
