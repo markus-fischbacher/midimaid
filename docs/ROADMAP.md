@@ -66,7 +66,7 @@ pluginval und auval sind grün. Die Host-Ergebnisse sind dokumentiert, für nega
 Ersatzweg beschlossen.
 
 ## Phase 1a – Musikalischer Kern (offline)
-- [ ] Eigener PRNG (PCG32) und Verteilungsfunktionen, plattformübergreifend identische Tests (SPEC §4.3)
+- [x] Eigener PRNG (PCG32) und Verteilungsfunktionen, plattformübergreifend identische Tests (SPEC §4.3)
 - [ ] Musiktheorie: Tonhöhenklassen, Skalen (inkl. Moll-Pentatonik, Phrygisch-Dominant), Akkorde,
       Stufen mit Alteration → MIDI, Akkord-Skalen-Prinzip
 - [ ] Pattern-Datenmodell (SPEC §5) mit Noten-IDs, `voices`-Liste und den für v1.1 reservierten Feldern,
