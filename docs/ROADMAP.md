@@ -83,7 +83,7 @@ Ersatzweg beschlossen.
 - [x] Kopierschutz-Metrik mit Regel „nur markante Einträge“, mit Grenzfall-Tests (SPEC §3.20)
 - [x] Akkordsymbole: Parser und Darstellung nach STYLES.md §1.17
 - [x] Stilprofile als JSON nach `docs/STYLES.md` inklusive Loader und Validierung
-- [ ] Archetyp-Schnittstelle und alle v1.0-Archetypen aus STYLES.md (ohne `polymeter_seq`)
+- [x] Archetyp-Schnittstelle und alle v1.0-Archetypen aus STYLES.md (ohne `polymeter_seq`)
 - [x] Gewichtete Auto-Auswahl und manuelle Übersteuerung pro Stimme
 - [x] Kick-Raster und Bass-Aussparung (inkl. Ausnahme `long_tied`)
 - [ ] Mehrstimmige Melodie (Akkordfarben je Stil)
