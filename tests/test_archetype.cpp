@@ -1,6 +1,7 @@
 #include "PatternFixtures.h"
 #include "core/Archetype.h"
 #include "core/KickGrid.h"
+#include "core/Macros.h"
 #include "core/Theory.h"
 
 #include <algorithm>
@@ -1170,4 +1171,54 @@ TEST_CASE("the flat second of the bass repeats bar for bar", "[archetype][chroma
         }
     }
     CHECK(flatSeconds > 0);
+}
+
+TEST_CASE("the creativity fills the chromatic budget of the bass, never beyond it", "[archetype][chromatic][macros]") {
+    StyleProfile style = loadShipped("hard_industrial");
+    style.bass.movement = {0, 0, 100};
+    size_t atZero = 0;
+    size_t atHundred = 0;
+    for (uint64_t seed = 1; seed <= 100; ++seed) {
+        for (const int creativity : {0, 100}) {
+            Pattern p = makePattern(4);
+            p.context.scaleId = "natural_minor";
+            setProgression(p, {{0, ChordQuality::Minor, 8}});
+            const auto notes = bassOf(p, "rolling16", style, seed, 100, creativity);
+            size_t outside = 0;
+            for (const Note& note : notes) {
+                outside += note.pitch == 34 ? 1 : 0; // Bb over A natural minor
+            }
+            INFO("seed " << seed << " creativity " << creativity);
+            CHECK(outside <= chromaticFill(35 * notes.size() / 100, creativity));
+            (creativity == 0 ? atZero : atHundred) += outside;
+        }
+    }
+    CHECK(atZero > 0);
+    CHECK(atZero < atHundred);
+}
+
+TEST_CASE("bass variations follow the creativity and the energy", "[archetype][macros]") {
+    const StyleProfile style = loadShipped("peak_time");
+    for (const char* id : {"rolling16", "long_tied"}) {
+        const auto varied = [&](int energy, int creativity) {
+            size_t count = 0;
+            for (uint64_t seed = 1; seed <= 300; ++seed) {
+                Pattern p = makePattern(4);
+                p.context.scaleId = "natural_minor";
+                setProgression(p, {{0, ChordQuality::Minor, 8}});
+                const auto notes = bassOf(p, id, style, seed, energy, creativity);
+                count += startsInBar(notes, 3) != startsInBar(notes, 0) ? 1 : 0;
+            }
+            return count;
+        };
+        INFO(id);
+        CHECK(varied(50, 0) == 0);
+        const size_t low = varied(50, 20);
+        const size_t mid = varied(50, 60);
+        CHECK(low > 0);
+        CHECK(low < mid);
+        CHECK(mid < varied(50, 100));
+        CHECK(varied(0, 60) < mid);
+        CHECK(varied(100, 60) > mid);
+    }
 }

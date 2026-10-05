@@ -38,17 +38,20 @@ const Archetype* findArchetype(std::string_view id);
 
 struct ArchetypeSettings {
     int energyPct = 50;     ///< 0-100: density, accent share, octave jumps, velocity level (STYLES.md 1.5)
-    int creativityPct = 40; ///< 0-100: share of variation bars inside a pattern
+    int creativityPct = 40; ///< 0-100: variation bars, unusual (chromatic) tones, scatter of the archetype choice
 };
 
 /// Chooses an archetype of the profile for `role` at random, weighted by the profile weights moved by the energy
 /// (calm: x(150 - energy)/100, dense: x(50 + energy)/100). Ids without an implementation or for another role are
-/// skipped. Empty string if no archetype is left.
-std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energyPct, Pcg32& rng);
+/// skipped. The creativity scatters every weight by a random factor (`archetypeScatterRange`, SPEC 7.6); at 0 (the
+/// default) the weights hold exactly and nothing is drawn for it. Empty string if no archetype is left.
+std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energyPct, Pcg32& rng,
+                            int creativityPct = 0);
 
 /// The archetype a voice is generated with: the manual choice of the voice (`archetypeAuto == false`, a known id of the
 /// right role, no random draw) or else `chooseArchetype`.
-std::string resolveArchetype(const Track& track, const StyleProfile& style, int energyPct, Pcg32& rng);
+std::string resolveArchetype(const Track& track, const StyleProfile& style, int energyPct, Pcg32& rng,
+                             int creativityPct = 0);
 
 /// Replaces the notes of voice `voiceIndex` by a new line of the archetype and sets `Track::archetypeId`. The line
 /// follows the harmony (`Pattern::context`), the kick grids (`kickTicks`) and the effective range of the voice, and
