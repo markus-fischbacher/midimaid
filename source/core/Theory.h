@@ -35,6 +35,8 @@ enum class ChordQuality { Major, Minor, Diminished, Sus2, Sus4 };
 struct Chord {
     uint8_t rootOffset = 0; // 0-11
     ChordQuality quality = ChordQuality::Minor;
+
+    bool operator==(const Chord&) const = default;
 };
 
 /// The three triad intervals of a quality, relative to the chord root.
