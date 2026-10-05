@@ -8,6 +8,10 @@ on:
   # Windows and Linux are built on demand only: Actions tab -> CI -> Run workflow (or `gh workflow run ci.yml`).
   workflow_dispatch:
     inputs:
+      sanitizers:
+        description: Run the core, engine and plugin-logic tests with AddressSanitizer and UBSan (macOS)
+        type: boolean
+        default: false
       universal:
         description: macOS universal binary (arm64 + x86_64) instead of arm64 only
         type: boolean
@@ -80,6 +84,28 @@ jobs:
           sleep 2
           auval -v aumu Mdmi Klrw
           auval -v aumi Mdmf Klrw
+
+  sanitizers:
+    name: Sanitizers (ASan + UBSan, macOS)
+    if: github.event_name == 'workflow_dispatch' && inputs.sanitizers
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: .cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('cmake/Dependencies.cmake', 'cmake/CPM.cmake') }}
+      - name: Configure
+        run: cmake --preset macos-debug -DMIDIMAID_SANITIZE=ON
+      - name: Build (tests without JUCE)
+        run: cmake --build --preset macos-debug --target mm_core_tests mm_engine_tests mm_plugin_tests
+      - name: Run the tests with the sanitizers
+        env:
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: |
+          build/macos-debug/tests/mm_core_tests
+          build/macos-debug/tests/mm_engine_tests
+          build/macos-debug/tests/mm_plugin_tests
 
   windows:
     name: Windows (build, tests, pluginval)

@@ -26,6 +26,17 @@ include(Warnings)
 include(Formats)
 include(Dependencies)
 
+# AddressSanitizer and UndefinedBehaviorSanitizer for our own code (not for the third-party dependencies above).
+# Findings abort the program, so a failing check fails the test.
+option(MIDIMAID_SANITIZE "Build our targets with AddressSanitizer and UndefinedBehaviorSanitizer (not MSVC)" OFF)
+if(MIDIMAID_SANITIZE)
+    if(MSVC)
+        message(FATAL_ERROR "MIDIMAID_SANITIZE is not supported with MSVC")
+    endif()
+    add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 enable_testing()
 
 add_subdirectory(source/core)
