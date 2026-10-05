@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <map>
 
 namespace mm::core {
 
@@ -16,6 +17,7 @@ namespace {
 constexpr uint32_t kStepTicks = 240;
 constexpr uint32_t kHalfBarTicks = kTicksPerBar / 2;
 constexpr uint32_t kMinNoteTicks = 60;
+constexpr uint32_t kBeatTicks = 960;
 constexpr int kSteps = 16;
 
 bool noteLess(const Note& a, const Note& b) {
@@ -34,7 +36,7 @@ public:
     Melody(const MelodyInput& input, Pcg32& rng)
         : in_(input), rng_(rng), endTick_(input.pattern.lengthBars * kTicksPerBar),
           energy_(std::clamp(input.energyPct, 0, 100)), creativity_(std::clamp(input.creativityPct, 0, 100)),
-          tension_(input.style.chromaticDefaultPercent >= 30) {
+          chromatic_(std::max(input.style.chromaticDefaultPercent, 0)), tension_(chromatic_ >= 30) {
         for (const Track& track : input.pattern.voices) {
             if (track.role == VoiceRole::Bass) {
                 bass_ = &track;
@@ -75,6 +77,7 @@ public:
             return std::nullopt;
         }
         finish();
+        chromaticPass();
         if (id == "acid_siren") {
             addSlides();
         }
@@ -127,8 +130,7 @@ private:
     }
 
     /// A tension tone (`offset` semitones above the chord root) where the scale offers it, otherwise the nearest
-    /// allowed pitch. Tones outside the scale wait for the chromatic share of the style (SPEC 3.8, later task), so the
-    /// cell keeps repeating the same pitches in every bar.
+    /// allowed pitch. The tone outside the scale is the wish of the chromatic pass (SPEC 3.8), see `addTension`.
     int tensionPitch(const Chord& chord, int offset) const {
         const int pitch = baseFor(rootPc(chord)) + offset;
         const auto here = std::optional<Chord>(chord);
@@ -204,6 +206,18 @@ private:
         note.pitch = static_cast<uint8_t>(std::clamp(pitch, 0, 127));
         note.accent = accent;
         notes_.push_back(note);
+    }
+
+    /// A tension note: the allowed pitch nearest to the tension tone, remembering the tone itself for the chromatic
+    /// pass (which plays it instead where the share of the style leaves room).
+    void addTension(uint32_t start, uint32_t length, int offset) {
+        const Chord chord = chordAt(start);
+        const int pitch = tensionPitch(chord, offset);
+        const int tone = baseFor(rootPc(chord)) + offset;
+        if (tone != pitch) {
+            wishes_[{start, pitch}] = tone;
+        }
+        addNote(start, length, pitch, false);
     }
 
     // -- phrases -----------------------------------------------------------------------------------------------
@@ -608,7 +622,7 @@ private:
         for (uint32_t bar = 0; bar < in_.pattern.lengthBars; ++bar) {
             for (size_t i = 0; i < count; ++i) {
                 const uint32_t start = bar * kTicksPerBar + static_cast<uint32_t>(steps[i]) * kStepTicks;
-                addNote(start, lengths[i], tensionPitch(chordAt(start), offsets[i]), false);
+                addTension(start, lengths[i], offsets[i]);
             }
         }
     }
@@ -632,7 +646,7 @@ private:
         for (uint32_t cell = 0; cell * cellBars < in_.pattern.lengthBars; ++cell) {
             for (size_t i = 0; i < steps.size(); ++i) {
                 const uint32_t start = cell * cellBars * kTicksPerBar + static_cast<uint32_t>(steps[i]) * kStepTicks;
-                addNote(start, lengths[i], tensionPitch(chordAt(start), offsets[i]), false);
+                addTension(start, lengths[i], offsets[i]);
             }
         }
     }
@@ -654,8 +668,7 @@ private:
     }
 
     /// Notes keep to the range: a pitch outside folds by octaves, a note without a place goes. Every generator builds
-    /// pitches of scale and chord, so the scale rule of the constraint layer never has to snap (and the chromatic share
-    /// stays unused until the chromatics task).
+    /// pitches of scale and chord; the chromatic pass leaves the scale afterwards, within the share of the style.
     bool pitchPass() {
         bool changed = false;
         std::vector<Note> kept;
@@ -749,6 +762,189 @@ private:
         return changed;
     }
 
+    // -- the chromatic share (SPEC 3.8) ------------------------------------------------------------------------------
+
+    /// What `pitch` for `note` costs against the chromatic share: 0 if allowed, 1 if it leaves scale and chord on a
+    /// weak step a semitone from an allowed pitch (as `applyConstraints` accepts it within the share), -1 if it would
+    /// not stand (range, bass rules or the constraint layer's snapping).
+    int chromaticCost(const Note& note, int pitch) const {
+        if (!in_.range.contains(pitch)) {
+            return -1;
+        }
+        if (bass_ != nullptr && !bass_->notes.empty() &&
+            violatesBassRules(*bass_, note.startTick, note.lengthTicks, pitch, tension_)) {
+            return -1;
+        }
+        const auto chord = std::optional<Chord>(chordAt(note.startTick));
+        if (isAllowed(in_.scale, keyRoot(), chord, pitch)) {
+            return 0;
+        }
+        const auto snapped = quantize(in_.scale, keyRoot(), chord, pitch);
+        const bool adjacent = snapped.has_value() && std::abs(*snapped - pitch) == 1;
+        return note.startTick % kBeatTicks != 0 && adjacent ? 1 : -1;
+    }
+
+    /// True if a note of `pitch` from `start` for `length` ticks would overlap a note of that pitch (the notes that
+    /// change together have the old pitch, so none of them counts).
+    bool overlapsSamePitch(uint32_t start, uint32_t length, int pitch) const {
+        for (size_t i = 0; i < notes_.size(); ++i) {
+            const Note& other = notes_[i];
+            if (other.pitch == pitch && other.startTick < start + length &&
+                start < other.startTick + other.lengthTicks) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    size_t chromaticNotes() const {
+        size_t used = 0;
+        for (const Note& note : notes_) {
+            used += isAllowed(in_.scale, keyRoot(), std::optional<Chord>(chordAt(note.startTick)), note.pitch) ? 0 : 1;
+        }
+        return used;
+    }
+
+    size_t chromaticBudget(size_t noteCount) const { return static_cast<size_t>(chromatic_) * noteCount / 100; }
+
+    /// Leaves the scale where the style allows it: the share of notes is `floor(share * notes / 100)` of the voice, as
+    /// in the constraint layer, and `applyConstraints` keeps every one of them. Arps, chord arps and plain stabs stay
+    /// on chord tones (STYLES.md 1.11).
+    void chromaticPass() {
+        const std::string_view id = in_.archetypeId;
+        if (chromatic_ <= 0 || notes_.empty() || id == "arp" || id == "chord_arp" || id == "stabs") {
+            return;
+        }
+        std::sort(notes_.begin(), notes_.end(), noteLess);
+        if (id == "aggro_stabs") {
+            if (tension_) {
+                addClusters();
+            }
+            return;
+        }
+        inflectNotes(id == "atonal_motif" || id == "sparse_hits");
+    }
+
+    /// Notes that repeat (same position in the bar and pitch) change together, so the bars keep repeating.
+    /// `wished`: only the tension tones of the cell (atonal, sparse); otherwise passing and neighbour tones
+    /// a semitone from the pitch, towards the next note. The notes at the extremes of the line and the last note of a
+    /// phrase keep their pitch, with everything that repeats them (span, climax and ending).
+    void inflectNotes(bool wished) {
+        int low = 127;
+        int high = 0;
+        for (const Note& note : notes_) {
+            low = std::min<int>(low, note.pitch);
+            high = std::max<int>(high, note.pitch);
+        }
+        std::vector<bool> ending(notes_.size(), false);
+        for (const Span& span : phrases()) {
+            const uint32_t from = span.startBar * kTicksPerBar;
+            const uint32_t to = from + span.lengthBars * kTicksPerBar;
+            for (size_t i = notes_.size(); i-- > 0;) {
+                if (notes_[i].startTick >= from && notes_[i].startTick < to) {
+                    ending[i] = true;
+                    break;
+                }
+            }
+        }
+        std::map<std::pair<uint32_t, int>, std::vector<size_t>> groups;
+        for (size_t i = 0; i < notes_.size(); ++i) {
+            const Note& note = notes_[i];
+            groups[{note.startTick % kTicksPerBar, note.pitch}].push_back(i);
+        }
+        std::vector<std::vector<size_t>> order;
+        for (auto& entry : groups) {
+            const bool protectedGroup =
+                !wished && (entry.first.second <= low || entry.first.second >= high ||
+                            std::any_of(entry.second.begin(), entry.second.end(), [&](size_t i) { return ending[i]; }));
+            if (!protectedGroup) {
+                order.push_back(std::move(entry.second));
+            }
+        }
+        const size_t budget = chromaticBudget(notes_.size());
+        size_t used = chromaticNotes();
+        if (used >= budget) {
+            return;
+        }
+        rng_.shuffle(order.begin(), order.end());
+        for (const std::vector<size_t>& members : order) {
+            const Note& first = notes_[members.front()];
+            std::array<int, 2> candidates{};
+            size_t count = 0;
+            if (wished) {
+                const auto it = wishes_.find({first.startTick, first.pitch});
+                if (it != wishes_.end()) {
+                    candidates[count++] = it->second;
+                }
+            } else {
+                const size_t index = members.front();
+                const bool up = index + 1 >= notes_.size() || notes_[index + 1].pitch >= first.pitch;
+                candidates[count++] = first.pitch + (up ? 1 : -1);
+                candidates[count++] = first.pitch + (up ? -1 : 1);
+            }
+            for (size_t c = 0; c < count; ++c) {
+                const int pitch = candidates[c];
+                size_t cost = 0;
+                bool fits = wished || (pitch >= low && pitch <= high);
+                for (const size_t index : members) {
+                    const int one = chromaticCost(notes_[index], pitch);
+                    fits = fits && one >= 0 &&
+                           !overlapsSamePitch(notes_[index].startTick, notes_[index].lengthTicks, pitch);
+                    cost += one > 0 ? 1 : 0;
+                }
+                if (!fits || cost == 0 || used + cost > budget) {
+                    continue;
+                }
+                for (const size_t index : members) {
+                    notes_[index].pitch = static_cast<uint8_t>(pitch);
+                }
+                used += cost;
+                break;
+            }
+        }
+    }
+
+    /// Aggressive stabs: a flat second above the root of the chord joins a hit where the scale lacks it (a cluster,
+    /// STYLES.md 1.8), on weak steps and within the share. The added notes count as notes of the voice.
+    void addClusters() {
+        std::map<std::pair<uint32_t, int>, std::vector<size_t>> groups; // position in the bar, root tone of the hit
+        for (size_t i = 0; i < notes_.size(); ++i) {
+            const PitchClass root = rootPc(chordAt(notes_[i].startTick));
+            if (pitchClassOf(notes_[i].pitch) == root) {
+                groups[{notes_[i].startTick % kTicksPerBar, notes_[i].pitch}].push_back(i);
+            }
+        }
+        std::vector<std::vector<size_t>> order;
+        for (auto& entry : groups) {
+            order.push_back(std::move(entry.second));
+        }
+        rng_.shuffle(order.begin(), order.end());
+        size_t used = chromaticNotes();
+        size_t total = notes_.size();
+        std::vector<Note> added;
+        for (const std::vector<size_t>& members : order) {
+            const int pitch = notes_[members.front()].pitch + 1;
+            bool fits = true;
+            for (const size_t index : members) {
+                const Note& hit = notes_[index];
+                fits =
+                    fits && chromaticCost(hit, pitch) == 1 && !overlapsSamePitch(hit.startTick, hit.lengthTicks, pitch);
+            }
+            if (!fits || used + members.size() > chromaticBudget(total + members.size())) {
+                continue;
+            }
+            for (const size_t index : members) {
+                Note cluster = notes_[index];
+                cluster.pitch = static_cast<uint8_t>(pitch);
+                added.push_back(cluster);
+            }
+            used += members.size();
+            total += members.size();
+        }
+        notes_.insert(notes_.end(), added.begin(), added.end());
+        std::sort(notes_.begin(), notes_.end(), noteLess);
+    }
+
     void finish() {
         for (int round = 0; round < 8; ++round) {
             std::sort(notes_.begin(), notes_.end(), noteLess);
@@ -767,7 +963,9 @@ private:
     uint32_t endTick_;
     int energy_;
     int creativity_;
+    int chromatic_; ///< share of notes that may leave the scale, in percent (SPEC 3.8)
     bool tension_;
+    std::map<std::pair<uint32_t, int>, int> wishes_; ///< (start, allowed pitch) -> tension tone outside the scale
     const Track* bass_ = nullptr;
     std::vector<Note> notes_;
 };
