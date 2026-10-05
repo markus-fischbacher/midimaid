@@ -1,0 +1,60 @@
+{
+  "id": "melodic_techno",
+  "version": 1,
+  "name": { "de": "Melodic Techno", "en": "Melodic Techno" },
+  "tempo": [120, 128],
+  "scales": [
+    { "id": "natural_minor", "w": 3 },
+    { "id": "dorian", "w": 2 },
+    { "id": "harmonic_minor", "w": 1 },
+    { "id": "phrygian_dominant", "w": 1 }
+  ],
+  "chromatic_default": 0.0,
+  "harmony": {
+    "modes": [
+      { "id": "four_chord", "w": 60 },
+      { "id": "two_chord", "w": 30 },
+      { "id": "static", "w": 10 }
+    ],
+    "progressions": [
+      ["i", "bVI", "bIII", "bVII"],
+      ["i", "iv", "bVI", "V"],
+      ["i", "bVII", "bVI", "bVII"],
+      ["i", "bVI", "iv", "bVII"]
+    ],
+    "chord_length_bars": [1, 2]
+  },
+  "kick_default": "4otf",
+  "bass": {
+    "range": [28, 52],
+    "kick_clearance": "1/32",
+    "swing_default": 0.50,
+    "movement": { "root": 0.35, "fifth_octave": 0.30, "passing": 0.35, "root_on_chord_change": true },
+    "archetypes": [
+      { "id": "rolling16_harmonic", "w": 4 },
+      { "id": "offbeat_changes", "w": 3 },
+      { "id": "long_tied", "w": 2 }
+    ]
+  },
+  "melody": {
+    "range": [55, 88],
+    "voicing": { "range": [55, 79], "chord_memory": false },
+    "swing_default": 0.52,
+    "archetypes": [
+      { "id": "chord_arp", "w": 4 },
+      { "id": "lead_phrase", "w": 3 },
+      { "id": "call_response", "w": 3 },
+      { "id": "pluck_seq", "w": 3 }
+    ],
+    "chord_colors": [
+      { "id": "min7", "w": 25 },
+      { "id": "min9", "w": 25 },
+      { "id": "min", "w": 30 },
+      { "id": "sus", "w": 20 }
+    ]
+  },
+  "quality": {
+    "min_score": 50,
+    "weights": { "motif": 3, "range": 1, "density": 2, "kick": 2, "intervals": 2, "rhythm_variety": 1 }
+  }
+}

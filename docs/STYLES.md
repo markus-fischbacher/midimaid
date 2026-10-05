@@ -330,3 +330,31 @@ Cluster (mit ♭2) 40 % · Quinte 40 % · Moll-Triade 20 %
 Archetypen sind Code-Bausteine (eine Klasse pro Archetyp mit gemeinsamer Schnittstelle).
 Die Profile wählen und gewichten sie nur. Neue Stile entstehen so ohne neuen Code, solange sie
 vorhandene Archetypen nutzen.
+
+### Schema und Validierung (Loader `core/StyleProfile`)
+
+Die ausgelieferten Profile liegen unter `resources/styles/` (`peak_time.json`, `melodic_techno.json`,
+`hard_industrial.json`). Der Loader liest den Text, prüft ihn und liefert ein `StyleProfile` oder eine
+Fehlermeldung mit dem Pfad des Problems; unbekannte Felder werden ignoriert (Felder späterer Versionen bleiben lesbar).
+
+- **Pflichtfelder:** `id`, `version`, `name.de`, `tempo`, `scales`, `chromatic_default`, `harmony`, `kick_default`,
+  `bass`, `melody`, `quality`. **Optional:** `name.en` (sonst der deutsche Name), `kick_variants`,
+  `bass.movement.root_on_chord_change`, `melody.voicing.chord_memory`.
+- **Ganzzahlen statt Gleitkomma:** Gewichte sind ganze Zahlen. `chromatic_default` und die Bewegungsanteile werden beim
+  Laden in ganze Prozent umgerechnet. `swing_default` bleibt ein Wert zwischen 0,50 und 0,75.
+- **Regeln:** `id` aus Kleinbuchstaben, Ziffern und Unterstrichen; Tempo 60–220 BPM aufsteigend; Skalen aus der
+  Skalentabelle (`Theory`) mit Gewicht ≥ 1; Harmonie-Modi `static`, `two_chord`, `four_chord`; Progressionen aus
+  2–4 gültigen Akkordsymbolen (§1.17), mindestens eine, sobald ein akkordwechselnder Modus ein Gewicht hat;
+  Akkordlänge in Takten aus {1, 2, 4, 8, 16}; Kick-Standard und `kick_variants` aus den festen Kick-Rastern;
+  `kick_clearance` ∈ {`off`, `1/64`, `1/32`, `1/16`}; Bereiche (`bass.range`, `melody.range`, `melody.voicing.range`)
+  nur **enger** als die Standards aus §1.6 und mindestens 12 Töne breit; die drei Bewegungsanteile ergeben 100 %;
+  Archetyp-IDs nur im Format (ob ein Archetyp implementiert ist, klärt später die Archetyp-Schnittstelle);
+  Akkordfarben aus der festen Menge `min`, `fifth`, `min7`, `min9`, `sus`, `cluster`;
+  `quality.min_score` 0–100, Gewichte ≥ 0 mit mindestens einem Wert über 0.
+- **Progressionen anderer Länge:** Ein Modus mit Gewicht, für den keine Progression der passenden Länge existiert
+  (z. B. `four_chord` in Peak Time), ist zulässig. Der Progressions-Generator leitet sie dann aus vorhandenen ab
+  (O-25).
+- **Startwerte, die §2–4 nicht nennen** (mit dem Hörtest der Phase 1a zu kalibrieren): Bass-Bewegung Melodic
+  (35/30/35 %, `root_on_chord_change`), Bass-Bewegung Hard (90/5/5 %), Swing-Standards (Peak Bass 0,52 und Melodie
+  0,55; Melodic 0,50 und 0,52; Hard 0,50 und 0,50), Akkordlängen Hard (4–8 Takte), Akkordfarben-IDs und ihre
+  Gewichte in Melodic und Hard sowie `kick_variants` (`broken_a`, `broken_b`) in Hard.

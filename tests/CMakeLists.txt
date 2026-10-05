@@ -1,5 +1,6 @@
-add_executable(mm_core_tests test_version.cpp test_midi_file.cpp test_random.cpp test_theory.cpp test_pattern.cpp test_constraints.cpp test_output_stage.cpp test_register.cpp test_chord_symbol.cpp)
+add_executable(mm_core_tests test_version.cpp test_midi_file.cpp test_random.cpp test_theory.cpp test_pattern.cpp test_constraints.cpp test_output_stage.cpp test_register.cpp test_chord_symbol.cpp test_style_profile.cpp)
 target_link_libraries(mm_core_tests PRIVATE mm_core Catch2::Catch2WithMain mm_warnings)
+target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
 add_executable(mm_plugin_tests test_host_capabilities.cpp)
 target_link_libraries(mm_plugin_tests PRIVATE mm_host_capabilities Catch2::Catch2WithMain mm_warnings)
