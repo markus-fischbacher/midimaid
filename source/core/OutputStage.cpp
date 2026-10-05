@@ -47,8 +47,11 @@ struct GrooveTemplate {
     std::vector<int64_t> velocityFactor; // permille, per 16th of the reference
 };
 
-GrooveTemplate buildGroove(const Pattern& pattern, const GrooveSettings& groove) {
+GrooveTemplate buildGroove(const Pattern& pattern, const GrooveSettings& groove, bool includeGroove) {
     GrooveTemplate result;
+    if (!includeGroove) {
+        return result; // straight: no swing, no profile
+    }
     const int32_t amount = std::clamp(toPermille(groove.amount), 0, 1000);
     const bool wantsReference = std::string_view(groove.templateId) == kGrooveDrumReference;
     if (wantsReference && pattern.rhythmRef.has_value() && pattern.rhythmRef->bars >= 1) {
@@ -80,8 +83,9 @@ GrooveTemplate buildGroove(const Pattern& pattern, const GrooveSettings& groove)
 
 /// Stage 2: timing offset and velocity profile. Only notes that start exactly on a 16th are touched (triplets and
 /// freely placed notes stay, SPEC 3.9). Starts are kept inside [0, pattern end) (D-104).
-void applyGroove(const Pattern& pattern, const Track& track, std::vector<Work>& notes, int64_t patternEnd) {
-    const GrooveTemplate groove = buildGroove(pattern, track.groove);
+void applyGroove(const Pattern& pattern, const Track& track, bool includeGroove, std::vector<Work>& notes,
+                 int64_t patternEnd) {
+    const GrooveTemplate groove = buildGroove(pattern, track.groove, includeGroove);
     for (Work& work : notes) {
         const Note& note = *work.source;
         int64_t offset = 0;
@@ -238,8 +242,8 @@ OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& setting
         for (size_t i = 0; i < notes.size(); ++i) {
             notes[i].source = &track.notes[i];
         }
-        applyGroove(pattern, track, notes, patternEnd);  // stage 2
-        applySlides(track, notes, settings, patternEnd); // stage 3
+        applyGroove(pattern, track, settings.includeGroove, notes, patternEnd); // stage 2
+        applySlides(track, notes, settings, patternEnd);                        // stage 3
         const bool ignoresKick = v < settings.ignoresKick.size() && settings.ignoresKick[v];
         if (track.role == VoiceRole::Bass && !ignoresKick) {
             applyKickClearance(notes, kicks, settings, patternEnd); // stage 4
