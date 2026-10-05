@@ -436,7 +436,8 @@ TEST_CASE("validation: every rule has a violating case", "[core][pattern][valida
         {"voices", [](Pattern& p) { p.voices.clear(); }},
         {"voices",
          [](Pattern& p) {
-             p.voices.assign(9, p.voices[0]);
+             const Track copy = p.voices[0]; // a copy: assign() must not alias an element of the vector
+             p.voices.assign(9, copy);
              for (size_t i = 0; i < p.voices.size(); ++i) {
                  p.voices[i].midiChannel = static_cast<uint8_t>(i + 1);
              }
