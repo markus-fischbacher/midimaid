@@ -40,6 +40,10 @@ Range applyOctaveOffset(Range range, int octaveOffset);
 /// Archetypes that play chords in the voicing range (stabs) instead of the line range of the melody.
 bool isVoicingArchetype(std::string_view archetypeId);
 
+/// Archetypes that may start on kick steps and hold over kicks (`long_tied`, STYLES.md 3); the constraint layer leaves
+/// the kick rules out for them.
+bool ignoresKickArchetype(std::string_view archetypeId);
+
 /// The range a voice is generated and constrained in: bass range, melody range, or for stab archetypes the voicing
 /// range of the pattern, plus the octave offset of the voice (SPEC 4.2). nullopt if the result is narrower than
 /// `kMinRangeWidth` pitches.
