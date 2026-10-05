@@ -1,5 +1,6 @@
 #include "PatternFixtures.h"
 #include "core/Archetype.h"
+#include "core/Macros.h"
 #include "core/Theory.h"
 #include "core/Voicing.h"
 
@@ -1674,7 +1675,7 @@ TEST_CASE("atonal_motif plays the real flat second and tritone in natural minor 
         Pattern p = makePattern(4);
         p.context.scaleId = "natural_minor";
         setProgression(p, {{0, ChordQuality::Minor, 8}});
-        for (const Note& note : melodyOf(p, "atonal_motif", hard, seed, 100, 0, false)) {
+        for (const Note& note : melodyOf(p, "atonal_motif", hard, seed, 100, 100, false)) {
             offsets.insert((note.pitch - 69 + 12) % 12);
         }
     }
@@ -1713,4 +1714,136 @@ TEST_CASE("aggro_stabs adds a flat second above the chord root to a hit from 30 
         CHECK(outsideCount(q, melodyOf(q, "aggro_stabs", peak, seed, 100, 0, false)) == 0); // below 30 %: no cluster
     }
     CHECK(clusters > 0);
+}
+
+// -- energy and creativity as macros (SPEC 3.3, 7.6) ----------------------------------------------------------------
+
+namespace {
+
+struct Totals {
+    size_t notes = 0;
+    size_t velocity = 0;
+    size_t accents = 0;
+};
+
+Totals totalsAt(const StyleProfile& style, int energy, int creativity) {
+    Totals totals;
+    for (const Archetype& archetype : allArchetypes()) {
+        for (uint64_t seed = 1; seed <= 30; ++seed) {
+            Pattern p = makePattern(4);
+            p.context.scaleId = std::string(style.scales.front().id);
+            variedProgression(p, seed);
+            Pcg32 rng = Pcg32::fromSeed(seed);
+            const bool melody = archetype.role == VoiceRole::Melody;
+            if (melody) {
+                REQUIRE(generateVoice(p, 0, "rolling16", style, ArchetypeSettings{energy, creativity}, rng));
+            }
+            REQUIRE(generateVoice(p, melody ? 1 : 0, archetype.id, style, ArchetypeSettings{energy, creativity}, rng));
+            for (const Note& note : p.voices[melody ? 1 : 0].notes) {
+                ++totals.notes;
+                totals.velocity += note.velocity;
+                totals.accents += note.accent ? 1 : 0;
+            }
+        }
+    }
+    return totals;
+}
+
+} // namespace
+
+TEST_CASE("more energy gives more notes, more velocity and more accents", "[archetype-melody][macros]") {
+    for (const std::string& styleName : kStyles) {
+        const StyleProfile style = loadShipped(styleName);
+        const Totals low = totalsAt(style, 0, 40);
+        const Totals mid = totalsAt(style, 50, 40);
+        const Totals high = totalsAt(style, 100, 40);
+        INFO(styleName);
+        CHECK(low.notes < mid.notes);
+        CHECK(mid.notes < high.notes);
+        CHECK(low.velocity * mid.notes < mid.velocity * low.notes); // mean velocity
+        CHECK(mid.velocity * high.notes < high.velocity * mid.notes);
+        CHECK(low.accents * mid.notes < mid.accents * low.notes); // share of accents
+        CHECK(mid.accents * high.notes < high.accents * mid.notes);
+    }
+}
+
+namespace {
+
+/// Seeds (of `count`) for which the last bar of four differs from the first.
+size_t variedSeeds(const StyleProfile& style, const char* id, int energy, int creativity, uint64_t count) {
+    size_t varied = 0;
+    for (uint64_t seed = 1; seed <= count; ++seed) {
+        Pattern p = makePattern(4);
+        p.context.scaleId = "natural_minor";
+        setProgression(p, {{0, ChordQuality::Minor, 8}});
+        const auto notes = melodyOf(p, id, style, seed, energy, creativity, false);
+        varied += startsAndPitches(notes, 3, 4) != startsAndPitches(notes, 0, 1) ? 1 : 0;
+    }
+    return varied;
+}
+
+} // namespace
+
+TEST_CASE("variations follow the creativity and the energy", "[archetype-melody][macros]") {
+    const StyleProfile style = loadShipped("peak_time");
+    for (const char* id : {"pluck_seq", "acid_siren"}) {
+        INFO(id);
+        CHECK(variedSeeds(style, id, 50, 0, 200) == 0); // no creativity, no variation
+        const size_t low = variedSeeds(style, id, 50, 20, 300);
+        const size_t mid = variedSeeds(style, id, 50, 60, 300);
+        const size_t high = variedSeeds(style, id, 50, 100, 300);
+        CHECK(low > 0);
+        CHECK(low < mid);
+        CHECK(mid < high);
+        CHECK(variedSeeds(style, id, 0, 60, 300) < mid); // the energy moves the share
+        CHECK(variedSeeds(style, id, 100, 60, 300) > mid);
+    }
+}
+
+TEST_CASE("the creativity scatters the choice of the archetype within the profile", "[archetype-melody][macros]") {
+    for (const std::string& styleName : kStyles) {
+        const StyleProfile style = loadShipped(styleName);
+        std::set<std::string> ids;
+        for (const WeightedId& entry : style.melody.archetypes) {
+            ids.insert(entry.id);
+        }
+        size_t different = 0;
+        for (uint64_t seed = 1; seed <= 300; ++seed) {
+            Pcg32 plain = Pcg32::fromSeed(seed);
+            Pcg32 explicitZero = Pcg32::fromSeed(seed);
+            Pcg32 scattered = Pcg32::fromSeed(seed);
+            Pcg32 again = Pcg32::fromSeed(seed);
+            const std::string base = chooseArchetype(style, VoiceRole::Melody, 50, plain);
+            CHECK(chooseArchetype(style, VoiceRole::Melody, 50, explicitZero, 0) == base); // no draw at 0
+            CHECK(plain.next() == explicitZero.next());
+            const std::string other = chooseArchetype(style, VoiceRole::Melody, 50, scattered, 100);
+            CHECK(ids.count(other) == 1);
+            CHECK(chooseArchetype(style, VoiceRole::Melody, 50, again, 100) == other); // deterministic
+            different += other != base ? 1 : 0;
+        }
+        INFO(styleName);
+        CHECK(different > 0);
+    }
+}
+
+TEST_CASE("the creativity fills the chromatic budget, never beyond it", "[archetype-melody][macros]") {
+    const StyleProfile hard = loadShipped("hard_industrial");
+    size_t atZero = 0;
+    size_t atHundred = 0;
+    for (const std::string& id : kChromaticIds) {
+        for (uint64_t seed = 1; seed <= 40; ++seed) {
+            for (const int creativity : {0, 100}) {
+                Pattern p = makePattern(4);
+                p.context.scaleId = "natural_minor";
+                variedProgression(p, seed);
+                const auto notes = melodyOf(p, id, hard, seed, 100, creativity, false);
+                const size_t outside = outsideCount(p, notes);
+                INFO(id << " seed " << seed << " creativity " << creativity);
+                CHECK(outside <= chromaticFill(35 * notes.size() / 100, creativity));
+                (creativity == 0 ? atZero : atHundred) += outside;
+            }
+        }
+    }
+    CHECK(atZero > 0);
+    CHECK(atZero < atHundred);
 }

@@ -2,6 +2,7 @@
 
 #include "core/ArchetypeMelody.h"
 #include "core/KickGrid.h"
+#include "core/Macros.h"
 #include "core/Theory.h"
 #include "core/VelocityContour.h"
 
@@ -207,8 +208,8 @@ private:
         }
 
         const BassMovement& movement = style_.bass.movement;
-        const int accentChance = spec_.aggressive ? 50 + energy_ / 2 : 30 + (6 * energy_) / 10;
-        const int jumpChance = 5 + (15 * energy_) / 100;
+        const int accentChance = bassAccentChance(energy_, spec_.aggressive);
+        const int jumpChance = bassJumpChance(energy_);
         for (size_t s = 0; s < kSteps; ++s) {
             const bool strong = s % 4 == 0;
             const std::array<uint32_t, 3> weights{static_cast<uint32_t>(std::max(movement.rootPercent, 0)),
@@ -283,9 +284,7 @@ private:
 
     /// Share of the free steps a 16th archetype plays: 40 % at energy 0 up to 100 % at energy 100, rounded up so that
     /// the density stays inside the band of the energy (D-111, D-113).
-    size_t keptCount(size_t freeSteps) const {
-        return std::min(freeSteps, (freeSteps * static_cast<size_t>(400 + 6 * energy_) + 999) / 1000);
-    }
+    size_t keptCount(size_t freeSteps) const { return energyKeptSteps(freeSteps, energy_); }
 
     void buildSteps() {
         const std::vector<int> shape = stepsOfShape();
@@ -306,7 +305,7 @@ private:
                 kept.resize(std::min(kept.size(), keptCount(domain.size())));
             }
             const bool variationBar = pattern_.lengthBars >= 4 && bar % 4 == 3;
-            if (variationBar && rng_.chance(creativity_) && !domain.empty()) {
+            if (variationBar && rng_.chance(variationChance(creativity_, energy_)) && !domain.empty()) {
                 varyBar(domain, kept, sixteenth);
             }
             for (const int s : domain) {
@@ -379,7 +378,7 @@ private:
             const Chord second = chordAt(barStart + kHalfBarTicks);
             const bool split = !(first == second);
             const bool variationBar = pattern_.lengthBars >= 4 && bar % 4 == 3;
-            const bool vary = variationBar && rng_.chance(creativity_);
+            const bool vary = variationBar && rng_.chance(variationChance(creativity_, energy_));
             if (split || vary) {
                 addLongNote(barStart, kHalfBarTicks, rootPitch(first));
                 int pitch = rootPitch(second);
@@ -487,7 +486,8 @@ private:
             order.push_back(std::move(entry.second));
         }
         rng_.shuffle(order.begin(), order.end());
-        const size_t budget = static_cast<size_t>(std::max(style_.chromaticDefaultPercent, 0)) * notes_.size() / 100;
+        const size_t budget = chromaticFill(
+            static_cast<size_t>(std::max(style_.chromaticDefaultPercent, 0)) * notes_.size() / 100, creativity_);
         size_t used = 0;
         for (const std::vector<size_t>& members : order) {
             if (used + members.size() <= budget) {
@@ -533,37 +533,36 @@ const Archetype* findArchetype(std::string_view id) {
     return nullptr;
 }
 
-std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energyPct, Pcg32& rng) {
+std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energyPct, Pcg32& rng, int creativityPct) {
     const int energy = std::clamp(energyPct, 0, 100);
     const std::vector<WeightedId>& entries = role == VoiceRole::Bass ? style.bass.archetypes : style.melody.archetypes;
     std::vector<std::string> ids;
     std::vector<uint32_t> weights;
+    const int range = archetypeScatterRange(creativityPct);
     for (const WeightedId& entry : entries) {
         const Archetype* archetype = findArchetype(entry.id);
         if (archetype == nullptr || archetype->role != role || entry.weight <= 0) {
             continue;
         }
-        int factor = 100;
-        if (archetype->density == ArchetypeDensity::Dense) {
-            factor = 50 + energy;
-        } else if (archetype->density == ArchetypeDensity::Calm) {
-            factor = 150 - energy;
-        }
+        const int factor = archetypeDensityFactor(archetype->density == ArchetypeDensity::Dense,
+                                                  archetype->density == ArchetypeDensity::Calm, energy);
         ids.push_back(entry.id);
-        weights.push_back(static_cast<uint32_t>(entry.weight) * static_cast<uint32_t>(factor));
+        weights.push_back(static_cast<uint32_t>(entry.weight) * static_cast<uint32_t>(factor) *
+                          static_cast<uint32_t>(archetypeScatterFactor(range, rng)));
     }
     const size_t index = rng.weightedIndex(weights);
     return index < ids.size() ? ids[index] : std::string();
 }
 
-std::string resolveArchetype(const Track& track, const StyleProfile& style, int energyPct, Pcg32& rng) {
+std::string resolveArchetype(const Track& track, const StyleProfile& style, int energyPct, Pcg32& rng,
+                             int creativityPct) {
     if (!track.archetypeAuto) {
         const Archetype* manual = findArchetype(track.archetypeId);
         if (manual != nullptr && manual->role == track.role) {
             return track.archetypeId;
         }
     }
-    return chooseArchetype(style, track.role, energyPct, rng);
+    return chooseArchetype(style, track.role, energyPct, rng, creativityPct);
 }
 
 bool generateVoice(Pattern& pattern, size_t voiceIndex, std::string_view archetypeId, const StyleProfile& style,

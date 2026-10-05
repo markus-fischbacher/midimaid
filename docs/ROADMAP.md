@@ -88,7 +88,7 @@ Ersatzweg beschlossen.
 - [x] Kick-Raster und Bass-Aussparung (inkl. Ausnahme `long_tied`)
 - [x] Mehrstimmige Melodie (Akkordfarben je Stil)
 - [x] Chromatik nach Stil-Standardwerten (SPEC §3.8)
-- [ ] Energie als Makro, Kreativität (SPEC §3.3, §7.6)
+- [x] Energie als Makro, Kreativität (SPEC §3.3, §7.6)
 - [ ] Swing pro Stimme, Groove-Anwendung in der Ausgabestufe (SPEC §3.9)
 - [ ] Harmonischer Kontext und Progressions-Generator
 - [ ] Bass- und Melodie-Generator (aufeinander abgestimmt), deterministisch über Seed

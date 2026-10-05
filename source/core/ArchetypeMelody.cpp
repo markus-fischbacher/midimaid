@@ -1,6 +1,7 @@
 #include "core/ArchetypeMelody.h"
 
 #include "core/Constraints.h"
+#include "core/Macros.h"
 #include "core/Motif.h"
 #include "core/Quality.h"
 #include "core/Voicing.h"
@@ -149,9 +150,7 @@ private:
     }
 
     /// 40 % of the steps at energy 0 up to 100 % at energy 100, rounded up (arps, acid lines).
-    size_t keptShare(size_t total) const {
-        return std::min(total, (total * static_cast<size_t>(400 + 6 * energy_) + 999) / 1000);
-    }
+    size_t keptShare(size_t total) const { return energyKeptSteps(total, energy_); }
 
     bool variationBar(uint32_t relativeBar, uint32_t barCount) const { return barCount >= 4 && relativeBar % 4 == 3; }
 
@@ -189,7 +188,7 @@ private:
     std::vector<int> keptFor(const std::vector<int>& order, size_t count, uint32_t relativeBar, uint32_t barCount) {
         std::vector<int> kept(order.begin(),
                               order.begin() + static_cast<std::ptrdiff_t>(std::min(count, order.size())));
-        if (variationBar(relativeBar, barCount) && rng_.chance(creativity_)) {
+        if (variationBar(relativeBar, barCount) && rng_.chance(variationChance(creativity_, energy_))) {
             moveOne(order, kept);
         }
         std::sort(kept.begin(), kept.end());
@@ -430,7 +429,7 @@ private:
     // -- step based archetypes ---------------------------------------------------------------------------------
 
     void buildPluck() {
-        const int gridStep = rng_.chance(30 + (4 * energy_) / 10) ? 1 : 2; // 16th or 8th grid
+        const int gridStep = rng_.chance(pluckSixteenthChance(energy_)) ? 1 : 2; // 16th or 8th grid
         const int positions = kSteps / gridStep;
         const std::vector<int> order = shuffledOrder(positions, [](int) { return false; });
         const size_t count = static_cast<size_t>(std::min(midCount(), positions));
@@ -540,7 +539,7 @@ private:
         const size_t count = static_cast<size_t>(std::min(midCount(), kSteps));
         const std::array<uint32_t, 2> lengths =
             aggressive ? std::array<uint32_t, 2>{120, 240} : std::array<uint32_t, 2>{240, 480};
-        const int accentChance = aggressive ? 60 : 20 + (3 * energy_) / 10;
+        const int accentChance = stabAccentChance(energy_, aggressive);
         std::array<bool, kSteps> longHit{};
         std::array<bool, kSteps> accent{};
         for (int s = 0; s < kSteps; ++s) {
@@ -576,7 +575,7 @@ private:
             current = std::clamp(current + static_cast<int>(rng_.bounded(5)) - 2, -reach, reach);
             degree[s] = current;
             shortNote[s] = rng_.chance(30);
-            accent[s] = rng_.chance(30 + (4 * energy_) / 10);
+            accent[s] = rng_.chance(acidAccentChance(energy_));
         }
         const std::vector<int> order = shuffledOrder(kSteps, [](int) { return false; });
         const size_t count = keptShare(kSteps);
@@ -593,7 +592,7 @@ private:
     /// Slide flags once the pitches are final: never on the last note and never onto the same pitch (a tie).
     void addSlides() {
         std::sort(notes_.begin(), notes_.end(), noteLess);
-        const int chance = 25 + (2 * energy_) / 10;
+        const int chance = acidSlideChance(energy_);
         for (size_t i = 0; i + 1 < notes_.size(); ++i) {
             if (notes_[i].pitch != notes_[i + 1].pitch &&
                 notes_[i].startTick + notes_[i].lengthTicks <= notes_[i + 1].startTick) {
@@ -603,7 +602,7 @@ private:
     }
 
     void buildAtonal() {
-        const size_t count = static_cast<size_t>(2 + (2 * energy_) / 100);
+        const size_t count = static_cast<size_t>(atonalNoteCount(energy_));
         const std::vector<int> order = shuffledOrder(kSteps, [](int) { return false; });
         std::vector<int> steps(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(count));
         std::sort(steps.begin(), steps.end());
@@ -630,7 +629,7 @@ private:
     void buildSparse() {
         const uint32_t cellBars = std::min(2u, in_.pattern.lengthBars);
         const int positions = static_cast<int>(cellBars) * kSteps;
-        const size_t count = static_cast<size_t>(1 + (3 * energy_) / 100);
+        const size_t count = static_cast<size_t>(sparseHitCount(energy_));
         const std::vector<int> order = shuffledOrder(positions, [](int) { return false; });
         std::vector<int> steps(order.begin(),
                                order.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(count, order.size())));
@@ -805,7 +804,9 @@ private:
         return used;
     }
 
-    size_t chromaticBudget(size_t noteCount) const { return static_cast<size_t>(chromatic_) * noteCount / 100; }
+    size_t chromaticBudget(size_t noteCount) const {
+        return chromaticFill(static_cast<size_t>(chromatic_) * noteCount / 100, creativity_);
+    }
 
     /// Leaves the scale where the style allows it: the share of notes is `floor(share * notes / 100)` of the voice, as
     /// in the constraint layer, and `applyConstraints` keeps every one of them. Arps, chord arps and plain stabs stay
