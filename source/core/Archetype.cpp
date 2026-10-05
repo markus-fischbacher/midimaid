@@ -1,5 +1,6 @@
 #include "core/Archetype.h"
 
+#include "core/ArchetypeMelody.h"
 #include "core/KickGrid.h"
 #include "core/Theory.h"
 #include "core/VelocityContour.h"
@@ -16,7 +17,7 @@ constexpr uint32_t kMinNoteTicks = 60; ///< the constraint layer drops shorter n
 constexpr uint32_t kHalfBarTicks = kTicksPerBar / 2;
 constexpr int kSteps = 16; // 16th steps per bar
 
-constexpr std::array<Archetype, 9> kArchetypes{{
+constexpr std::array<Archetype, 20> kArchetypes{{
     {"rolling16", VoiceRole::Bass, false, ArchetypeDensity::Dense},
     {"offbeat", VoiceRole::Bass, false, ArchetypeDensity::Neutral},
     {"gallop", VoiceRole::Bass, false, ArchetypeDensity::Neutral},
@@ -26,6 +27,17 @@ constexpr std::array<Archetype, 9> kArchetypes{{
     {"rumble", VoiceRole::Bass, false, ArchetypeDensity::Neutral},
     {"hard_offbeat", VoiceRole::Bass, false, ArchetypeDensity::Neutral},
     {"roll16_aggressive", VoiceRole::Bass, false, ArchetypeDensity::Dense},
+    {"hypnotic_motif", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
+    {"stabs", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
+    {"arp", VoiceRole::Melody, false, ArchetypeDensity::Dense},
+    {"acid_siren", VoiceRole::Melody, false, ArchetypeDensity::Dense},
+    {"chord_arp", VoiceRole::Melody, false, ArchetypeDensity::Dense},
+    {"lead_phrase", VoiceRole::Melody, false, ArchetypeDensity::Calm},
+    {"call_response", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
+    {"pluck_seq", VoiceRole::Melody, false, ArchetypeDensity::Dense},
+    {"aggro_stabs", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
+    {"atonal_motif", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
+    {"sparse_hits", VoiceRole::Melody, false, ArchetypeDensity::Calm},
 }};
 
 enum class Shape { Sixteenth, Offbeat, Gallop, Rumble, LongTied };
@@ -533,15 +545,31 @@ bool generateVoice(Pattern& pattern, size_t voiceIndex, std::string_view archety
     if (scale == nullptr || !range.has_value()) {
         return false;
     }
-    std::vector<Note> notes = Generator(pattern, *archetype, style, settings, *range, *scale, rng).run();
+    std::vector<Note> notes;
+    if (archetype->role == VoiceRole::Bass) {
+        notes = Generator(pattern, *archetype, style, settings, *range, *scale, rng).run();
+    } else {
+        const MelodyInput input{
+            pattern, style, archetype->id, *range, *scale, settings.energyPct, settings.creativityPct};
+        auto melody = generateMelodyNotes(input, rng);
+        if (!melody.has_value()) {
+            return false;
+        }
+        notes = std::move(*melody);
+    }
     track.notes.clear();
     for (Note& note : notes) {
         note.id = allocateNoteId(pattern);
         track.notes.push_back(note);
     }
     track.archetypeId = std::string(archetype->id);
+    // The contour sets the base velocity; a note keeps its offset from 100 (micro variations of motifs).
     const int energy = std::clamp(settings.energyPct, 0, 100);
-    applyContour(track, applyEnergy(archetypeContour(archetype->id), static_cast<uint16_t>(energy * 10)));
+    const VelocityContour contour = applyEnergy(archetypeContour(archetype->id), static_cast<uint16_t>(energy * 10));
+    for (Note& note : track.notes) {
+        note.velocity =
+            static_cast<uint8_t>(std::clamp(contour.velocityAtTick(note.startTick) + (note.velocity - 100), 1, 127));
+    }
     return true;
 }
 
@@ -551,6 +579,10 @@ VelocityContour archetypeContour(std::string_view archetypeId) {
         contour.steps.fill(115);
     } else if (archetypeId == "roll16_aggressive") {
         contour.steps.fill(110);
+    } else if (archetypeId == "stabs") {
+        contour.steps.fill(105);
+    } else if (archetypeId == "aggro_stabs") {
+        contour.steps.fill(112);
     } else if (archetypeId == "gallop") {
         for (size_t s = 0; s < kContourSteps; ++s) {
             contour.steps[s] = s % 2 == 0 ? 100 : 80; // the second note of every pair is quieter

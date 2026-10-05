@@ -89,6 +89,17 @@ bool isKickTick(const std::vector<uint32_t>& kicks, uint32_t tick) {
     return std::binary_search(kicks.begin(), kicks.end(), tick);
 }
 
+/// The bass archetypes of the table (the melody ones have their own tests).
+std::vector<Archetype> bassArchetypes() {
+    std::vector<Archetype> bass;
+    for (const Archetype& archetype : allArchetypes()) {
+        if (archetype.role == VoiceRole::Bass) {
+            bass.push_back(archetype);
+        }
+    }
+    return bass;
+}
+
 } // namespace
 
 TEST_CASE("the archetype table lists the nine bass archetypes", "[archetype]") {
@@ -96,15 +107,14 @@ TEST_CASE("the archetype table lists the nine bass archetypes", "[archetype]") {
                                             "offbeat_changes",  "long_tied", "rumble", "hard_offbeat",
                                             "roll16_aggressive"};
     std::vector<std::string> ids;
-    for (const Archetype& archetype : allArchetypes()) {
+    for (const Archetype& archetype : bassArchetypes()) {
         ids.emplace_back(archetype.id);
-        CHECK(archetype.role == VoiceRole::Bass);
         CHECK(archetype.ignoresKick == (archetype.id == "long_tied"));
         CHECK(archetype.ignoresKick == ignoresKickArchetype(archetype.id));
-        CHECK(findArchetype(archetype.id) == &archetype);
+        CHECK(findArchetype(archetype.id)->id == archetype.id);
     }
     CHECK(ids == expected);
-    CHECK(findArchetype("stabs") == nullptr);
+    CHECK(findArchetype("polymeter_seq") == nullptr);
     CHECK(findArchetype("") == nullptr);
     CHECK(archetypeContour("unknown") == VelocityContour{});
 }
@@ -622,7 +632,7 @@ TEST_CASE("every archetype keeps off the kicks and ends before the next one on e
         const StyleProfile style = loadShipped(styleName);
         for (const std::string grid :
              {"4otf", "4otf_pickup", "halftime", "broken_a", "broken_b", "custom", "unknown"}) {
-            for (const Archetype& archetype : allArchetypes()) {
+            for (const Archetype& archetype : bassArchetypes()) {
                 if (archetype.ignoresKick) {
                     continue;
                 }
@@ -676,7 +686,7 @@ TEST_CASE("generated lines are valid and need no repair from the constraint laye
     };
     for (const std::string& styleName : kStyles) {
         const StyleProfile style = loadShipped(styleName);
-        for (const Archetype& archetype : allArchetypes()) {
+        for (const Archetype& archetype : bassArchetypes()) {
             for (const uint32_t bars : {1u, 2u, 4u, 8u}) {
                 for (const int energy : {0, 30, 60, 90}) {
                     for (uint64_t seed = 1; seed <= 6; ++seed) {
@@ -936,7 +946,7 @@ TEST_CASE("the approach tone covers a note a beat before the change and all thre
 
 TEST_CASE("the quality rating accepts kick-aware lines", "[archetype]") {
     const StyleProfile style = loadShipped("peak_time");
-    for (const Archetype& archetype : allArchetypes()) {
+    for (const Archetype& archetype : bassArchetypes()) {
         Pattern p = makePattern(4);
         bassOf(p, std::string(archetype.id), style, 5, 60);
         const QualityContext context = qualityContextFor(p, style, {60, 40});
@@ -956,7 +966,7 @@ TEST_CASE("the quality rating accepts kick-aware lines", "[archetype]") {
 TEST_CASE("candidate selection works with the archetype generators", "[archetype]") {
     for (const std::string& styleName : kStyles) {
         const StyleProfile style = loadShipped(styleName);
-        for (const Archetype& archetype : allArchetypes()) {
+        for (const Archetype& archetype : bassArchetypes()) {
             const auto generate = [&](uint64_t seed) {
                 Pattern p = makePattern(4);
                 Pcg32 rng = Pcg32::fromSeed(seed);
@@ -1061,8 +1071,11 @@ TEST_CASE("the automatic choice skips unknown ids, other roles and zero weights"
     StyleProfile crossed = loadShipped("peak_time");
     crossed.melody.archetypes = {{"rumble", 5}};
     CHECK(chooseArchetype(crossed, VoiceRole::Melody, 50, rng).empty());
-    // no melody archetype is implemented yet
-    CHECK(chooseArchetype(loadShipped("peak_time"), VoiceRole::Melody, 50, rng).empty());
+    // Peak Time lists `polymeter_seq` ([v1.1], no implementation), which is skipped
+    const std::set<std::string> peakMelody{"hypnotic_motif", "stabs", "arp", "acid_siren"};
+    for (int i = 0; i < 200; ++i) {
+        CHECK(peakMelody.count(chooseArchetype(loadShipped("peak_time"), VoiceRole::Melody, 50, rng)) == 1);
+    }
 }
 
 TEST_CASE("a manual archetype wins without a random draw", "[archetype]") {
@@ -1089,5 +1102,7 @@ TEST_CASE("a manual archetype wins without a random draw", "[archetype]") {
     track.role = VoiceRole::Melody;
     track.archetypeId = "rumble";
     Pcg32 d = Pcg32::fromSeed(8);
-    CHECK(resolveArchetype(track, style, 50, d).empty());
+    const std::string melody = resolveArchetype(track, style, 50, d);
+    REQUIRE(findArchetype(melody) != nullptr);
+    CHECK(findArchetype(melody)->role == VoiceRole::Melody);
 }
