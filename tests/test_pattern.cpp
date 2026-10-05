@@ -23,7 +23,7 @@ Pattern fullPattern() {
                  {4, 4, PhraseRole::Build, std::string("halftime"), false, false}};
     p.phrases[1].turnaround = false;
     p.kickGridId = "broken_a";
-    p.kickRoot = 5;
+    p.kickRoot = static_cast<PitchClass>(5);
     p.polymeterPhase = PolymeterPhase::FreeRunning;
     RhythmReference ref;
     ref.kickSteps = 0x11111111u;
