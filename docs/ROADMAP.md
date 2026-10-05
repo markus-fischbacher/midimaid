@@ -75,7 +75,7 @@ Ersatzweg beschlossen.
       (schlägt Slide), Intervall- und Registerregeln, eigene Kanäle pro Stimme, mit vollständigen Tests
 - [x] Ausgabestufe in fester Reihenfolge (SPEC §4.2a, v1.0-Stufen) mit Tests für jede Kombination
 - [x] Register in MIDI-Nummern, Oktav-Offset (STYLES.md §1.6)
-- [ ] Velocity-Konturen, Akzent als Flag, Akzent-Velocity (STYLES.md §1.9)
+- [x] Velocity-Konturen, Akzent als Flag, Akzent-Velocity (STYLES.md §1.9)
 - [ ] Voicing-Engine: enge Lage, Stimmführung (STYLES.md §1.10)
 - [ ] Motiv-Engine: Motiv zuerst, Wiederholung vor Variation, Durchgangstöne, Auftakte (STYLES.md §1.11)
 - [ ] Qualitätsbewertung: harte und weiche Kriterien, Mindestbewertung aus dem Profil, 8 Kandidaten,
