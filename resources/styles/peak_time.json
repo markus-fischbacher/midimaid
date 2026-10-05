@@ -1,0 +1,56 @@
+{
+  "id": "peak_time",
+  "version": 1,
+  "name": { "de": "Peak Time / Driving", "en": "Peak Time / Driving" },
+  "tempo": [128, 135],
+  "scales": [
+    { "id": "natural_minor", "w": 3 },
+    { "id": "phrygian", "w": 2 },
+    { "id": "dorian", "w": 2 },
+    { "id": "minor_pentatonic", "w": 1 }
+  ],
+  "chromatic_default": 0.10,
+  "harmony": {
+    "modes": [
+      { "id": "static", "w": 50 },
+      { "id": "two_chord", "w": 40 },
+      { "id": "four_chord", "w": 10 }
+    ],
+    "progressions": [["i", "bVII"], ["i", "bVI"], ["i", "iv"]],
+    "chord_length_bars": [4, 8]
+  },
+  "kick_default": "4otf",
+  "bass": {
+    "range": [28, 52],
+    "kick_clearance": "1/32",
+    "swing_default": 0.52,
+    "movement": { "root": 0.70, "fifth_octave": 0.25, "passing": 0.05 },
+    "archetypes": [
+      { "id": "rolling16", "w": 4 },
+      { "id": "offbeat", "w": 3 },
+      { "id": "gallop", "w": 3 }
+    ]
+  },
+  "melody": {
+    "range": [55, 88],
+    "voicing": { "range": [55, 79], "chord_memory": true },
+    "swing_default": 0.55,
+    "archetypes": [
+      { "id": "hypnotic_motif", "w": 4 },
+      { "id": "stabs", "w": 3 },
+      { "id": "arp", "w": 2 },
+      { "id": "polymeter_seq", "w": 3 },
+      { "id": "acid_siren", "w": 1 }
+    ],
+    "chord_colors": [
+      { "id": "min", "w": 40 },
+      { "id": "fifth", "w": 30 },
+      { "id": "min7", "w": 20 },
+      { "id": "sus", "w": 10 }
+    ]
+  },
+  "quality": {
+    "min_score": 50,
+    "weights": { "motif": 3, "range": 1, "density": 2, "kick": 2, "intervals": 2, "rhythm_variety": 1 }
+  }
+}
