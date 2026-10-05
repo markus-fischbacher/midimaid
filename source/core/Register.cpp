@@ -21,6 +21,10 @@ bool isVoicingArchetype(std::string_view archetypeId) {
     return archetypeId == "stabs" || archetypeId == "aggro_stabs";
 }
 
+bool ignoresKickArchetype(std::string_view archetypeId) {
+    return archetypeId == "long_tied";
+}
+
 std::optional<Range> effectiveRange(const RegisterProfile& profile, VoiceRole role, std::string_view archetypeId,
                                     const VoicingSettings& voicing, int octaveOffset) {
     Range base = profile.bass;

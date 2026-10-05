@@ -78,12 +78,13 @@ std::optional<int> foldIntoRange(int pitch, int low, int high) {
 VoiceConstraints rangeOf(const Pattern& pattern, const Track& track,
                          const RegisterProfile& profile = RegisterProfile{}) {
     const auto range = effectiveRange(profile, track.role, track.archetypeId, pattern.voicing, track.octaveOffset);
+    const bool ignoresKick = ignoresKickArchetype(track.archetypeId);
     if (range.has_value()) {
-        return {range->low, range->high};
+        return {range->low, range->high, ignoresKick};
     }
     const auto unshifted = effectiveRange(profile, track.role, track.archetypeId, pattern.voicing, 0);
     const Range fallback = unshifted.value_or(track.role == VoiceRole::Bass ? profile.bass : profile.melody);
-    return {fallback.low, fallback.high};
+    return {fallback.low, fallback.high, ignoresKick};
 }
 
 class Pass {

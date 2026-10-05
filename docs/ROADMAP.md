@@ -84,8 +84,8 @@ Ersatzweg beschlossen.
 - [x] Akkordsymbole: Parser und Darstellung nach STYLES.md §1.17
 - [x] Stilprofile als JSON nach `docs/STYLES.md` inklusive Loader und Validierung
 - [ ] Archetyp-Schnittstelle und alle v1.0-Archetypen aus STYLES.md (ohne `polymeter_seq`)
-- [ ] Gewichtete Auto-Auswahl und manuelle Übersteuerung pro Stimme
-- [ ] Kick-Raster und Bass-Aussparung (inkl. Ausnahme `long_tied`)
+- [x] Gewichtete Auto-Auswahl und manuelle Übersteuerung pro Stimme
+- [x] Kick-Raster und Bass-Aussparung (inkl. Ausnahme `long_tied`)
 - [ ] Mehrstimmige Melodie (Akkordfarben je Stil)
 - [ ] Chromatik nach Stil-Standardwerten (SPEC §3.8)
 - [ ] Energie als Makro, Kreativität (SPEC §3.3, §7.6)
