@@ -17,6 +17,7 @@ struct OutputSettings {
     uint32_t kickClearanceTicks = 120; ///< bass notes end this long before the next kick; 0 = off
     uint8_t accentVelocity = 124;      ///< velocity of accented notes (STYLES.md 1.9)
     uint32_t minNoteTicks = 60;        ///< notes that end up shorter are dropped
+    bool includeGroove = true;         ///< false skips stage 2: the notes keep their grid (export without groove)
     std::vector<bool> ignoresKick;     ///< per voice (pattern order): the archetype may hold over kicks (`long_tied`)
 };
 
