@@ -59,7 +59,7 @@ jobs:
       - name: Build
         run: cmake --build --preset macos-debug
       - name: Test
-        run: ctest --preset macos-debug
+        run: ctest --preset macos-debug --timeout 300
       - name: Install pluginval
         run: |
           curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/pluginval_macOS.zip"
@@ -105,7 +105,7 @@ jobs:
       - name: Build
         run: cmake --build --preset windows-debug -- -k 0
       - name: Test
-        run: ctest --preset windows-debug
+        run: ctest --preset windows-debug --timeout 300
       - name: Install pluginval
         run: |
           Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/$env:PLUGINVAL_VERSION/pluginval_Windows.zip" -OutFile pluginval.zip
@@ -146,4 +146,4 @@ jobs:
       - name: Build (includes the VST3 compile test)
         run: cmake --build --preset linux-debug -- -k 0
       - name: Test
-        run: xvfb-run -a ctest --preset linux-debug
+        run: xvfb-run -a ctest --preset linux-debug --timeout 300

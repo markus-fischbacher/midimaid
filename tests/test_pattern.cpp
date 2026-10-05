@@ -23,7 +23,7 @@ Pattern fullPattern() {
                  {4, 4, PhraseRole::Build, std::string("halftime"), false, false}};
     p.phrases[1].turnaround = false;
     p.kickGridId = "broken_a";
-    p.kickRoot = 5;
+    p.kickRoot = static_cast<PitchClass>(5);
     p.polymeterPhase = PolymeterPhase::FreeRunning;
     RhythmReference ref;
     ref.kickSteps = 0x11111111u;
@@ -426,7 +426,7 @@ TEST_CASE("validation: every rule has a violating case", "[core][pattern][valida
     const std::vector<Case> cases = {
         {"lengthBars", [](Pattern& p) { p.lengthBars = 3; }},
         {"timeSig", [](Pattern& p) { p.timeSigNum = 3; }},
-        {"kickRoot", [](Pattern& p) { p.kickRoot = 12; }},
+        {"kickRoot", [](Pattern& p) { p.kickRoot = static_cast<PitchClass>(12); }},
         {"refineHistory", [](Pattern& p) { p.refineHistory.assign(6, "x"); }},
         {"qualityScore", [](Pattern& p) { p.qualityScore = 101; }},
         {"info.creativityPct", [](Pattern& p) { p.info.creativityPct = 101; }},
@@ -436,7 +436,8 @@ TEST_CASE("validation: every rule has a violating case", "[core][pattern][valida
         {"voices", [](Pattern& p) { p.voices.clear(); }},
         {"voices",
          [](Pattern& p) {
-             p.voices.assign(9, p.voices[0]);
+             const Track copy = p.voices[0]; // a copy: assign() must not alias an element of the vector
+             p.voices.assign(9, copy);
              for (size_t i = 0; i < p.voices.size(); ++i) {
                  p.voices[i].midiChannel = static_cast<uint8_t>(i + 1);
              }

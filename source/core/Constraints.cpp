@@ -1,5 +1,7 @@
 #include "core/Constraints.h"
 
+#include "core/KickGrid.h"
+
 #include <algorithm>
 #include <array>
 
@@ -10,6 +12,7 @@ namespace {
 constexpr int kMaxPasses = 12;
 constexpr uint32_t kTripletGridTicks = 160;
 constexpr uint32_t kBeatTicks = 960;
+constexpr uint32_t kStepTicks = 240;
 
 enum class Dimension { Pitch, Rhythm, Velocity };
 
@@ -73,7 +76,7 @@ class Pass {
 public:
     Pass(Pattern& pattern, const ConstraintSettings& settings, bool firstPass, ConstraintReport& report)
         : pattern_(pattern), settings_(settings), countLocks_(firstPass), report_(report),
-          endTick_(pattern.lengthBars * kTicksPerBar) {}
+          endTick_(pattern.lengthBars * kTicksPerBar), kicks_(kickTicks(pattern)) {}
 
     void run() {
         reassignChannels();
@@ -84,6 +87,7 @@ public:
             }
             constrainVoice(track, voiceConstraints(v, track.role));
         }
+        constrainInteractions();
     }
 
 private:
@@ -120,14 +124,26 @@ private:
     }
 
     void constrainVoice(Track& track, const VoiceConstraints& range) {
+        // Kick rules apply to the bass only, unless its archetype may overlap kicks (`long_tied`).
+        const bool kickRules = track.role == VoiceRole::Bass && !range.ignoresKick && !kicks_.empty();
         clampVelocity(track);
         snapToGridAndClip(track);
         std::stable_sort(track.notes.begin(), track.notes.end(), noteLess);
+        if (kickRules) {
+            avoidKicks(track);
+            std::stable_sort(track.notes.begin(), track.notes.end(), noteLess);
+        }
         constrainPitch(track, range);
         mergeDuplicates(track);
         trimOverlaps(track);
         removeInvalidSlides(track);
+        if (kickRules) {
+            removeKickSlides(track); // the kick clearance beats a slide
+        }
         mergeTies(track);
+        if (kickRules) {
+            clearKicks(track);
+        }
         dropShortNotes(track);
         std::stable_sort(track.notes.begin(), track.notes.end(), noteLess);
     }
@@ -388,8 +404,9 @@ private:
 
     void dropShortNotes(Track& track) {
         std::vector<bool> remove(track.notes.size(), false);
+        const uint32_t minimum = std::max<uint32_t>(settings_.minNoteTicks, 1);
         for (size_t i = 0; i < track.notes.size(); ++i) {
-            if (track.notes[i].lengthTicks >= settings_.minNoteTicks) {
+            if (track.notes[i].lengthTicks >= minimum) {
                 continue;
             }
             if (isLocked(track, track.notes[i], Dimension::Rhythm)) {
@@ -400,6 +417,208 @@ private:
             ++report_.droppedNotes;
         }
         eraseMarked(track, remove);
+    }
+
+    // -- kick (bass only) --------------------------------------------------------------------------------------
+
+    bool isKick(uint32_t tick) const { return std::binary_search(kicks_.begin(), kicks_.end(), tick); }
+
+    /// The first kick strictly after `tick`, including the first kick of the next loop pass.
+    std::optional<uint32_t> nextKickAfter(uint32_t tick) const {
+        const auto it = std::upper_bound(kicks_.begin(), kicks_.end(), tick);
+        if (it != kicks_.end()) {
+            return *it;
+        }
+        if (!kicks_.empty()) {
+            return kicks_.front() + endTick_;
+        }
+        return std::nullopt;
+    }
+
+    /// Bass notes never start on a kick: they move one 16th later until the step is free; a note that would leave
+    /// the pattern or land on another note is dropped.
+    void avoidKicks(Track& track) {
+        std::vector<bool> remove(track.notes.size(), false);
+        for (size_t i = 0; i < track.notes.size(); ++i) {
+            Note& note = track.notes[i];
+            if (!isKick(note.startTick)) {
+                continue;
+            }
+            if (isLocked(track, note, Dimension::Rhythm)) {
+                skipped();
+                continue;
+            }
+            uint32_t start = note.startTick;
+            while (isKick(start) && start < endTick_) {
+                start += kStepTicks;
+            }
+            bool collision = false;
+            for (size_t j = 0; j < track.notes.size() && !collision; ++j) {
+                collision = j != i && !remove[j] && track.notes[j].startTick == start;
+            }
+            if (start >= endTick_ || collision) {
+                remove[i] = true;
+                ++report_.droppedNotes;
+                continue;
+            }
+            note.startTick = start;
+            if (endOf(note) > endTick_) {
+                note.lengthTicks = endTick_ - start;
+            }
+            ++report_.kickShifted;
+        }
+        eraseMarked(track, remove);
+    }
+
+    /// A bass slide that would reach over a kick step loses its slide flag (SPEC 4.2).
+    void removeKickSlides(Track& track) {
+        uint32_t firstStart = endTick_;
+        for (const Note& note : track.notes) {
+            firstStart = std::min(firstStart, note.startTick);
+        }
+        for (Note& note : track.notes) {
+            if (!note.slide) {
+                continue;
+            }
+            const auto target = targetAfter(track, endOf(note));
+            const uint32_t targetStart =
+                target.first < track.notes.size() ? track.notes[target.first].startTick : endTick_ + firstStart;
+            const uint32_t reach = targetStart + settings_.slideOverlapTicks;
+            bool spansKick = false;
+            for (uint32_t pass = 0; pass < 2 && !spansKick; ++pass) { // the second copy is the next loop pass
+                for (const uint32_t kick : kicks_) {
+                    const uint32_t tick = kick + pass * endTick_;
+                    spansKick = spansKick || (tick > note.startTick && tick <= reach);
+                }
+            }
+            if (!spansKick) {
+                continue;
+            }
+            if (isLocked(track, note, Dimension::Rhythm)) {
+                skipped();
+                continue;
+            }
+            note.slide = false;
+            ++report_.kickSlidesRemoved;
+        }
+    }
+
+    /// Bass notes end the configured clearance before the next kick (SPEC 4.2); the clearance has priority over the
+    /// note length, notes that become too short are dropped afterwards.
+    void clearKicks(Track& track) {
+        if (settings_.kickClearanceTicks == 0) {
+            return;
+        }
+        for (Note& note : track.notes) {
+            const auto next = nextKickAfter(note.startTick);
+            if (!next.has_value()) {
+                continue;
+            }
+            const int64_t limit = static_cast<int64_t>(*next) - static_cast<int64_t>(settings_.kickClearanceTicks);
+            if (static_cast<int64_t>(endOf(note)) <= limit) {
+                continue;
+            }
+            if (isLocked(track, note, Dimension::Rhythm)) {
+                skipped();
+                continue;
+            }
+            note.lengthTicks = limit > static_cast<int64_t>(note.startTick)
+                                   ? static_cast<uint32_t>(limit - static_cast<int64_t>(note.startTick))
+                                   : 0;
+            ++report_.clearanceTrimmed;
+        }
+    }
+
+    // -- bass and the other voices -----------------------------------------------------------------------------
+
+    /// True if `pitch` for `note` breaks the register rule (melody at least 12 semitones above the bass at a
+    /// simultaneous attack) or sounds a tense interval with the bass on a strong step (STYLES.md 1.6, 1.8).
+    bool breaksBassRules(const Track& bass, const Note& note, int pitch, bool tensionAllowed) const {
+        for (const Note& b : bass.notes) {
+            if (b.startTick == note.startTick && pitch < b.pitch + 12) {
+                return true;
+            }
+        }
+        if (tensionAllowed) {
+            return false;
+        }
+        const uint32_t firstStrong = (note.startTick + kBeatTicks - 1) / kBeatTicks * kBeatTicks;
+        for (uint32_t tick = firstStrong; tick < endOf(note); tick += kBeatTicks) {
+            for (const Note& b : bass.notes) {
+                if (b.startTick <= tick && tick < endOf(b)) {
+                    const int interval = ((pitch - b.pitch) % 12 + 12) % 12;
+                    if (interval == 1 || interval == 6 || interval == 11) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /// The voices other than the bass yield to the bass: a violating note moves to the nearest pitch that is
+    /// allowed, in range and free of violations (down before up), or is dropped if there is none.
+    void constrainInteractions() {
+        const Track* bass = nullptr;
+        for (const Track& track : pattern_.voices) {
+            if (track.role == VoiceRole::Bass) {
+                bass = &track;
+                break;
+            }
+        }
+        if (bass == nullptr) {
+            return;
+        }
+        const bool tensionAllowed = settings_.chromaticPercent >= 30 || settings_.harshStyle;
+        const Scale* scale = findScale(pattern_.context.scaleId);
+        for (size_t v = 0; v < pattern_.voices.size(); ++v) {
+            Track& track = pattern_.voices[v];
+            if (track.role == VoiceRole::Bass || fullyLocked(track)) {
+                continue;
+            }
+            const VoiceConstraints range = voiceConstraints(v, track.role);
+            std::vector<bool> remove(track.notes.size(), false);
+            for (size_t i = 0; i < track.notes.size(); ++i) {
+                Note& note = track.notes[i];
+                if (!breaksBassRules(*bass, note, note.pitch, tensionAllowed)) {
+                    continue;
+                }
+                if (isLocked(track, note, Dimension::Pitch)) {
+                    skipped();
+                    continue;
+                }
+                const auto chord = chordAt(pattern_.context, note.startTick);
+                bool fixed = false;
+                for (int distance = 1; distance <= 24 && !fixed; ++distance) {
+                    for (const int direction : {-1, 1}) {
+                        const int candidate = note.pitch + direction * distance;
+                        if (candidate < range.rangeLow || candidate > range.rangeHigh) {
+                            continue;
+                        }
+                        if (scale != nullptr && !isAllowed(*scale, pattern_.context.root, chord, candidate)) {
+                            continue;
+                        }
+                        if (breaksBassRules(*bass, note, candidate, tensionAllowed)) {
+                            continue;
+                        }
+                        note.pitch = static_cast<uint8_t>(candidate);
+                        ++report_.intervalsFixed;
+                        fixed = true;
+                        break;
+                    }
+                }
+                if (fixed) {
+                    continue;
+                }
+                if (isLocked(track, note, Dimension::Rhythm)) {
+                    skipped();
+                    continue;
+                }
+                remove[i] = true;
+                ++report_.droppedNotes;
+            }
+            eraseMarked(track, remove);
+        }
     }
 
     static void eraseMarked(Track& track, const std::vector<bool>& remove) {
@@ -418,6 +637,7 @@ private:
     bool countLocks_;
     ConstraintReport& report_;
     uint32_t endTick_;
+    std::vector<uint32_t> kicks_; ///< ascending kick ticks inside the pattern
 };
 
 void accumulate(ConstraintReport& total, const ConstraintReport& pass) {
@@ -431,6 +651,10 @@ void accumulate(ConstraintReport& total, const ConstraintReport& pass) {
     total.trimmedOverlaps += pass.trimmedOverlaps;
     total.slidesRemoved += pass.slidesRemoved;
     total.droppedNotes += pass.droppedNotes;
+    total.kickShifted += pass.kickShifted;
+    total.clearanceTrimmed += pass.clearanceTrimmed;
+    total.kickSlidesRemoved += pass.kickSlidesRemoved;
+    total.intervalsFixed += pass.intervalsFixed;
     total.skippedByLock += pass.skippedByLock;
 }
 
@@ -446,7 +670,8 @@ ConstraintSettings ConstraintSettings::defaultsFor(const Pattern& pattern) {
 
 size_t ConstraintReport::total() const {
     return channelsReassigned + velocityClamped + pitchSnapped + registerFolded + gridSnapped + clippedToEnd +
-           tiesMerged + trimmedOverlaps + slidesRemoved + droppedNotes;
+           tiesMerged + trimmedOverlaps + slidesRemoved + droppedNotes + kickShifted + clearanceTrimmed +
+           kickSlidesRemoved + intervalsFixed;
 }
 
 ConstraintReport applyConstraints(Pattern& pattern, const ConstraintSettings& settings) {
