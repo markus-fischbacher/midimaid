@@ -712,6 +712,7 @@ TEST_CASE("generated lines are valid and need no repair from the constraint laye
                         const auto range =
                             *effectiveRange(style.registerProfile(), VoiceRole::Bass, archetype.id, p.voicing, 0);
                         const Scale& scale = *findScale(p.context.scaleId);
+                        size_t outside = 0;
                         for (size_t i = 0; i < notes.size(); ++i) {
                             const Note& note = notes[i];
                             CHECK(range.contains(note.pitch));
@@ -722,7 +723,7 @@ TEST_CASE("generated lines are valid and need no repair from the constraint laye
                                     chord = event.chord;
                                 }
                             }
-                            CHECK(isAllowed(scale, p.context.root, chord, note.pitch));
+                            outside += isAllowed(scale, p.context.root, chord, note.pitch) ? 0 : 1;
                             if (i + 1 < notes.size()) {
                                 CHECK(note.startTick + note.lengthTicks <= notes[i + 1].startTick);
                             }
@@ -730,6 +731,8 @@ TEST_CASE("generated lines are valid and need no repair from the constraint laye
                             CHECK(note.velocity >= 1);
                             CHECK(note.velocity <= 127);
                         }
+                        // only the chromatic share of the style may leave scale and chord (SPEC 3.8)
+                        CHECK(outside * 100 <= static_cast<size_t>(style.chromaticDefaultPercent) * notes.size());
                         Pattern repaired = p;
                         const ConstraintReport report =
                             applyConstraints(repaired, constraintSettingsFor(repaired, style));
@@ -1105,4 +1108,66 @@ TEST_CASE("a manual archetype wins without a random draw", "[archetype]") {
     const std::string melody = resolveArchetype(track, style, 50, d);
     REQUIRE(findArchetype(melody) != nullptr);
     CHECK(findArchetype(melody)->role == VoiceRole::Melody);
+}
+
+TEST_CASE("the bass plays the flat second outside the scale only within the chromatic share",
+          "[archetype][chromatic]") {
+    for (const std::string& styleName : kStyles) {
+        StyleProfile style = loadShipped(styleName);
+        style.bass.movement = {0, 0, 100}; // passing tones wherever a step is not strong
+        size_t flatSeconds = 0;
+        for (uint64_t seed = 1; seed <= 100; ++seed) {
+            for (const uint32_t bars : {1u, 4u}) {
+                Pattern p = makePattern(bars);
+                p.context.scaleId = "natural_minor";
+                setProgression(p, {{0, ChordQuality::Minor, bars * 2}});
+                const auto notes = bassOf(p, "rolling16", style, seed, 100);
+                INFO(styleName << " seed " << seed << " bars " << bars);
+                size_t outside = 0;
+                for (const Note& note : notes) {
+                    if (note.pitch == 34) { // Bb over A natural minor
+                        ++outside;
+                        CHECK(note.startTick % 960 != 0);
+                    } else {
+                        CHECK(isAllowed(*findScale("natural_minor"), p.context.root, Chord{0, ChordQuality::Minor},
+                                        note.pitch));
+                    }
+                }
+                flatSeconds += outside;
+                CHECK(outside * 100 <= static_cast<size_t>(style.chromaticDefaultPercent) * notes.size());
+                Pattern repaired = p;
+                CHECK(applyConstraints(repaired, constraintSettingsFor(repaired, style)).total() == 0);
+                CHECK(repaired.voices[0].notes.size() == notes.size());
+            }
+        }
+        if (style.chromaticDefaultPercent >= 30) {
+            CHECK(flatSeconds > 0);
+        } else {
+            CHECK(flatSeconds == 0); // below 30 % the bass keeps to the scale
+        }
+    }
+}
+
+TEST_CASE("the flat second of the bass repeats bar for bar", "[archetype][chromatic]") {
+    StyleProfile style = loadShipped("hard_industrial");
+    style.bass.movement = {0, 0, 100};
+    size_t flatSeconds = 0;
+    for (uint64_t seed = 1; seed <= 100; ++seed) {
+        Pattern p = makePattern(4);
+        p.context.scaleId = "natural_minor";
+        setProgression(p, {{0, ChordQuality::Minor, 8}});
+        const auto notes = bassOf(p, "rolling16", style, seed, 100, 0); // no variation bar
+        for (const Note& note : notes) {
+            flatSeconds += note.pitch == 34 ? 1 : 0;
+            if (note.pitch == 34) {
+                size_t bars = 0;
+                for (const Note& other : notes) {
+                    bars +=
+                        other.pitch == 34 && other.startTick % kTicksPerBar == note.startTick % kTicksPerBar ? 1 : 0;
+                }
+                CHECK(bars == 4);
+            }
+        }
+    }
+    CHECK(flatSeconds > 0);
 }

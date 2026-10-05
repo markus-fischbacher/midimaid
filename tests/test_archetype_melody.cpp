@@ -669,12 +669,13 @@ TEST_CASE("acid_siren is a monophonic 16th line within an octave, with slides an
         INFO("seed " << seed);
         REQUIRE(notes.size() == 32); // 100 % of the 16 steps in both bars
         CHECK(span(notes) <= 12);
+        size_t outside = 0; // the chromatic share of Peak Time (10 %) allows three of the 32 notes
         for (size_t i = 0; i < notes.size(); ++i) {
             CHECK(notes[i].startTick == i * 240);
             CHECK((notes[i].lengthTicks == 120 || notes[i].lengthTicks == 240));
             ++total;
             accents += notes[i].accent ? 1 : 0;
-            CHECK(inScale(*findScale(p.context.scaleId), p.context.root, notes[i].pitch));
+            outside += inScale(*findScale(p.context.scaleId), p.context.root, notes[i].pitch) ? 0 : 1;
             if (i + 1 < notes.size()) {
                 if (notes[i].pitch == notes[i + 1].pitch) {
                     CHECK_FALSE(notes[i].slide);
@@ -686,6 +687,7 @@ TEST_CASE("acid_siren is a monophonic 16th line within an octave, with slides an
                 CHECK_FALSE(notes[i].slide);
             }
         }
+        CHECK(outside <= 3);
     }
     // energy 100: 70 % accents, 45 % slides
     CHECK(accents * 100 > total * 63);
@@ -719,8 +721,8 @@ TEST_CASE("atonal_motif repeats two to four notes of tension, bar for bar", "[ar
             }
             for (const Note& n : notes) {
                 const int offset = (n.pitch - 69 + 12) % 12; // semitones above the root A
-                CHECK((offset == 0 || offset == 1 || offset == 5 ||
-                       offset == 7)); // root, flat second, or snapped tritone
+                CHECK((offset == 0 || offset == 1 || offset == 5 || offset == 6 ||
+                       offset == 7)); // root, flat second, tritone or the tone it snaps to
                 CHECK((n.lengthTicks == 240 || n.lengthTicks == 480 || n.lengthTicks == 240 + 0));
             }
         }
@@ -728,7 +730,8 @@ TEST_CASE("atonal_motif repeats two to four notes of tension, bar for bar", "[ar
 }
 
 TEST_CASE("atonal_motif uses the flat second and, where the scale has it, the tritone", "[archetype-melody]") {
-    const StyleProfile style = loadShipped("hard_industrial");
+    // Melodic Techno has no chromatic share: the tension tones stay on the scale, so only the scale offers the tritone
+    const StyleProfile style = loadShipped("melodic_techno");
     std::set<int> phrygian;
     std::set<int> locrian;
     for (uint64_t seed = 1; seed <= 200; ++seed) {
@@ -1518,4 +1521,196 @@ TEST_CASE("the voices of the stab chords move little in every style", "[archetyp
         INFO(styleName);
         CHECK(worst <= 5); // a close voicing leads every voice by a few semitones
     }
+}
+
+// -- chromatic share (SPEC 3.8) ------------------------------------------------------------------------------------
+
+namespace {
+
+Chord progressionChord(const Pattern& p, uint32_t tick) {
+    const uint32_t half = tick / 1920;
+    for (const ChordEvent& event : p.context.progression) {
+        if (half >= event.startHalfBar && half < event.startHalfBar + event.lengthHalfBars) {
+            return event.chord;
+        }
+    }
+    return Chord{};
+}
+
+bool outsideAllowed(const Pattern& p, const Note& note) {
+    return !isAllowed(*findScale(p.context.scaleId), p.context.root, progressionChord(p, note.startTick), note.pitch);
+}
+
+size_t outsideCount(const Pattern& p, const std::vector<Note>& notes) {
+    size_t count = 0;
+    for (const Note& note : notes) {
+        count += outsideAllowed(p, note) ? 1 : 0;
+    }
+    return count;
+}
+
+const std::vector<std::string> kChromaticIds{"hypnotic_motif", "lead_phrase",  "call_response", "pluck_seq",
+                                             "acid_siren",     "atonal_motif", "sparse_hits",   "aggro_stabs"};
+
+} // namespace
+
+TEST_CASE("the chromatic share holds per voice and the constraint layer keeps every chromatic note",
+          "[archetype-melody][chromatic]") {
+    for (const std::string& styleName : kStyles) {
+        const StyleProfile style = loadShipped(styleName);
+        for (const std::string& id : kChromaticIds) {
+            for (const uint32_t bars : {1u, 2u, 4u, 8u}) {
+                for (uint64_t seed = 1; seed <= 12; ++seed) {
+                    for (const bool withBass : {false, true}) {
+                        Pattern p = makePattern(bars);
+                        p.context.scaleId = seed % 3 == 0 ? "phrygian" : "natural_minor";
+                        variedProgression(p, seed);
+                        const auto notes = melodyOf(p, id, style, seed, 30 + 5 * static_cast<int>(seed), 60, withBass);
+                        INFO(styleName << " " << id << " bars " << bars << " seed " << seed << " bass " << withBass);
+                        REQUIRE_FALSE(notes.empty());
+                        const size_t outside = outsideCount(p, notes);
+                        CHECK(outside * 100 <= static_cast<size_t>(style.chromaticDefaultPercent) * notes.size());
+                        for (const Note& note : notes) {
+                            if (outsideAllowed(p, note)) {
+                                CHECK(note.startTick % 960 != 0); // weak steps only
+                            }
+                        }
+                        Pattern repaired = p;
+                        CHECK(applyConstraints(repaired, constraintSettingsFor(repaired, style)).total() == 0);
+                        CHECK(repaired.voices[1].notes.size() == notes.size());
+                        for (size_t i = 0; i < notes.size(); ++i) {
+                            CHECK(repaired.voices[1].notes[i].pitch == notes[i].pitch);
+                        }
+                        if (style.chromaticDefaultPercent == 0) {
+                            CHECK(outside == 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("every chromatic archetype leaves the scale in Hard/Industrial, and more often than in Peak Time",
+          "[archetype-melody][chromatic]") {
+    const StyleProfile hard = loadShipped("hard_industrial");
+    const StyleProfile peak = loadShipped("peak_time");
+    for (const std::string& id : kChromaticIds) {
+        size_t inHard = 0;
+        size_t inPeak = 0;
+        for (uint64_t seed = 1; seed <= 60; ++seed) {
+            for (const StyleProfile* style : {&hard, &peak}) {
+                Pattern p = makePattern(4);
+                p.context.scaleId = "natural_minor";
+                setProgression(p, {{0, ChordQuality::Minor, 8}});
+                const auto notes = melodyOf(p, id, *style, seed, 100, 40, false);
+                (style == &hard ? inHard : inPeak) += outsideCount(p, notes);
+            }
+        }
+        INFO(id);
+        CHECK(inHard > 0);
+        CHECK(inHard > inPeak);
+    }
+}
+
+TEST_CASE("arps and plain stabs never leave the chord tones", "[archetype-melody][chromatic]") {
+    const StyleProfile style = loadShipped("hard_industrial");
+    for (const char* id : {"arp", "chord_arp", "stabs"}) {
+        for (uint64_t seed = 1; seed <= 40; ++seed) {
+            Pattern p = makePattern(4);
+            p.context.scaleId = "natural_minor";
+            variedProgression(p, seed);
+            const auto notes = melodyOf(p, id, style, seed, 100, 60);
+            INFO(id << " seed " << seed);
+            CHECK(outsideCount(p, notes) == 0);
+        }
+    }
+}
+
+TEST_CASE("chromatic notes keep repeating bar for bar with the rest of the line", "[archetype-melody][chromatic]") {
+    const StyleProfile style = loadShipped("hard_industrial");
+    size_t chromatic = 0;
+    for (uint64_t seed = 1; seed <= 80; ++seed) {
+        for (const char* id : {"pluck_seq", "atonal_motif"}) {
+            Pattern p = makePattern(4);
+            p.context.scaleId = "natural_minor";
+            setProgression(p, {{0, ChordQuality::Minor, 8}});
+            const auto notes = melodyOf(p, id, style, seed, 100, 0, false); // creativity 0: no variation bar
+            chromatic += outsideCount(p, notes);
+            INFO(id << " seed " << seed);
+            for (uint32_t bar = 1; bar < 4; ++bar) {
+                CHECK(startsAndPitches(notes, bar, bar + 1) == startsAndPitches(notes, 0, 1));
+            }
+        }
+    }
+    CHECK(chromatic > 0);
+}
+
+TEST_CASE("Peak Time leaves the scale only from ten notes on", "[archetype-melody][chromatic]") {
+    const StyleProfile style = loadShipped("peak_time"); // 10 %
+    size_t atTen = 0;
+    for (const std::string& id : kChromaticIds) {
+        for (uint64_t seed = 1; seed <= 50; ++seed) {
+            Pattern p = makePattern(8);
+            p.context.scaleId = "natural_minor";
+            variedProgression(p, seed);
+            const auto notes = melodyOf(p, id, style, seed, 100, 40, false);
+            if (notes.size() < 10) {
+                INFO(id << " seed " << seed << " notes " << notes.size());
+                CHECK(outsideCount(p, notes) == 0);
+            } else {
+                atTen += outsideCount(p, notes);
+            }
+        }
+    }
+    CHECK(atTen > 0);
+}
+
+TEST_CASE("atonal_motif plays the real flat second and tritone in natural minor at 35 %",
+          "[archetype-melody][chromatic]") {
+    const StyleProfile hard = loadShipped("hard_industrial");
+    std::set<int> offsets;
+    for (uint64_t seed = 1; seed <= 200; ++seed) {
+        Pattern p = makePattern(4);
+        p.context.scaleId = "natural_minor";
+        setProgression(p, {{0, ChordQuality::Minor, 8}});
+        for (const Note& note : melodyOf(p, "atonal_motif", hard, seed, 100, 0, false)) {
+            offsets.insert((note.pitch - 69 + 12) % 12);
+        }
+    }
+    CHECK(offsets.count(1) == 1); // Bb over A natural minor
+    CHECK(offsets.count(6) == 1); // Eb
+}
+
+TEST_CASE("aggro_stabs adds a flat second above the chord root to a hit from 30 % on",
+          "[archetype-melody][chromatic]") {
+    const StyleProfile hard = loadShipped("hard_industrial");
+    const StyleProfile peak = loadShipped("peak_time");
+    size_t clusters = 0;
+    for (uint64_t seed = 1; seed <= 60; ++seed) {
+        Pattern p = makePattern(4);
+        p.context.scaleId = "natural_minor";
+        variedProgression(p, seed);
+        const auto notes = melodyOf(p, "aggro_stabs", hard, seed, 100, 0, false);
+        for (const Note& note : notes) {
+            if (!outsideAllowed(p, note)) {
+                continue;
+            }
+            ++clusters;
+            // the tone a semitone below belongs to the same hit and is the root of its chord
+            const PitchClass root =
+                static_cast<PitchClass>((p.context.root + progressionChord(p, note.startTick).rootOffset) % 12);
+            bool below = false;
+            for (const Note& other : notes) {
+                below = below || (other.startTick == note.startTick && other.pitch + 1 == note.pitch &&
+                                  pitchClassOf(other.pitch) == root);
+            }
+            CHECK(below);
+        }
+        Pattern q = makePattern(4);
+        q.context.scaleId = "natural_minor";
+        variedProgression(q, seed);
+        CHECK(outsideCount(q, melodyOf(q, "aggro_stabs", peak, seed, 100, 0, false)) == 0); // below 30 %: no cluster
+    }
+    CHECK(clusters > 0);
 }

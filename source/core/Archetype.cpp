@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
 #include <optional>
 
 namespace mm::core {
@@ -122,6 +123,7 @@ public:
             if (style_.bass.movement.rootOnChordChange) {
                 placeRootsOnChordChange();
             }
+            limitChromatics();
         }
         return std::move(notes_);
     }
@@ -161,7 +163,8 @@ private:
         size_t count = 0;
         for (size_t i = 0; i < (tension_ ? 3u : 2u); ++i) {
             const int pitch = fitted(root + offsets[i], root);
-            if (pitch != root && isAllowed(scale_, keyRoot(), chord, pitch)) {
+            // the flat second may leave the scale: the chromatic share decides afterwards how many stay (SPEC 3.8)
+            if (pitch != root && (i == 2 || isAllowed(scale_, keyRoot(), chord, pitch))) {
                 candidates[count++] = pitch;
             }
         }
@@ -461,6 +464,38 @@ private:
                     note.pitch = static_cast<uint8_t>(rootPitch(chordAt(changes[i])));
                     break;
                 }
+            }
+        }
+    }
+
+    /// Passing tones outside the scale (the flat second, Hard/Industrial) stay within the chromatic share of the style,
+    /// `floor(share * notes / 100)`, as the constraint layer enforces it. Notes that repeat (same position in the bar
+    /// and pitch) stay or go together; the others fall back to the root of their chord.
+    void limitChromatics() {
+        std::map<std::pair<uint32_t, int>, std::vector<size_t>> groups;
+        for (size_t i = 0; i < notes_.size(); ++i) {
+            const Note& note = notes_[i];
+            if (!isAllowed(scale_, keyRoot(), chordAt(note.startTick), note.pitch)) {
+                groups[{note.startTick % kTicksPerBar, note.pitch}].push_back(i);
+            }
+        }
+        if (groups.empty()) {
+            return;
+        }
+        std::vector<std::vector<size_t>> order;
+        for (auto& entry : groups) {
+            order.push_back(std::move(entry.second));
+        }
+        rng_.shuffle(order.begin(), order.end());
+        const size_t budget = static_cast<size_t>(std::max(style_.chromaticDefaultPercent, 0)) * notes_.size() / 100;
+        size_t used = 0;
+        for (const std::vector<size_t>& members : order) {
+            if (used + members.size() <= budget) {
+                used += members.size();
+                continue;
+            }
+            for (const size_t index : members) {
+                notes_[index].pitch = static_cast<uint8_t>(rootPitch(chordAt(notes_[index].startTick)));
             }
         }
     }
