@@ -1,4 +1,7 @@
 # Run with: cmake -DCMAKE_MODULE_PATH=<repo>/cmake -P test_formats.cmake
+# Script mode has no project: set the policies explicitly (IN_LIST needs CMP0057, not the default before 3.31).
+cmake_minimum_required(VERSION 3.25)
+
 include(FormatChecks)
 
 function(expect_ok error)
