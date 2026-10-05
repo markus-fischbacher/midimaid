@@ -69,7 +69,7 @@ Ersatzweg beschlossen.
 - [x] Eigener PRNG (PCG32) und Verteilungsfunktionen, plattformübergreifend identische Tests (SPEC §4.3)
 - [x] Musiktheorie: Tonhöhenklassen, Skalen (inkl. Moll-Pentatonik, Phrygisch-Dominant), Akkorde,
       Stufen mit Alteration → MIDI, Akkord-Skalen-Prinzip
-- [ ] Pattern-Datenmodell (SPEC §5) mit Noten-IDs, `voices`-Liste und den für v1.1 reservierten Feldern,
+- [x] Pattern-Datenmodell (SPEC §5) mit Noten-IDs, `voices`-Liste und den für v1.1 reservierten Feldern,
       Serialisierung (JSON) mit `stateVersion`
 - [ ] Constraint-Schicht (SPEC §4.2): Skala/Akkord-Skala, Register, Kick-Aussparung, Kick-Freiraum
       (schlägt Slide), Intervall- und Registerregeln, eigene Kanäle pro Stimme, mit vollständigen Tests
