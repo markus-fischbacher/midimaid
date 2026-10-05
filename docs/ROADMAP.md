@@ -81,7 +81,7 @@ Ersatzweg beschlossen.
 - [ ] Qualitätsbewertung: harte und weiche Kriterien, Mindestbewertung aus dem Profil, 8 Kandidaten,
       weitere Runden und Fehlschlag-Regel, Gewinner-Seed (SPEC §4.3, §4.4, STYLES.md §1.14)
 - [ ] Kopierschutz-Metrik mit Regel „nur markante Einträge“, mit Grenzfall-Tests (SPEC §3.20)
-- [ ] Akkordsymbole: Parser und Darstellung nach STYLES.md §1.17
+- [x] Akkordsymbole: Parser und Darstellung nach STYLES.md §1.17
 - [ ] Stilprofile als JSON nach `docs/STYLES.md` inklusive Loader und Validierung
 - [ ] Archetyp-Schnittstelle und alle v1.0-Archetypen aus STYLES.md (ohne `polymeter_seq`)
 - [ ] Gewichtete Auto-Auswahl und manuelle Übersteuerung pro Stimme
