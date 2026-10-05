@@ -1401,3 +1401,121 @@ TEST_CASE("lead_phrase of two bars repeats a one-bar motif", "[archetype-melody]
     CHECK(repeated > 150); // the rhythm of the motif returns in the second bar
     CHECK(maxSpan <= 12 + 4);
 }
+
+// -- polyphonic melody: chord colours per style (STYLES.md 1.4, 1.10)
+// ---------------------------------------------------
+
+TEST_CASE("the shipped profiles carry the chord colours of STYLES.md", "[archetype-melody][polyphony]") {
+    const std::map<std::string, std::map<std::string, int>> expected{
+        {"peak_time", {{"min", 40}, {"fifth", 30}, {"min7", 20}, {"sus", 10}}},
+        {"melodic_techno", {{"min7", 25}, {"min9", 25}, {"min", 30}, {"sus", 20}}},
+        {"hard_industrial", {{"cluster", 40}, {"fifth", 40}, {"min", 20}}}};
+    for (const auto& [name, colors] : expected) {
+        const StyleProfile style = loadShipped(name);
+        std::map<std::string, int> actual;
+        for (const WeightedId& entry : style.melody.chordColors) {
+            actual[entry.id] = entry.weight;
+        }
+        INFO(name);
+        CHECK(actual == colors);
+        // [v1.1] default of the field (on for peak time and hard, off for melodic), not used in v1.0
+        CHECK(style.melody.chordMemory == (name != "melodic_techno"));
+        StyleProfile flipped = style;
+        flipped.melody.chordMemory = !style.melody.chordMemory;
+        Pattern a = makePattern(2);
+        Pattern b = makePattern(2);
+        CHECK(melodyOf(a, "stabs", style, 3, 50, 40) ==
+              melodyOf(b, "stabs", flipped, 3, 50, 40)); // voice leading everywhere
+    }
+}
+
+TEST_CASE("stab chords are polyphonic hits that survive the whole chain", "[archetype-melody][polyphony]") {
+    for (const std::string& styleName : kStyles) {
+        const StyleProfile style = loadShipped(styleName);
+        for (const char* id : {"stabs", "aggro_stabs"}) {
+            for (uint64_t seed = 1; seed <= 25; ++seed) {
+                Pattern p = makePattern(4);
+                p.context.scaleId = std::string(style.scales.front().id);
+                variedProgression(p, seed);
+                const auto notes = melodyOf(p, id, style, seed, 60, 50);
+                INFO(styleName << " " << id << " seed " << seed);
+                REQUIRE_FALSE(notes.empty());
+                std::map<uint32_t, std::set<int>> hits;
+                for (const Note& n : notes) {
+                    CHECK(n.startTick % 240 == 0);
+                    CHECK(n.pitch >= p.voicing.lowNote);
+                    CHECK(n.pitch <= p.voicing.highNote);
+                    CHECK_FALSE(n.slide);
+                    CHECK(hits[n.startTick].insert(n.pitch).second); // no pitch twice in a chord
+                }
+                size_t polyphonic = 0;
+                for (const auto& [tick, pitches] : hits) {
+                    CHECK(pitches.size() >= 2);
+                    CHECK(pitches.size() <= 5);
+                    polyphonic += pitches.size() >= 3 ? 1 : 0;
+                }
+                CHECK(polyphonic > 0);
+                // the bass stays monophonic next to it
+                const auto& bass = p.voices[0].notes;
+                for (size_t i = 0; i + 1 < bass.size(); ++i) {
+                    CHECK(bass[i].startTick + bass[i].lengthTicks <= bass[i + 1].startTick);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("slides on chord notes are removed by the constraint layer, single notes keep them",
+          "[archetype-melody][polyphony]") {
+    const StyleProfile style = loadShipped("peak_time");
+    Pattern p = makePattern(2);
+    const auto notes = melodyOf(p, "stabs", style, 7, 60, 0);
+    REQUIRE_FALSE(notes.empty());
+    for (Note& n : p.voices[1].notes) {
+        n.slide = true;
+    }
+    const ConstraintReport report = applyConstraints(p, constraintSettingsFor(p, style));
+    CHECK(report.total() > 0);
+    for (const Note& n : p.voices[1].notes) {
+        CHECK_FALSE(n.slide);
+    }
+}
+
+TEST_CASE("the voices of the stab chords move little in every style", "[archetype-melody][polyphony]") {
+    for (const std::string& styleName : kStyles) {
+        const StyleProfile style = loadShipped(styleName);
+        int worst = 0;
+        for (uint64_t seed = 1; seed <= 100; ++seed) {
+            Pattern p = makePattern(4);
+            p.context.scaleId = std::string(style.scales.front().id);
+            setProgression(p, {{0, ChordQuality::Minor, 2},
+                               {10, ChordQuality::Major, 2},
+                               {8, ChordQuality::Major, 2},
+                               {7, ChordQuality::Minor, 2}});
+            const auto notes = melodyOf(p, "stabs", style, seed, 50, 0, false);
+            std::vector<std::vector<int>> voicings;
+            for (uint32_t bar = 0; bar < 4; ++bar) {
+                std::vector<int> pitches;
+                for (const Note& n : notes) {
+                    if (n.startTick / kTicksPerBar == bar) {
+                        pitches.clear();
+                        const uint32_t first = n.startTick;
+                        for (const Note& m : notes) {
+                            if (m.startTick == first) {
+                                pitches.push_back(m.pitch);
+                            }
+                        }
+                        break;
+                    }
+                }
+                REQUIRE_FALSE(pitches.empty());
+                voicings.push_back(pitches);
+            }
+            for (size_t i = 1; i < voicings.size(); ++i) {
+                worst = std::max(worst, maxVoiceMovement(voicings[i - 1], voicings[i]));
+            }
+        }
+        INFO(styleName);
+        CHECK(worst <= 5); // a close voicing leads every voice by a few semitones
+    }
+}
