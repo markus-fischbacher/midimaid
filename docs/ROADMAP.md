@@ -73,7 +73,7 @@ Ersatzweg beschlossen.
       Serialisierung (JSON) mit `stateVersion`
 - [x] Constraint-Schicht (SPEC §4.2): Skala/Akkord-Skala, Register, Kick-Aussparung, Kick-Freiraum
       (schlägt Slide), Intervall- und Registerregeln, eigene Kanäle pro Stimme, mit vollständigen Tests
-- [ ] Ausgabestufe in fester Reihenfolge (SPEC §4.2a, v1.0-Stufen) mit Tests für jede Kombination
+- [x] Ausgabestufe in fester Reihenfolge (SPEC §4.2a, v1.0-Stufen) mit Tests für jede Kombination
 - [ ] Register in MIDI-Nummern, Oktav-Offset (STYLES.md §1.6)
 - [ ] Velocity-Konturen, Akzent als Flag, Akzent-Velocity (STYLES.md §1.9)
 - [ ] Voicing-Engine: enge Lage, Stimmführung (STYLES.md §1.10)
