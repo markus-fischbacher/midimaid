@@ -210,6 +210,11 @@ uint64_t candidateSeed(uint64_t initialSeed, int round, int index) {
 
 SelectionResult selectBest(const CandidateGenerator& generate, uint64_t initialSeed, const QualityProfile& profile,
                            const QualityContext& context, const HardCheck& hardCheck) {
+    return selectBest(generate, initialSeed, profile, [&context](const Pattern&) { return context; }, hardCheck);
+}
+
+SelectionResult selectBest(const CandidateGenerator& generate, uint64_t initialSeed, const QualityProfile& profile,
+                           const ContextFor& contextFor, const HardCheck& hardCheck) {
     SelectionResult result;
     for (int round = 0; round < kMaxRounds; ++round) {
         ++result.rounds;
@@ -221,6 +226,7 @@ SelectionResult selectBest(const CandidateGenerator& generate, uint64_t initialS
             if (hardCheck && !hardCheck(candidate)) {
                 continue;
             }
+            const QualityContext context = contextFor(candidate);
             const SoftScores scores = scoreCriteria(candidate, context);
             const int score = overallScore(scores, profile, context.creativityPct);
             if (score < profile.minScore) {
