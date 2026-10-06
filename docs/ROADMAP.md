@@ -34,7 +34,8 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
   - [ ] Clip (Live) bzw. Region (Logic) direkt ins Plugin-Fenster ziehen: kommt eine .mid-Datei an?
   - [ ] Parameter-Automation (Slot), Start mitten im Arrangement mit automatisiertem Slot
   - [ ] Live: Freeze einer Synth-Spur, die nur über „MIDI From“ gespielt wird (Erwartung: still)
-  - [ ] Welche Tasten Live und Logic an das Plugin-Fenster weiterleiten (Planung der Kürzel für v1.1)
+  - [x] Welche Tasten Live und Logic an das Plugin-Fenster weiterleiten (Planung der Kürzel für v1.1):
+        Live: Esc schließt das Fenster; Logic: Cmd+Z führt das Logic-Undo aus; der Rest kommt an (D-126)
   - [ ] Referenz-Instrumente: Legato-Glide für Slides und Velocity-Reaktion der Kandidaten prüfen,
         Auswahl pro Rolle festlegen (SPEC §12)
   - [ ] Versatz zwischen Spuren messen: Wie weit rechnet eine Voice dem Hub voraus oder hinterher? (Logic mit
@@ -226,7 +227,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 **Bearbeitung**
 - [ ] Sperren pro Dimension und Note (SPEC §3.5)
 - [ ] Piano-Roll-Hilfen: Scale-Fold, Slide/Akzent-Zeile, Wahrscheinlichkeits-Spur, Hintergründe
-- [ ] Tastenkürzel nach SPEC §8.3
+- [ ] Tastenkürzel nach SPEC §8.3: Aktionen frei belegbar in den Einstellungen, keine Voreinstellung (D-126)
 
 **Referenzen und Lenkung**
 - [ ] Mehrere benannte Sets pro Stil, automatisches Set „Favoriten“
