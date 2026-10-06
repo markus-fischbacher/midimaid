@@ -24,11 +24,15 @@ struct GenerationRequest {
     std::optional<std::string> kickGridId;      ///< else the default grid of the style
     std::optional<std::string> bassArchetype;   ///< manual choice, else automatic
     std::optional<std::string> melodyArchetype; ///< manual choice, else automatic
+    std::optional<std::vector<Phrase>> formPlan; ///< fixed phrases (valid for the length), else drawn (FormPlan.h)
     std::vector<ReferenceEntry> referenceSet;   ///< active set for the copy protection (empty = none)
 };
 
-/// One candidate, a pure function of `seed`: harmony, style groove, bass, melody (in this order, so that the melody
-/// knows the bass), then the constraint layer. All draws come from one `Pcg32::fromSeed(seed)`. `info` carries the
+/// One candidate, a pure function of `seed`: harmony, style groove, form plan, bass, melody (in this order, so that
+/// the melody knows the bass), then the constraint layer. Patterns of up to 4 bars are generated in one piece; patterns
+/// of 8 and 16 bars phrase by phrase (D-121): every phrase is a pattern of its own length with the chords, the kick
+/// grid and the energy and creativity of its role, generated from a seed of its role (phrases of one role share it,
+/// so they repeat their rhythm), and joined at the phrase starts. All draws come from one `Pcg32::fromSeed(seed)`. `info` carries the
 /// user seed of the request and `seed` as winner seed. A voice that cannot be generated (unknown scale, range too
 /// narrow) stays empty without archetype; `generatePattern` never accepts such a candidate.
 Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& request, uint64_t seed);
@@ -48,5 +52,12 @@ Pattern replayWinner(const StyleProfile& style, const GenerationRequest& request
 /// locks or when the voice cannot be generated.
 bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& style, const GenerationRequest& request,
                      uint64_t seed);
+
+/// Replaces bass and melody inside one phrase for `seed`, with the archetypes of the voices and the settings of the
+/// role of the phrase. Harmony, form plan and the other phrases stay. Voices with all three locks are kept. Then the
+/// constraint layer runs and the quality score is updated. False, pattern untouched, for an unknown or locked phrase,
+/// a voice without archetype or when a voice cannot be generated.
+bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& style, const GenerationRequest& request,
+                      uint64_t seed);
 
 } // namespace mm::core
