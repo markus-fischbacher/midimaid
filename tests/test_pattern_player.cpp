@@ -15,6 +15,7 @@ constexpr double kSampleRate = 48000.0;
 
 struct Event {
     long long sample; // absolute
+    double ppq;       // approximate position, from the tempo reported for the block
     uint8_t channel;
     uint8_t pitch;
     bool noteOn;
@@ -31,6 +32,13 @@ public:
     }
     void blockAt(double ppq, int numSamples, bool playing = true, double bpm = 120.0) {
         run(numSamples, playing, bpm, true, ppq, looping_, loopStart_, loopEnd_);
+    }
+    /// Host-style tempo change inside a block: the block reports `bpm` (the value at its start), but the position
+    /// advances at `newBpm` from `changeSample` on.
+    void blockWithTempoChange(int numSamples, double bpm, double newBpm, int changeSample) {
+        const double ppq = nextPpq_;
+        run(numSamples, true, bpm, true, ppq, looping_, loopStart_, loopEnd_);
+        nextPpq_ = ppq + (changeSample * bpm + (numSamples - changeSample) * newBpm) / 60.0 / kSampleRate;
     }
     void setLoop(double start, double end) {
         looping_ = true;
@@ -79,6 +87,8 @@ private:
         info.isLooping = looping;
         info.loopStartPpq = loopStart;
         info.loopEndPpq = loopEnd;
+        blockPpq_ = ppq;
+        blockPpqPerSample_ = bpm / 60.0 / kSampleRate;
         player_.process(info, numSamples, kSampleRate, out_);
         collect(numSamples);
         nextPpq_ = ppq + numSamples * bpm / 60.0 / kSampleRate;
@@ -100,7 +110,8 @@ private:
                 REQUIRE(sounding_.count(key) == 1); // never a stray note-off
                 sounding_.erase(key);
             }
-            events_.push_back({clock_ + e.sampleOffset, e.channel, e.pitch, e.noteOn});
+            events_.push_back({clock_ + e.sampleOffset, blockPpq_ + e.sampleOffset * blockPpqPerSample_, e.channel,
+                               e.pitch, e.noteOn});
         }
     }
 
@@ -109,6 +120,8 @@ private:
     std::vector<Event> events_;
     std::set<std::pair<uint8_t, uint8_t>> sounding_;
     double nextPpq_ = 0.0;
+    double blockPpq_ = 0.0;
+    double blockPpqPerSample_ = 0.0;
     long long clock_ = 0;
     bool looping_ = false;
     double loopStart_ = 0.0;
@@ -268,6 +281,147 @@ TEST_CASE("tempo changes between blocks are not mistaken for jumps", "[engine]")
     sim.block(256, false);
     CHECK(sim.soundingCount() == 0);
     CHECK(sim.noteOnSamples().size() > 8);
+}
+
+TEST_CASE("a tempo change inside a block is not a jump", "[engine]") {
+    // The host reports the tempo at the block start, the position follows the new tempo mid-block. A large step
+    // must neither cut sounding notes nor swallow a note start in the gap between the blocks.
+    constexpr double kNoteLengthPpq = 360.0 / 960.0;
+    const std::vector<std::pair<double, double>> steps = {{120.0, 180.0}, {180.0, 90.0}, {90.0, 240.0}, {240.0, 100.0}};
+
+    for (int changeSample : {1, 128, 400}) {
+        Simulation sim;
+        double bpm = 120.0;
+        size_t stepIndex = 0;
+        for (int i = 0; i < 1500; ++i) {
+            if (i % 37 == 36) {
+                const auto step = steps[stepIndex++ % steps.size()];
+                bpm = step.first;
+                sim.blockWithTempoChange(512, bpm, step.second, changeSample);
+                bpm = step.second;
+            } else {
+                sim.block(512, true, bpm);
+            }
+        }
+
+        std::vector<double> onPpq;
+        std::vector<double> offPpq;
+        for (const auto& e : sim.events()) {
+            (e.noteOn ? onPpq : offPpq).push_back(e.ppq);
+        }
+        REQUIRE(onPpq.size() >= 8);
+        // Notes start at 0.5 ppq of every bar beat: none may be missing between the first and the last one.
+        for (size_t i = 1; i < onPpq.size(); ++i) {
+            const double beats = std::round(onPpq[i] - onPpq[i - 1]);
+            CHECK(beats >= 1.0);
+            CHECK(beats <= 1.0);
+        }
+        // No note is cut short (a note-off before its planned end would mean a spurious release).
+        REQUIRE(offPpq.size() + 1 >= onPpq.size());
+        for (size_t i = 0; i < offPpq.size(); ++i) {
+            CHECK(offPpq[i] - onPpq[i] > kNoteLengthPpq - 0.02);
+        }
+    }
+}
+
+TEST_CASE("tempo change inside a block: note start in the gap is played at the first sample", "[engine]") {
+    // Expected end of block 1 is just before the note at 0.5 ppq; the host position has moved past it (tempo up).
+    Simulation sim;
+    sim.setPpq(0.5 - 1e-4 - 512 * 120.0 / 60.0 / kSampleRate);
+    sim.blockWithTempoChange(512, 120.0, 240.0, 1);
+    sim.block(512, true, 240.0);
+    REQUIRE(sim.noteOnSamples().size() == 1);
+    CHECK(sim.noteOnSamples()[0] == 512);
+}
+
+TEST_CASE("tempo change inside a block: note start in the overlap is not played twice", "[engine]") {
+    // Tempo down: the note at 0.5 ppq was already started in block 1, the host position lies before it again.
+    Simulation sim;
+    sim.setPpq(0.5 + 1e-4 - 512 * 240.0 / 60.0 / kSampleRate);
+    sim.blockWithTempoChange(512, 240.0, 120.0, 1);
+    sim.block(512, true, 120.0);
+    CHECK(sim.noteOnSamples().size() == 1);
+}
+
+TEST_CASE("tempo change inside a block: note end in the gap is sent at the first sample", "[engine]") {
+    // The note started at 0.5 ppq ends at 0.875 ppq, between the expected end of block 1 and the host position.
+    Simulation sim;
+    sim.setPpq(0.8749 - 9600 * 120.0 / 60.0 / kSampleRate - 512 * 120.0 / 60.0 / kSampleRate);
+    sim.block(9600, true, 120.0);
+    REQUIRE(sim.soundingCount() == 1);
+    sim.blockWithTempoChange(512, 120.0, 240.0, 1);
+    REQUIRE(sim.soundingCount() == 1);
+    sim.block(512, true, 240.0);
+    REQUIRE(sim.soundingCount() == 0);
+    CHECK(sim.events().back().sample == 9600 + 512);
+}
+
+TEST_CASE("tempo change inside a block: a note in the gap is kept in the block that wraps the loop", "[engine]") {
+    Simulation sim;
+    sim.setLoop(0.0, 4.0);
+    sim.setPpq(1.0);
+    sim.blockWithTempoChange(24000, 120.0, 240.0, 1); // expected end 2.0, host position 3.0: note at 2.5 is in the gap
+    sim.block(24000, true, 240.0);                    // wraps at 4.0
+    // 1.5 (block 1); 2.5 (gap), 3.5 and, after the wrap, 0.5 (block 2)
+    CHECK(sim.noteOnSamples().size() == 4);
+}
+
+TEST_CASE("tempo change inside a block: sounding notes keep sounding, up or down", "[engine]") {
+    for (const auto& [bpm, newBpm] : {std::make_pair(240.0, 120.0), std::make_pair(120.0, 240.0)}) {
+        Simulation sim;
+        sim.setPpq(0.45); // the note at 0.5 ppq sounds until 0.875 ppq
+        sim.block(2400, true, bpm);
+        REQUIRE(sim.soundingCount() == 1);
+        sim.blockWithTempoChange(512, bpm, newBpm, 1);
+        sim.block(512, true, newBpm);
+        CHECK(sim.soundingCount() == 1);
+    }
+}
+
+TEST_CASE("jumps are still detected after the tolerance change", "[engine]") {
+    constexpr double kPpqPerSample = 120.0 / 60.0 / kSampleRate;
+    {
+        // constant tempo, the host position is off by 0.9 samples: no jump, the note keeps sounding
+        Simulation sim;
+        sim.setPpq(0.45);
+        sim.block(2400, true, 120.0);
+        REQUIRE(sim.soundingCount() == 1);
+        sim.blockAt(0.45 + 2400 * kPpqPerSample + 0.9 * kPpqPerSample, 512, true, 120.0);
+        CHECK(sim.soundingCount() == 1);
+    }
+    {
+        // constant tempo, the position jumps by 0.01 ppq (240 samples): a jump
+        Simulation sim;
+        sim.setPpq(0.45);
+        sim.block(2400, true, 120.0);
+        REQUIRE(sim.soundingCount() == 1);
+        sim.blockAt(0.45 + 2400 * kPpqPerSample + 0.01, 512, true, 120.0);
+        CHECK(sim.soundingCount() == 0);
+    }
+    {
+        // after a tempo change: a deviation beyond what the change can cause is a jump too
+        Simulation sim;
+        sim.setPpq(0.45);
+        sim.block(2400, true, 120.0);
+        const double expectedEnd = 0.45 + 2400 * kPpqPerSample + 512 * kPpqPerSample;
+        sim.blockWithTempoChange(512, 120.0, 240.0, 1); // may deviate by 512 * 2 / 48000 = 0.0213 ppq
+        REQUIRE(sim.soundingCount() == 1);
+        sim.blockAt(expectedEnd + 0.04, 512, true, 240.0);
+        CHECK(sim.soundingCount() == 0);
+    }
+}
+
+TEST_CASE("a real jump right after a tempo change still releases the notes", "[engine]") {
+    Simulation sim;
+    // Run into the first note (starts at 0.5 ppq), change the tempo inside a block, then jump a bar ahead.
+    sim.block(512, true, 120.0);
+    sim.blockWithTempoChange(512, 120.0, 130.0, 128);
+    while (sim.soundingCount() == 0) {
+        sim.block(512, true, 130.0);
+    }
+    sim.blockAt(40.0, 512, true, 130.0);
+    CHECK(sim.events().back().noteOn == false);
+    CHECK(sim.soundingCount() == 0);
 }
 
 TEST_CASE("note-off never lands before or on its note-on", "[engine]") {

@@ -51,6 +51,7 @@ void PatternPlayer::setPattern(PatternView pattern) {
 void PatternPlayer::invalidateTransport() {
     playing_ = false;
     pendingWrapRelease_ = false;
+    lastNumSamples_ = 0;
 }
 
 void PatternPlayer::releaseAll(MidiEventList& out, int sampleOffset) {
@@ -89,20 +90,20 @@ void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset
     ++activeCount_;
 }
 
-void PatternPlayer::processSegment(double from, double to, int sampleBase, int numSamples, double ppqPerSample,
-                                   MidiEventList& out) {
-    if (pattern_.count > 0 && pattern_.lengthTicks > 0 && to > from) {
+void PatternPlayer::processSegment(double scanFrom, double origin, double to, int sampleBase, int numSamples,
+                                   double ppqPerSample, MidiEventList& out) {
+    if (pattern_.count > 0 && pattern_.lengthTicks > 0 && to > scanFrom) {
         const double ticksToPpq = 1.0 / kTicksPerQuarter;
         const double lengthPpq = pattern_.lengthTicks * ticksToPpq;
-        const auto firstCycle = static_cast<long long>(std::floor(from / lengthPpq));
+        const auto firstCycle = static_cast<long long>(std::floor(scanFrom / lengthPpq));
         const auto lastCycle = static_cast<long long>(std::floor(to / lengthPpq));
         for (long long cycle = firstCycle; cycle <= lastCycle; ++cycle) {
             for (size_t i = 0; i < pattern_.count; ++i) {
                 const PatternNote& note = pattern_.notes[i];
                 const double start = static_cast<double>(cycle) * lengthPpq + note.startTick * ticksToPpq;
-                if (start >= from && start < to) {
+                if (start >= scanFrom && start < to) {
                     const double end = start + note.lengthTicks * ticksToPpq;
-                    startNote(note, end, clampOffset(sampleBase, (start - from) / ppqPerSample, numSamples), out);
+                    startNote(note, end, clampOffset(sampleBase, (start - origin) / ppqPerSample, numSamples), out);
                 }
             }
         }
@@ -114,7 +115,7 @@ void PatternPlayer::processSegment(double from, double to, int sampleBase, int n
             if (!note.active || note.endPpq > to) {
                 continue;
             }
-            int offset = clampOffset(sampleBase, (note.endPpq - from) / ppqPerSample, numSamples);
+            int offset = clampOffset(sampleBase, (note.endPpq - origin) / ppqPerSample, numSamples);
             if (note.startedInCall == call_) {
                 // Never let the note-off land on or before its own note-on.
                 offset = std::max(offset, note.startOffset + 1);
@@ -142,15 +143,24 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     }
 
     const double ppqPerSample = transport.bpm / 60.0 / sampleRate;
-    const double tolerance = ppqPerSample + 1e-6;
+    // The position may deviate by one sample. After a tempo change the previous block advanced at a rate between
+    // the old and the new tempo, so it deviates by at most its length times the rate change as well.
+    const double tolerance = ppqPerSample + 1e-6 + lastNumSamples_ * std::abs(ppqPerSample - lastPpqPerSample_);
 
+    // Without a jump the scan continues exactly where the previous block ended: no gap (swallowed note-on) and
+    // no overlap (double note-on), whatever the host reports within the tolerance.
+    double scanFrom = transport.ppq;
     if (!playing_) {
         releaseAll(out, 0);
         playing_ = true;
     } else if (pendingWrapRelease_ || std::abs(transport.ppq - expectedPpq_) > tolerance) {
         releaseAll(out, 0); // jump
+    } else {
+        scanFrom = expectedPpq_;
     }
     pendingWrapRelease_ = false;
+    lastPpqPerSample_ = ppqPerSample;
+    lastNumSamples_ = numSamples;
 
     const double blockEnd = transport.ppq + numSamples * ppqPerSample;
     const bool loops = transport.isLooping && transport.loopEndPpq > transport.loopStartPpq;
@@ -159,13 +169,14 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     if (loops && transport.ppq < transport.loopEndPpq && blockEnd > transport.loopEndPpq + kEpsilon) {
         // The loop wraps inside this block: handle both halves sample-accurately.
         const int wrapOffset = clampOffset(0, (transport.loopEndPpq - transport.ppq) / ppqPerSample, numSamples);
-        processSegment(transport.ppq, transport.loopEndPpq, 0, numSamples, ppqPerSample, out);
+        processSegment(scanFrom, transport.ppq, transport.loopEndPpq, 0, numSamples, ppqPerSample, out);
         releaseAll(out, wrapOffset);
         const double secondEnd = transport.loopStartPpq + (blockEnd - transport.loopEndPpq);
-        processSegment(transport.loopStartPpq, secondEnd, wrapOffset, numSamples, ppqPerSample, out);
+        processSegment(transport.loopStartPpq, transport.loopStartPpq, secondEnd, wrapOffset, numSamples, ppqPerSample,
+                       out);
         expectedPpq_ = secondEnd;
     } else {
-        processSegment(transport.ppq, blockEnd, 0, numSamples, ppqPerSample, out);
+        processSegment(scanFrom, transport.ppq, blockEnd, 0, numSamples, ppqPerSample, out);
         expectedPpq_ = blockEnd;
         if (loops && blockEnd >= transport.loopEndPpq - kEpsilon && transport.ppq < transport.loopEndPpq) {
             // The block ends exactly on the loop end: the wrap happens at the next block's first sample.

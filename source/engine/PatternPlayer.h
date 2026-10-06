@@ -58,7 +58,8 @@ private:
 ///
 /// Position = song position modulo pattern length (switch time is PPQ 0, as after a start or jump).
 /// Every note-on gets a guaranteed note-off: on stop, jump (any PPQ discontinuity, including the loop wrap),
-/// missing host data and bypass.
+/// missing host data and bypass. A tempo change inside a block (the host reports the tempo at the block start
+/// only) shifts the next block's position; that is no jump (SPEC 6.2, D-125).
 class PatternPlayer {
 public:
     explicit PatternPlayer(PatternView pattern = placeholderPattern());
@@ -82,7 +83,10 @@ private:
         int32_t startOffset = 0;
     };
 
-    void processSegment(double from, double to, int sampleBase, int numSamples, double ppqPerSample,
+    /// Starts notes whose start lies in [scanFrom, to) and ends those that end before `to`. Sample offsets are
+    /// measured from `origin` (the PPQ position of sample `sampleBase`); `scanFrom` differs from it when the
+    /// host position deviates from the expected one (tempo change inside the previous block).
+    void processSegment(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
                         MidiEventList& out);
     void startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out);
 
@@ -92,6 +96,8 @@ private:
     bool playing_ = false;
     bool pendingWrapRelease_ = false;
     double expectedPpq_ = 0.0;
+    double lastPpqPerSample_ = 0.0; // tempo and length of the previous block, for the tempo-change tolerance
+    int lastNumSamples_ = 0;
     uint32_t call_ = 0;
 };
 
