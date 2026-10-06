@@ -1,0 +1,70 @@
+pattern melodic_techno bars=1 seed=1 winner=5266705631892356520 score=97
+  key root=1 scale=dorian kick=4otf
+  chords i@0+1 bVII@1+1
+  phrases 0+1:main
+  voice bass archetype=rolling16_harmonic notes=9 velocitySum=900
+  voice melody archetype=call_response notes=4 velocitySum=400
+  hash 690bc65f478883b2
+pattern melodic_techno bars=1 seed=2 winner=5747796768693156649 score=96
+  key root=7 scale=dorian kick=4otf
+  chords i@0+1 bVI@1+1
+  phrases 0+1:main
+  voice bass archetype=rolling16_harmonic notes=9 velocitySum=900
+  voice melody archetype=call_response notes=4 velocitySum=400
+  hash f1198cf054c109bc
+pattern melodic_techno bars=2 seed=1 winner=17911839290282890590 score=73
+  key root=3 scale=natural_minor kick=4otf
+  chords i@0+2 bVI@2+2
+  phrases 0+2:main
+  voice bass archetype=rolling16_harmonic notes=18 velocitySum=1800
+  voice melody archetype=call_response notes=8 velocitySum=800
+  hash 83f92c38ae70afaf
+pattern melodic_techno bars=2 seed=2 winner=5747796768693156649 score=65
+  key root=7 scale=dorian kick=4otf
+  chords i@0+2 bVI@2+2
+  phrases 0+2:main
+  voice bass archetype=offbeat_changes notes=8 velocitySum=800
+  voice melody archetype=call_response notes=8 velocitySum=800
+  hash 44d5bd8899d881ba
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=77
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=400
+  voice melody archetype=pluck_seq notes=16 velocitySum=1600
+  hash 7e1f8ccedcfeec02
+pattern melodic_techno bars=4 seed=2 winner=6394052312532759219 score=81
+  key root=8 scale=phrygian_dominant kick=4otf
+  chords i@0+4 bVI@4+4
+  phrases 0+4:main
+  voice bass archetype=offbeat_changes notes=15 velocitySum=1500
+  voice melody archetype=pluck_seq notes=16 velocitySum=1600
+  hash 565bc6225953313c
+pattern melodic_techno bars=8 seed=1 winner=16184226688143867045 score=95
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2 i@8+2 bVII@10+2 i@12+2 bVII@14+2
+  phrases 0+4:main 4+4:answer
+  voice bass archetype=rolling16_harmonic notes=72 velocitySum=7200
+  voice melody archetype=pluck_seq notes=32 velocitySum=3200
+  hash b04f17d9d7af61c4
+pattern melodic_techno bars=8 seed=2 winner=13398859234004329862 score=92
+  key root=8 scale=phrygian_dominant kick=4otf
+  chords i@0+2 iv@2+2 bVI@4+2 V@6+2 i@8+2 iv@10+2 bVI@12+2 V@14+2
+  phrases 0+8:main
+  voice bass archetype=rolling16_harmonic notes=72 velocitySum=7200
+  voice melody archetype=call_response notes=32 velocitySum=3200
+  hash b5b6908f35eeba43
+pattern melodic_techno bars=16 seed=1 winner=17911839290282890590 score=95
+  key root=3 scale=natural_minor kick=4otf
+  chords i@0+2 bVI@2+2 bIII@4+2 bVII@6+2 i@8+2 bVI@10+2 bIII@12+2 bVII@14+2 i@16+2 bVI@18+2 bIII@20+2 bVII@22+2 i@24+2 bVI@26+2 bIII@28+2 bVII@30+2
+  phrases 0+8:main 8+8:answer
+  voice bass archetype=rolling16_harmonic notes=144 velocitySum=14400
+  voice melody archetype=lead_phrase notes=64 velocitySum=6408
+  hash 932172803d5d4919
+pattern melodic_techno bars=16 seed=2 winner=14119491246550939236 score=88
+  key root=11 scale=natural_minor kick=4otf
+  chords i@0+2 iv@2+2 bVI@4+2 V@6+2 i@8+2 iv@10+2 bVI@12+2 V@14+2 i@16+2 iv@18+2 bVI@20+2 V@22+2 i@24+2 iv@26+2 bVI@28+2 V@30+2
+  phrases 0+4:main 4+4:answer 8+4:main 12+4:breakdown:halftime
+  voice bass archetype=rolling16_harmonic notes=140 velocitySum=13776
+  voice melody archetype=lead_phrase notes=56 velocitySum=5544
+  hash f410cd79e26460bb

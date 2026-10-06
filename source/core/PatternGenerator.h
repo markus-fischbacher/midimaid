@@ -24,6 +24,7 @@ struct GenerationRequest {
     std::optional<std::string> kickGridId;      ///< else the default grid of the style
     std::optional<std::string> bassArchetype;   ///< manual choice, else automatic
     std::optional<std::string> melodyArchetype; ///< manual choice, else automatic
+    std::vector<VoiceRole> voices;              ///< voice roles in order; empty = bass and melody (at most kMaxVoices)
     std::optional<std::vector<Phrase>> formPlan; ///< fixed phrases (valid for the length), else drawn (FormPlan.h)
     std::vector<ReferenceEntry> referenceSet;   ///< active set for the copy protection (empty = none)
 };

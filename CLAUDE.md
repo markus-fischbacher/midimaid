@@ -88,6 +88,8 @@ Offene Punkte in `docs/DECISIONS.md` unter „Offen“ eintragen.
   laufendem Zufallszustand im Audio-Thread (SPEC §3.19).
 - Tonhöhen im Code immer als MIDI-Nummern, Notennamen nur in der UI.
 - Öffentliche Funktionen in `core` und `ai` bekommen Unit-Tests.
+- Golden Files (`tests/golden/`) nur bewusst erneuern (`MIDIMAID_UPDATE_GOLDEN=1`), den Diff prüfen und die Ursache in
+  `docs/DECISIONS.md` festhalten; sie müssen auf allen Plattformen gleich sein.
 - Keine festen UI-Texte im Code: alles über die Übersetzungstabelle (SPEC §8.2).
 
 ## Entwicklungsumgebung

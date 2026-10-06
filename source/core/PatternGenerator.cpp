@@ -124,6 +124,15 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     Pcg32 rng = Pcg32::fromSeed(seed);
     Pattern pattern = makeEmptyPattern(request.lengthBars, style.id);
     pattern.kickGridId = request.kickGridId.value_or(style.kickDefault);
+    if (!request.voices.empty()) {
+        pattern.voices.clear();
+        for (size_t i = 0; i < request.voices.size() && i < static_cast<size_t>(kMaxVoices); ++i) {
+            Track track;
+            track.role = request.voices[i];
+            track.midiChannel = static_cast<uint8_t>(i + 1);
+            pattern.voices.push_back(std::move(track));
+        }
+    }
     applyHarmony(pattern, style, rng, request.root, request.scaleId);
     applyStyleGroove(pattern, style);
     for (Track& track : pattern.voices) {
