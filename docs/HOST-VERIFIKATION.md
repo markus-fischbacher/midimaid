@@ -16,62 +16,67 @@ Daher gilt:
 
 ## A. Vorbereitung
 
-- [ ] Plugins gebaut und installiert (VST3, AU `aumu`, AU MIDI-FX `aumi`), AU-Cache geleert
+- [x] Plugins gebaut und installiert (VST3, AU `aumu`, AU MIDI-FX `aumi`), AU-Cache geleert
       (`killall -9 AudioComponentRegistrar`), DAW neu gestartet
-- [ ] Build-Typ notieren (Debug oder Release), Commit-Hash notieren (`git rev-parse --short HEAD`)
-- [ ] Versionen notieren: macOS, Live, Logic, Xcode, CMake; später Windows und Visual Studio
-- [ ] Beide DAWs: Das Plugin erscheint in der Plugin-Liste (Hersteller „Klirrwerk“)
+- [x] Build-Typ notieren (Debug oder Release), Commit-Hash notieren (`git rev-parse --short HEAD`) - Debug, 81e826d
+- [x] Versionen notieren: macOS, Live, Logic, Xcode, CMake; später Windows und Visual Studio
+  - macOS 27.0 (Build 26A428), Live 12.4.6 (Ableton Live 12 Suite), Logic Pro 12.4
+  - Kein Xcode installiert, nur Command Line Tools 27.0.0.0.1788430756 (macOS-SDK 27.0)
+  - Apple clang 21.0.0 (clang-2100.3.34.2, arm64-apple-darwin27.0.0), CMake 4.4.4, Ninja 1.13.2, gh 2.102.0
+  - pluginval 1.0.4 (lokal und in der CI gepinnt), CI-Runner `macos-15` (Xcode-Version im CI-Log, Schritt „xcodebuild -version“)
+  - Windows und Visual Studio: noch offen
+- [x] Beide DAWs: Das Plugin erscheint in der Plugin-Liste (Hersteller „Klirrwerk“)
 
 ## B. Live 12 (macOS: VST3 und AU; Windows: VST3)
 
 Je Format einmal durchgehen und ankreuzen. Ergebnis: ✔ / ✘ plus Notiz.
 
-| Nr. | Prüfung | Erwartung | VST3 | AU | Win VST3 |
-|---|---|---|---|---|---|
-| B1 | Neue MIDI-Spur, MidiMaid als Instrument laden, Fenster öffnet | Fenster mit Namen und Griff | | | |
-| B2 | Play | Pattern startet exakt mit dem Takt | | | |
-| B3 | Stop | Alle Noten enden sofort, keine hängenden Töne | | | |
-| B4 | Loop im Arrangement ein, Sprung am Loop-Ende | Kein hängender Ton, Pattern bleibt im Takt | | | |
-| B5 | Tempoänderung während der Wiedergabe | Pattern folgt, keine Aussetzer | | | |
-| B6 | Zweite Spur mit Synth, Eingang „MIDI From“ = MidiMaid-Spur, Monitoring „In“ | Der Synth spielt das Pattern | | | |
-| B7 | In der MidiMaid-Spur aufnehmen (Synth-Spur scharf) | Aufgenommene Noten stimmen mit der Wiedergabe überein | | | |
-| B8 | **D-55:** Kanäle trennen beim Routing? (Einzelne MIDI-Kanäle im „MIDI From“-Menü wählen, sofern das Plugin mehrere Kanäle sendet; sonst notieren: „nur ein Kanal, nicht prüfbar“) | Notieren, ob Live Kanäle trennt | | | |
-| B9 | Plugin-Fenster schließen, Set speichern, neu öffnen | Plugin lädt ohne Fehler | | | |
-| B10 | Tasten: Leertaste, Cmd+Z, Pfeile und Buchstaben bei fokussiertem Plugin-Fenster | Notieren, welche Tasten Live ans Plugin weitergibt (Planung v1.1-Kürzel) | | | |
+| Nr. | Prüfung | Erwartung | VST3 | AU | Win VST3 | Bemerkung |
+|---|---|---|---|---|---|---|
+| B1 | Neue MIDI-Spur, MidiMaid als Instrument laden, Fenster öffnet | Fenster mit Namen und Griff | ✔ | ✔ | | |
+| B2 | Play | Pattern startet exakt mit dem Takt | ✔ |  | | |
+| B3 | Stop | Alle Noten enden sofort, keine hängenden Töne | ✔ |  | | |
+| B4 | Loop im Arrangement ein, Sprung am Loop-Ende | Kein hängender Ton, Pattern bleibt im Takt | ✔ |  | | |
+| B5 | Tempoänderung während der Wiedergabe | Pattern folgt, keine Aussetzer |✘| | | Der Ton fällt aus/knackt und wenn ich im passenden Takt die BPM ändere, kommt gar kein Ton daher |
+| B6 | Zweite Spur mit Synth, Eingang „MIDI From“ = MidiMaid-Spur, Monitoring „In“ | Der Synth spielt das Pattern | ✔ | ✘ | | |
+| B7 | In der MidiMaid-Spur aufnehmen (Synth-Spur scharf) | Aufgenommene Noten stimmen mit der Wiedergabe überein | ✔ | | | Spur 2 muss scharf sein |
+| B8 | **D-55:** Kanäle trennen beim Routing? (Einzelne MIDI-Kanäle im „MIDI From“-Menü wählen, sofern das Plugin mehrere Kanäle sendet; sonst notieren: „nur ein Kanal, nicht prüfbar“) | Notieren, ob Live Kanäle trennt | - | | |nur ein Kanal, nicht prüfbar|
+| B9 | Plugin-Fenster schließen, Set speichern, neu öffnen | Plugin lädt ohne Fehler | ✔ | | | |
+| B10 | Tasten: Leertaste, Cmd+Z, Pfeile und Buchstaben bei fokussiertem Plugin-Fenster | Notieren, welche Tasten Live ans Plugin weitergibt. Keine Folgeprüfung nötig: MidiMaid belegt keine Kürzel vorab (D-126, SPEC §8.3) | | | | Live: Esc schließt das Plugin-Fenster. Alle anderen Tasten kommen im Plugin an, manche lösen zusätzlich etwas in Live aus (nicht einzeln geprüft). |
 
 ## C. Logic Pro
 
 MidiMaid als **MIDI-FX** (`MidiMaid MIDI`, MIDI-FX-Slot einer Instrumentenspur) und als **Instrument** prüfen.
 
-| Nr. | Prüfung | Erwartung | MIDI-FX | Instrument |
-|---|---|---|---|---|
-| C1 | `MidiMaid MIDI` im MIDI-FX-Slot laden, Synth auf derselben Spur | Plugin erscheint im Slot, lädt ohne Fehlermeldung | | – |
-| C2 | Play | Pattern startet im Takt | | |
-| C3 | Stop | Keine hängenden Noten | | |
-| C4 | Zyklus (Loop) ein, Sprung am Zyklusende | Kein hängender Ton, Pattern im Takt | | |
-| C5 | Tempoänderung, Positionssprung per Lineal | Pattern folgt | | |
-| C6 | Start mitten im Arrangement | Pattern an der richtigen Taktposition | | |
-| C7 | „Record MIDI to Track Here“ auf einer Synth-Spur, die von MidiMaid gespielt wird | Notiz: Nimmt Logic die Ausgabe **hinter** MidiMaid auf? (Ersatzweg laut Roadmap: nur Drag & Drop) | | |
-| C8 | Tasten ans Plugin-Fenster (wie B10) | Notieren | | |
-| C9 | `auval -v aumi Mdmf Klrw` und `auval -v aumu Mdmi Klrw` | Beide „AU VALIDATION SUCCEEDED“ | | |
+| Nr. | Prüfung | Erwartung | MIDI-FX | Instrument | Bemerkung |
+|---|---|---|---|---|---|
+| C1 | `MidiMaid MIDI` im MIDI-FX-Slot laden, Synth auf derselben Spur | Plugin erscheint im Slot, lädt ohne Fehlermeldung | | – | |
+| C2 | Play | Pattern startet im Takt | | | |
+| C3 | Stop | Keine hängenden Noten | | | |
+| C4 | Zyklus (Loop) ein, Sprung am Zyklusende | Kein hängender Ton, Pattern im Takt | | | |
+| C5 | Tempoänderung, Positionssprung per Lineal | Pattern folgt | | | |
+| C6 | Start mitten im Arrangement | Pattern an der richtigen Taktposition | | | |
+| C7 | „Record MIDI to Track Here“ auf einer Synth-Spur, die von MidiMaid gespielt wird | Notiz: Nimmt Logic die Ausgabe **hinter** MidiMaid auf? (Ersatzweg laut Roadmap: nur Drag & Drop) | | | |
+| C8 | Tasten ans Plugin-Fenster (wie B10) | Notieren; keine Folgeprüfung nötig (D-126) | | | Logic: Cmd+Z macht das Einfügen des MIDI-Effekts rückgängig (Logic-Undo), dadurch schließt sich das Fenster. Alle anderen Tasten kommen im Plugin an, manche lösen zusätzlich etwas in Logic aus (nicht einzeln geprüft). |
+| C9 | `auval -v aumi Mdmf Klrw` und `auval -v aumu Mdmi Klrw` | Beide „AU VALIDATION SUCCEEDED“ | | | |
 
 ## D. Drag & Drop (Live und Logic)
 
-| Nr. | Prüfung | Erwartung | Live | Logic |
-|---|---|---|---|---|
-| D1 | Griff aus dem Plugin auf eine MIDI-Spur ziehen | Clip bzw. Region mit dem Pattern entsteht | | |
-| D2 | Tempo-Event der Datei | Notieren: Wird das Tempo übernommen oder ignoriert? Passt die Länge bei abweichendem Projekttempo? | | |
-| D3 | Clip bzw. Region **ins** Plugin-Fenster ziehen | Kommt eine `.mid` im Plugin an? (Im Spike noch ohne Import: Notieren, was der Host beim Ziehen anbietet; Cursor, Verbotszeichen?) | | |
+| Nr. | Prüfung | Erwartung | Live | Logic | Bemerkung |
+|---|---|---|---|---|---|
+| D1 | Griff aus dem Plugin auf eine MIDI-Spur ziehen | Clip bzw. Region mit dem Pattern entsteht | | | |
+| D2 | Tempo-Event der Datei | Notieren: Wird das Tempo übernommen oder ignoriert? Passt die Länge bei abweichendem Projekttempo? | | | |
+| D3 | Clip bzw. Region **ins** Plugin-Fenster ziehen | Kommt eine `.mid` im Plugin an? (Im Spike noch ohne Import: Notieren, was der Host beim Ziehen anbietet; Cursor, Verbotszeichen?) | | | |
 
 ## E. Vorzähler und negative PPQ (O-24)
 
 Heute spielt die Engine bei negativen Positionen nach derselben Rechnung (Position modulo Länge).
 
-| Nr. | Prüfung | Erwartung | Live | Logic |
-|---|---|---|---|---|
-| E1 | Count-in (1 bzw. 2 Takte) einschalten, Aufnahme starten | Notieren: Spielt MidiMaid im Vorzähler? An welchen Positionen (modulo Länge, also phasenrichtig zum ersten Takt)? | | |
-| E2 | Aufnahme von einer MidiMaid-Spur: Landen Noten aus dem Vorzähler im Clip? | Notieren, ob das stört | | |
-| E3 | Subjektives Urteil | Wunsch: Vorzähler **still** oder **spielend**? | | |
+| Nr. | Prüfung | Erwartung | Live | Logic | Bemerkung |
+|---|---|---|---|---|---|
+| E1 | Count-in (1 bzw. 2 Takte) einschalten, Aufnahme starten | Notieren: Spielt MidiMaid im Vorzähler? An welchen Positionen (modulo Länge, also phasenrichtig zum ersten Takt)? | | | |
+| E2 | Aufnahme von einer MidiMaid-Spur: Landen Noten aus dem Vorzähler im Clip? | Notieren, ob das stört | | | |
+| E3 | Subjektives Urteil | Wunsch: Vorzähler **still** oder **spielend**? | | | |
 
 Folge: Ist „still“ gewünscht, wird die Engine so geändert, dass sie bei `ppq < 0` schweigt; die Entscheidung
 steht danach als D-xxx in `docs/DECISIONS.md` (O-24 entfällt).
