@@ -1,6 +1,7 @@
-add_executable(mm_core_tests test_version.cpp test_midi_file.cpp test_random.cpp test_theory.cpp test_pattern.cpp test_constraints.cpp test_output_stage.cpp test_register.cpp test_chord_symbol.cpp test_style_profile.cpp test_velocity_contour.cpp test_voicing.cpp test_motif.cpp test_quality.cpp test_copy_protection.cpp test_archetype.cpp test_archetype_melody.cpp test_macros.cpp test_groove.cpp test_progression.cpp test_pattern_generator.cpp test_form_plan.cpp)
+add_executable(mm_core_tests test_version.cpp test_midi_file.cpp test_random.cpp test_theory.cpp test_pattern.cpp test_constraints.cpp test_output_stage.cpp test_register.cpp test_chord_symbol.cpp test_style_profile.cpp test_velocity_contour.cpp test_voicing.cpp test_motif.cpp test_quality.cpp test_copy_protection.cpp test_archetype.cpp test_archetype_melody.cpp test_macros.cpp test_groove.cpp test_progression.cpp test_pattern_generator.cpp test_form_plan.cpp test_series.cpp test_golden.cpp)
 target_link_libraries(mm_core_tests PRIVATE mm_core Catch2::Catch2WithMain mm_warnings)
-target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
+target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources"
+                                                  MIDIMAID_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
 
 add_executable(mm_plugin_tests test_host_capabilities.cpp)
 target_link_libraries(mm_plugin_tests PRIVATE mm_host_capabilities Catch2::Catch2WithMain mm_warnings)

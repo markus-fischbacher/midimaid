@@ -1,0 +1,70 @@
+pattern peak_time bars=1 seed=1 winner=17911839290282890590 score=98
+  key root=3 scale=dorian kick=4otf
+  chords i@0+2
+  phrases 0+1:main
+  voice bass archetype=rolling16 notes=9 velocitySum=900
+  voice melody archetype=hypnotic_motif notes=4 velocitySum=400
+  hash 99adcbe29fdbb015
+pattern peak_time bars=1 seed=2 winner=4617448268296080639 score=98
+  key root=9 scale=natural_minor kick=4otf
+  chords i@0+1 iv@1+1
+  phrases 0+1:main
+  voice bass archetype=gallop notes=8 velocitySum=720
+  voice melody archetype=hypnotic_motif notes=4 velocitySum=400
+  hash d7f11c2c982deedb
+pattern peak_time bars=2 seed=1 winner=17911839290282890590 score=98
+  key root=3 scale=dorian kick=4otf
+  chords i@0+4
+  phrases 0+2:main
+  voice bass archetype=rolling16 notes=18 velocitySum=1800
+  voice melody archetype=hypnotic_motif notes=8 velocitySum=800
+  hash 91dd81cc5be27014
+pattern peak_time bars=2 seed=2 winner=14119491246550939236 score=95
+  key root=11 scale=natural_minor kick=4otf
+  chords i@0+4
+  phrases 0+2:main
+  voice bass archetype=gallop notes=16 velocitySum=1440
+  voice melody archetype=hypnotic_motif notes=8 velocitySum=800
+  hash 6f306144cf9c3d8b
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3600
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1600
+  hash 1b5cfc0d610f41c1
+pattern peak_time bars=4 seed=2 winner=14119491246550939236 score=95
+  key root=11 scale=natural_minor kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=gallop notes=32 velocitySum=2880
+  voice melody archetype=stabs notes=64 velocitySum=6720
+  hash 16ee8dbdd697cbba
+pattern peak_time bars=8 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+16
+  phrases 0+8:main
+  voice bass archetype=rolling16 notes=72 velocitySum=7200
+  voice melody archetype=hypnotic_motif notes=32 velocitySum=3200
+  hash 66d744f502cc34da
+pattern peak_time bars=8 seed=2 winner=13398859234004329862 score=95
+  key root=8 scale=minor_pentatonic kick=4otf
+  chords i@0+16
+  phrases 0+4:main 4+4:variation
+  voice bass archetype=rolling16 notes=72 velocitySum=7200
+  voice melody archetype=stabs notes=112 velocitySum=11760
+  hash c31422f49ab83eda
+pattern peak_time bars=16 seed=1 winner=13757245211066428519 score=96
+  key root=7 scale=dorian kick=4otf
+  chords i@0+32
+  phrases 0+8:main 8+8:variation
+  voice bass archetype=rolling16 notes=144 velocitySum=14400
+  voice melody archetype=hypnotic_motif notes=64 velocitySum=6400
+  hash 0d9e1ef82208cec1
+pattern peak_time bars=16 seed=2 winner=13398859234004329862 score=95
+  key root=8 scale=minor_pentatonic kick=4otf
+  chords i@0+32
+  phrases 0+4:main 4+4:variation 8+4:main 12+4:build
+  voice bass archetype=rolling16 notes=148 velocitySum=15000
+  voice melody archetype=stabs notes=208 velocitySum=22080
+  hash 5a658f6c53ddf7cf
