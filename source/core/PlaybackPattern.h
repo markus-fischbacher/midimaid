@@ -24,7 +24,7 @@ struct PatternView {
     uint32_t lengthTicks = 0;
 };
 
-/// Hard-coded Phase 0 pattern: one bar of offbeat bass (steps 2, 6, 10, 14), A1, accent on the last offbeat.
+/// Hard-coded Phase 0 pattern: one bar of offbeat bass (steps 2, 6, 10, 14), MIDI 45 (A1 with C3 = 60), accent on the last offbeat.
 PatternView placeholderPattern();
 
 } // namespace mm::core
