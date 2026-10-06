@@ -95,7 +95,7 @@ Ersatzweg beschlossen.
 - [x] Patterns 1/2/4/8/16 Takte, Phrasen und Formplan ab 8 Takten (SPEC §3.7)
 - [x] Golden-File-Tests pro Stil; Eigenschaftstests über Seed-Serien (SPEC §12); Tests mit 3 Test-Stimmen
       (offene Stimmenzahl)
-- [ ] Hörtest-Werkzeug `tools/mmgen`: .mid pro Stil, Archetyp, Energie, Seed; Serien-Modus (SPEC §12)
+- [x] Hörtest-Werkzeug `tools/mmgen`: .mid pro Stil, Archetyp, Energie, Seed; Serien-Modus (SPEC §12)
 - [ ] **Hörtest-Session** mit dem Entwickler nach dem Protokoll in SPEC §12: `mmgen`-Serien in Live mit den
       Referenz-Instrumenten abhören, Gewichte, Bereiche, Bewertungsgewichte und Mindestbewertung in
       STYLES.md anpassen
