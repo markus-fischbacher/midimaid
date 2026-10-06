@@ -3,6 +3,10 @@ target_link_libraries(mm_core_tests PRIVATE mm_core Catch2::Catch2WithMain mm_wa
 target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources"
                                                   MIDIMAID_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
 
+add_executable(mm_mmgen_tests test_mmgen.cpp)
+target_link_libraries(mm_mmgen_tests PRIVATE mm_mmgen Catch2::Catch2WithMain mm_warnings)
+target_compile_definitions(mm_mmgen_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
+
 add_executable(mm_plugin_tests test_host_capabilities.cpp)
 target_link_libraries(mm_plugin_tests PRIVATE mm_host_capabilities Catch2::Catch2WithMain mm_warnings)
 
@@ -16,9 +20,15 @@ target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catc
 list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
 include(Catch)
 catch_discover_tests(mm_core_tests)
+catch_discover_tests(mm_mmgen_tests)
 catch_discover_tests(mm_plugin_tests)
 catch_discover_tests(mm_engine_tests)
 catch_discover_tests(mm_plugin_glue_tests)
+
+add_test(
+    NAME mmgen_smoke
+    COMMAND mmgen series --style peak_time --archetype gallop --seeds 1 --energies 50 --bars 1 --out
+            ${CMAKE_CURRENT_BINARY_DIR}/mmgen_smoke)
 
 add_test(
     NAME cmake_format_checks
