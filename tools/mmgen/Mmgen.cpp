@@ -42,7 +42,7 @@ bool parseInt(const std::string& text, long long minValue, long long maxValue, l
 }
 
 std::string lower(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return std::tolower(c); });
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return text;
 }
 
