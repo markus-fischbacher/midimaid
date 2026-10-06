@@ -40,10 +40,13 @@ env:
   PLUGINVAL_SHA256_MACOS: 3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f
   PLUGINVAL_SHA256_WINDOWS: c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab
 
+# Every job has a timeout: the normal runs take about 10 minutes, and a hanging step (the cache post step of the Windows
+# job once ran for over 30 minutes) must not block the runner for the default six hours (D-123).
 jobs:
   macos:
     name: macOS (build, tests, pluginval, auval)
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6
@@ -89,6 +92,7 @@ jobs:
     name: Sanitizers (ASan + UBSan, macOS)
     if: github.event_name == 'workflow_dispatch' && inputs.sanitizers
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6
@@ -111,6 +115,7 @@ jobs:
     name: Windows (build, tests, pluginval)
     if: github.event_name == 'workflow_dispatch' && inputs.windows
     runs-on: windows-2022
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
@@ -148,6 +153,7 @@ jobs:
     name: Linux (build, tests, VST3 compile)
     if: github.event_name == 'workflow_dispatch' && inputs.linux
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/cache@v6
