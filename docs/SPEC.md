@@ -1239,7 +1239,7 @@ Windows und Linux. Kürzel greifen nur bei Fokus im Plugin-Fenster.
 - Ergebnis der Host-Verifikation (Phase 0, Live 12.4.6, Logic 12.4): Alle Tasten außer den folgenden erreichen
   das Plugin-Fenster, manche lösen zusätzlich eine Host-Aktion aus. **Live:** Esc schließt das Plugin-Fenster.
   **Logic:** Cmd+Z führt das Logic-Undo aus (macht z. B. das Einfügen des MIDI-Effekts rückgängig und schließt
-  damit das Fenster). Der Belegungsdialog weist bei diesen Tasten darauf hin.
+  damit das Fenster). Das ist Standardverhalten der Hosts; MidiMaid weist im Belegungsdialog nicht darauf hin.
 - **Ab v1.0: Jede Aktion hat eine Schaltfläche** (Rückgängig/Wiederholen, Duplizieren, Generieren,
   Variation), damit nichts nur über die Tastatur erreichbar ist
 
