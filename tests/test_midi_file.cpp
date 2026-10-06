@@ -129,7 +129,7 @@ TEST_CASE("midi file: notes of the placeholder pattern", "[core][midi]") {
     for (size_t i = 0; i < 4; ++i) {
         CHECK(n[2 * i].status == 0x90);
         CHECK(n[2 * i].tick == starts[i]);
-        CHECK(n[2 * i].data1 == 33);
+        CHECK(n[2 * i].data1 == 45);
         CHECK(n[2 * i].channel == 0);
         CHECK(n[2 * i + 1].status == 0x80);
         CHECK(n[2 * i + 1].tick == starts[i] + 360);
