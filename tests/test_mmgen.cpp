@@ -812,7 +812,7 @@ TEST_CASE("a style that never yields a valid candidate gives exit code 2 and fai
     CHECK(out.find("failed generations: 3 of 3") != std::string::npos);
 }
 
-TEST_CASE("--bpm sets the tempo of the files", "[mmgen]") {
+TEST_CASE("the bpm option sets the tempo of the files", "[mmgen]") {
     TempDir dir("bpm");
     std::string out;
     std::string err;
