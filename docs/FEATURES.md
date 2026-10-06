@@ -86,7 +86,7 @@ Kritische Prüfung aller Funktionen auf Sinnhaftigkeit, Nutzen und Wechselwirkun
 | Trigger Generieren/Variation per Automation | 3 | S | Controller-Knopf im Live-Set | Wird beim Bounce ignoriert | v1.1 |
 | Kreativität/Energie automatisierbar | 4 | S | Wirken erst bei der nächsten Generierung, Automation läuft ins Leere | – | Backlog (Parameter-ID reserviert) |
 | Schaltflächen für alle Aktionen | 1 | S | Live fängt Kürzel ab | – | v1.0 |
-| Tastenkürzel | 3 | S | Tempo für Profis | Host-Konflikte | v1.1 |
+| Tastenkürzel (frei belegbar, keine Voreinstellung) | 3 | S | Tempo für Profis | Hosts fangen Tasten ab (Esc in Live, Cmd+Z in Logic) | v1.1 |
 | Basis-/Experten-Ebene | 2 | S | Gegen Regler-Überladung | – | v1.0 |
 | DAW-Vorlagen und Setup-Hilfe | 2 | S | Erster Einsatz scheitert sonst am Routing | – | v1.0 |
 

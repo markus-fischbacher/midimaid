@@ -1222,37 +1222,25 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
 - Prompts an die KI bleiben unabhängig von der UI-Sprache in Englisch (bessere Ergebnisse); der
   Nutzerprompt darf in jeder Sprache sein
 
-### 8.3 [v1.1] Tastenkürzel (an Ableton angelehnt)
-Cmd steht für Ctrl unter Windows und Linux. Kürzel greifen nur bei Fokus im Plugin-Fenster.
+### 8.3 [v1.1] Tastenkürzel (vom Benutzer belegt)
+**MidiMaid belegt keine Taste vorab (D-126).** Die Aktionen unten gibt es als Kürzel-Aktionen, aber ohne
+Voreinstellung: Der Benutzer weist ihnen in den Einstellungen selbst Tasten zu. So kollidiert MidiMaid nicht mit
+Host-Kürzeln, und Tasten, die ein Host abfängt, wählt der Benutzer bewusst oder gar nicht. Cmd steht für Ctrl unter
+Windows und Linux. Kürzel greifen nur bei Fokus im Plugin-Fenster.
 
-| Aktion | Kürzel |
-|---|---|
-| Zeichenmodus an/aus | B |
-| Duplizieren | Cmd+D |
-| Alles auswählen | Cmd+A |
-| Löschen | Entf / Backspace |
-| Rückgängig / Wiederholen | Cmd+Z / Cmd+Shift+Z |
-| Note(n) Halbton hoch/runter | ↑ / ↓ |
-| Note(n) Oktave hoch/runter | Shift+↑ / Shift+↓ |
-| Note(n) um Rasterschritt verschieben | ← / → |
-| Notenlänge ändern | Shift+← / Shift+→ |
-| Raster enger / weiter | Cmd+1 / Cmd+2 |
-| Triolen-Raster | Cmd+3 |
-| Raster-Einrasten an/aus | Cmd+4 |
-| Scale-Fold an/aus | F |
-| Spurfokus Stimme 1 … 8 / alle | 1 … 8 / 0 (ohne Modifier) |
-| Generieren | Cmd+G |
-| Verfeinern absenden | Cmd+Enter im Verfeinern-Feld |
-| Variation (fokussierte Stimme) | V |
-| Verlauf zurück / vor | Cmd+[ / Cmd+] |
-
-- **Leertaste wird nie abgefangen**, sie bleibt Transport der DAW
-- Kürzel ohne Modifier (B, F, V, Ziffern) sind inaktiv, solange ein Textfeld (Prompt, Verfeinern)
-  den Fokus hat
-- Konflikte mit Host-Kürzeln werden im Phase-0-Spike geprüft (Live und Logic leiten nicht alle
-  Tasten an Plugin-Fenster weiter); betroffene Kürzel bekommen Alternativen. Besonders kritisch: Cmd+Z,
-  Cmd+D und Cmd+A haben in Live eigene Funktionen.
-- **Ab v1.0: Jede dieser Aktionen hat eine Schaltfläche** (Rückgängig/Wiederholen, Duplizieren, Generieren,
+- Zuweisbare Aktionen: Zeichenmodus an/aus, Duplizieren, Alles auswählen, Löschen, Rückgängig / Wiederholen,
+  Note(n) Halbton hoch/runter, Note(n) Oktave hoch/runter, Note(n) um Rasterschritt verschieben, Notenlänge ändern,
+  Raster enger / weiter, Triolen-Raster, Raster-Einrasten an/aus, Scale-Fold an/aus, Spurfokus Stimme 1 … 8 / alle,
+  Generieren, Verfeinern absenden, Variation (fokussierte Stimme), Verlauf zurück / vor
+- Die Belegung ist eine instanzübergreifende Einstellung (§9.2), kein Projekt-Zustand
+- Ein Eintrag „Standard wiederherstellen“ setzt alle Belegungen auf „keine“
+- **Leertaste ist nicht belegbar**, sie bleibt Transport der DAW
+- Kürzel ohne Modifier sind inaktiv, solange ein Textfeld (Prompt, Verfeinern) den Fokus hat
+- Ergebnis der Host-Verifikation (Phase 0, Live 12.4.6, Logic 12.4): Alle Tasten außer den folgenden erreichen
+  das Plugin-Fenster, manche lösen zusätzlich eine Host-Aktion aus. **Live:** Esc schließt das Plugin-Fenster.
+  **Logic:** Cmd+Z führt das Logic-Undo aus (macht z. B. das Einfügen des MIDI-Effekts rückgängig und schließt
+  damit das Fenster). Der Belegungsdialog weist bei diesen Tasten darauf hin.
+- **Ab v1.0: Jede Aktion hat eine Schaltfläche** (Rückgängig/Wiederholen, Duplizieren, Generieren,
   Variation), damit nichts nur über die Tastatur erreichbar ist
 
 ### 8.4 Einstellungen
@@ -1261,7 +1249,7 @@ Max-Tokens, MIDI-Kanäle, Slide-Überlappung, Akzent-Velocity, Kick-Freiraum, Ok
 Drum-Zuordnung (Liste), Zustimmung pro Cloud-Provider für Referenz-Beispiele und importierte Stimmen
 (anzeigen, widerrufen; §3.20), Mindestvorlauf geplanter Wechsel (Experte, §3.4), „Prompts protokollieren“
 (§10),
-[v1.1] Sprache, Notennamen-Konvention (C3 = 60 oder C4 = 60), Transponieren (Referenznote, Modus,
+[v1.1] Tastenbelegung (§8.3), Sprache, Notennamen-Konvention (C3 = 60 oder C4 = 60), Transponieren (Referenznote, Modus,
 Verhalten, Zeitpunkt, Ziel, Kanal), MIDI Thru, Favoriten zusätzlich ins aktive Set, Export-Modus für
 Wahrscheinlichkeiten, Tonumfänge, Standardstil, Quantisierung beim Wechsel, Logging an/aus.
 
