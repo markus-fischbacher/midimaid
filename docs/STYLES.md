@@ -354,6 +354,7 @@ Fehlermeldung mit dem Pfad des Problems; unbekannte Felder werden ignoriert (Fel
 - **Progressionen anderer Länge:** Ein Modus mit Gewicht, für den keine Progression der passenden Länge existiert
   (z. B. `four_chord` in Peak Time), ist zulässig. Der Progressions-Generator leitet sie dann aus vorhandenen ab
   (D-119): zwei Akkorde = die ersten zwei, vier Akkorde = A B A B (aus zwei) bzw. A B C B (aus drei).
+- **Formplan-Startwerte (D-121, im Hörtest zu kalibrieren):** Layout-Gewichte in Prozent, Rollen in der Reihenfolge der Phrasen (M = Hauptmotiv, V = Variation, B = Steigerung, A = Antwort, D = Ausdünnung). Peak Time / Hard (Gewichte jeweils Peak/Hard): 8 Takte `8` 40/60, `4+4` 60/40 (M V); 16 Takte `16`, `8+8`, `8+4+4`, `4+4+8`, `4+8+4`, `4+4+4+4` mit 10/20, 25/20, 10, 10, 5/10, 40/30 (M; M V; M V B; M V M; M V B; M V M B). Melodic Techno: 8 Takte `8` 30, `4+4` 70 (M A); 16 Takte 10, 30, 10, 10, 10, 30 (M; M A; M A D; M A M; M A D; M A M D). Ausdünnung (Energie −30, Kick-Raster `halftime`) gibt es nur bei Melodic Techno, Steigerung (Energie +20) nur bei den anderen Stilen; Variation hat Kreativität +30.
 - **Startwerte, die §2–4 nicht nennen** (mit dem Hörtest der Phase 1a zu kalibrieren): Bass-Bewegung Melodic
   (35/30/35 %, `root_on_chord_change`), Bass-Bewegung Hard (90/5/5 %), Swing-Standards (Peak Bass 0,52 und Melodie
   0,55; Melodic 0,50 und 0,52; Hard 0,50 und 0,50), Akkordlängen Hard (4–8 Takte), Akkordfarben-IDs und ihre

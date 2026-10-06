@@ -1,5 +1,6 @@
 #include "core/PatternGenerator.h"
 
+#include "core/FormPlan.h"
 #include "core/Groove.h"
 #include "core/Progression.h"
 
@@ -39,6 +40,84 @@ std::vector<size_t> generationOrder(const Pattern& pattern) {
     return order;
 }
 
+ArchetypeSettings settingsForRole(const ArchetypeSettings& base, PhraseRole role) {
+    ArchetypeSettings settings = base;
+    settings.energyPct = std::clamp(base.energyPct + phraseEnergyDelta(role), 0, 100);
+    settings.creativityPct = std::clamp(base.creativityPct + phraseCreativityDelta(role), 0, 100);
+    return settings;
+}
+
+/// The chords of the half bars [from, to) of the progression, starting at 0.
+std::vector<ChordEvent> sliceProgression(const std::vector<ChordEvent>& progression, uint32_t from, uint32_t to) {
+    std::vector<ChordEvent> slice;
+    for (const ChordEvent& event : progression) {
+        const uint32_t start = std::max(event.startHalfBar, from);
+        const uint32_t end = std::min(event.startHalfBar + event.lengthHalfBars, to);
+        if (start < end) {
+            ChordEvent part = event;
+            part.startHalfBar = start - from;
+            part.lengthHalfBars = end - start;
+            slice.push_back(part);
+        }
+    }
+    return slice;
+}
+
+/// A pattern of the length of the phrase with the harmony, kick grid and voices of `pattern` (without notes).
+Pattern phrasePattern(const Pattern& pattern, const Phrase& phrase) {
+    Pattern sub = makeEmptyPattern(phrase.lengthBars, pattern.styleId);
+    sub.kickGridId = phrase.kickGridId.value_or(pattern.kickGridId);
+    sub.kickRoot = pattern.kickRoot;
+    sub.polymeterPhase = pattern.polymeterPhase;
+    sub.rhythmRef = pattern.rhythmRef;
+    sub.voicing = pattern.voicing;
+    sub.context = pattern.context;
+    sub.context.progression =
+        sliceProgression(pattern.context.progression, phrase.startBar * 2, (phrase.startBar + phrase.lengthBars) * 2);
+    sub.voices = pattern.voices;
+    for (Track& track : sub.voices) {
+        track.notes.clear();
+    }
+    return sub;
+}
+
+using VoiceNotes = std::vector<std::vector<Note>>; ///< per voice, absolute ticks, without ids
+
+/// Generates all voices of one phrase; nullopt if one of them cannot be generated.
+std::optional<VoiceNotes> generatePhraseNotes(const Pattern& pattern, const Phrase& phrase,
+                                              const std::vector<std::string>& archetypes, const StyleProfile& style,
+                                              const ArchetypeSettings& base, uint64_t phraseSeed) {
+    Pattern sub = phrasePattern(pattern, phrase);
+    const ArchetypeSettings settings = settingsForRole(base, phrase.role);
+    Pcg32 rng = Pcg32::fromSeed(phraseSeed);
+    for (const size_t index : generationOrder(sub)) {
+        if (!generateVoice(sub, index, archetypes[index], style, settings, rng)) {
+            return std::nullopt;
+        }
+    }
+    VoiceNotes result;
+    for (const Track& track : sub.voices) {
+        std::vector<Note> notes = track.notes;
+        for (Note& note : notes) {
+            note.startTick += phrase.startBar * kTicksPerBar;
+        }
+        result.push_back(std::move(notes));
+    }
+    return result;
+}
+
+/// Phrases of one role share a seed, so that they repeat their rhythm (A ... A).
+uint64_t phraseSeed(uint64_t seed, PhraseRole role) {
+    return deriveSeed(seed, static_cast<uint64_t>(role) + 1);
+}
+
+void appendNotes(Pattern& pattern, size_t voice, std::vector<Note> notes) {
+    for (Note& note : notes) {
+        note.id = allocateNoteId(pattern);
+        pattern.voices[voice].notes.push_back(note);
+    }
+}
+
 } // namespace
 
 Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& request, uint64_t seed) {
@@ -50,8 +129,38 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     for (Track& track : pattern.voices) {
         setManualArchetype(track, track.role == VoiceRole::Bass ? request.bassArchetype : request.melodyArchetype);
     }
-    for (const size_t index : generationOrder(pattern)) {
-        fillVoice(pattern, index, style, request.settings, rng);
+    std::vector<Phrase> phrases = generateFormPlan(style, request.lengthBars, rng);
+    if (request.formPlan.has_value() && isValidFormPlan(request.lengthBars, *request.formPlan)) {
+        phrases = *request.formPlan;
+    }
+    pattern.phrases = phrases;
+    if (phrases.size() == 1) {
+        for (const size_t index : generationOrder(pattern)) {
+            fillVoice(pattern, index, style, request.settings, rng);
+        }
+    } else {
+        std::vector<std::string> archetypes(pattern.voices.size());
+        for (const size_t index : generationOrder(pattern)) {
+            archetypes[index] = resolveArchetype(pattern.voices[index], style, request.settings.energyPct, rng,
+                                                 request.settings.creativityPct);
+        }
+        std::vector<bool> complete(pattern.voices.size(), true);
+        for (const Phrase& phrase : phrases) {
+            const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, request.settings,
+                                                   phraseSeed(seed, phrase.role));
+            for (size_t i = 0; i < pattern.voices.size(); ++i) {
+                if (notes.has_value()) {
+                    appendNotes(pattern, i, (*notes)[i]);
+                } else {
+                    complete[i] = false;
+                }
+            }
+        }
+        for (size_t i = 0; i < pattern.voices.size(); ++i) {
+            if (complete[i]) {
+                pattern.voices[i].archetypeId = archetypes[i];
+            }
+        }
     }
     applyConstraints(pattern, constraintSettingsFor(pattern, style));
 
@@ -105,6 +214,45 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& st
     Pcg32 rng = Pcg32::fromSeed(seed);
     if (!fillVoice(next, voiceIndex, style, request.settings, rng)) {
         return false;
+    }
+    applyConstraints(next, constraintSettingsFor(next, style));
+    next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));
+    pattern = std::move(next);
+    return true;
+}
+
+bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& style, const GenerationRequest& request,
+                      uint64_t seed) {
+    if (phraseIndex >= pattern.phrases.size() || pattern.phrases[phraseIndex].locked) {
+        return false;
+    }
+    std::vector<std::string> archetypes;
+    for (const Track& track : pattern.voices) {
+        if (track.archetypeId.empty()) {
+            return false;
+        }
+        archetypes.push_back(track.archetypeId);
+    }
+    const Phrase phrase = pattern.phrases[phraseIndex];
+    const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, request.settings, seed);
+    if (!notes.has_value()) {
+        return false;
+    }
+    Pattern next = pattern;
+    const uint32_t from = phrase.startBar * kTicksPerBar;
+    const uint32_t to = from + phrase.lengthBars * kTicksPerBar;
+    for (size_t i = 0; i < next.voices.size(); ++i) {
+        const LockFlags& lock = next.voices[i].lock;
+        if (lock.pitch && lock.rhythm && lock.velocity) {
+            continue;
+        }
+        auto& all = next.voices[i].notes;
+        all.erase(std::remove_if(all.begin(), all.end(),
+                                 [&](const Note& note) { return note.startTick >= from && note.startTick < to; }),
+                  all.end());
+        appendNotes(next, i, (*notes)[i]);
+        std::stable_sort(all.begin(), all.end(),
+                         [](const Note& a, const Note& b) { return a.startTick < b.startTick; });
     }
     applyConstraints(next, constraintSettingsFor(next, style));
     next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));

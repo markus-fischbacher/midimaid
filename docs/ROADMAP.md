@@ -92,7 +92,7 @@ Ersatzweg beschlossen.
 - [x] Swing pro Stimme, Groove-Anwendung in der Ausgabestufe (SPEC §3.9)
 - [x] Harmonischer Kontext und Progressions-Generator
 - [x] Bass- und Melodie-Generator (aufeinander abgestimmt), deterministisch über Seed
-- [ ] Patterns 1/2/4/8/16 Takte, Phrasen und Formplan ab 8 Takten (SPEC §3.7)
+- [x] Patterns 1/2/4/8/16 Takte, Phrasen und Formplan ab 8 Takten (SPEC §3.7)
 - [ ] Golden-File-Tests pro Stil; Eigenschaftstests über Seed-Serien (SPEC §12); Tests mit 3 Test-Stimmen
       (offene Stimmenzahl)
 - [ ] Hörtest-Werkzeug `tools/mmgen`: .mid pro Stil, Archetyp, Energie, Seed; Serien-Modus (SPEC §12)
