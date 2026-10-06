@@ -1,5 +1,6 @@
 # Plugin targets. Format-specific decisions live only in cmake/Formats.cmake (MIDIMAID_FORMATS).
 option(MIDIMAID_COPY_PLUGINS "Copy built plugins into the user plugin folders (needed for auval)" OFF)
+option(MIDIMAID_KEY_PROBE "Phase 0 diagnostic: the editor lists the keys the host forwards to the plugin window" OFF)
 
 # Format/host capability logic without JUCE, so it can be unit-tested (SPEC 2.4).
 add_library(mm_host_capabilities STATIC HostCapabilities.cpp)
@@ -26,6 +27,8 @@ target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/.
 target_link_libraries(
     mm_plugin_common
     PUBLIC mm_core mm_engine mm_host_capabilities mm_juce_config juce::juce_audio_processors)
+# 0 or 1; the editor header changes with it, so every consumer must see the same value.
+target_compile_definitions(mm_plugin_common PUBLIC MIDIMAID_KEY_PROBE=$<BOOL:${MIDIMAID_KEY_PROBE}>)
 
 # Instrument variant: VST3, AU (aumu), Standalone.
 juce_add_plugin(
