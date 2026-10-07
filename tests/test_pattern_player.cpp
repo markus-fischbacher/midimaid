@@ -1,5 +1,6 @@
 #include "engine/PatternPlayer.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <cstdlib>
@@ -421,6 +422,46 @@ TEST_CASE("a real jump right after a tempo change still releases the notes", "[e
     }
     sim.blockAt(40.0, 512, true, 130.0);
     CHECK(sim.events().back().noteOn == false);
+    CHECK(sim.soundingCount() == 0);
+}
+
+TEST_CASE("the count-in with negative positions is silent", "[engine]") {
+    // Two bars of count-in, then the arrangement starts at ppq 0.
+    Simulation sim;
+    sim.setPpq(-8.0);
+    for (int i = 0; i < 400; ++i) { // 400 * 512 samples at 120 bpm: about 8.5 ppq
+        sim.block(512);
+    }
+    REQUIRE(!sim.events().empty());
+    for (const auto& e : sim.events()) {
+        CHECK(e.ppq >= -1e-9);
+    }
+    // The first note of the pattern sits at 0.5 ppq.
+    CHECK(sim.events().front().noteOn);
+    CHECK(sim.events().front().ppq == Catch::Approx(0.5).margin(0.01));
+}
+
+TEST_CASE("a block that crosses zero plays from zero on", "[engine]") {
+    Simulation sim;
+    sim.setPpq(-0.7);
+    sim.block(31200); // 1.3 ppq at 120 bpm: from -0.7 to 0.6, contains the notes at -0.5 and 0.5
+    REQUIRE(sim.noteOnSamples().size() == 1);
+    // 1.2 ppq after the block start: 1.2 / (2 / 48000) = 28800 samples
+    CHECK(sim.noteOnSamples().front() == 28800);
+}
+
+TEST_CASE("a jump into the count-in releases the notes and stays silent", "[engine]") {
+    Simulation sim;
+    sim.blockAt(0.4, 512);
+    sim.blockAt(0.5, 256); // note at 0.5 sounding
+    REQUIRE(sim.soundingCount() == 1);
+    const size_t before = sim.events().size();
+    sim.blockAt(-0.6, 4800); // 0.2 ppq: covers the note position -0.5 of the previous cycle
+    CHECK(sim.soundingCount() == 0);
+    for (size_t i = before; i < sim.events().size(); ++i) {
+        CHECK(!sim.events()[i].noteOn);
+    }
+    sim.block(512);
     CHECK(sim.soundingCount() == 0);
 }
 
