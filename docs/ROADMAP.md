@@ -44,7 +44,7 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
         Freeze): Läuft der Hub mit, folgt die Voice? (O-22)
   - [ ] Nicht aktive Parameter: Wie zeigen Live und Logic als nicht automatisierbar markierte Parameter an?
         (SPEC §3.13)
-  - [ ] Versionen von CI-Toolchains und pluginval in `DECISIONS.md` (SPEC §12)
+  - [x] Versionen von CI-Toolchains und pluginval in `DECISIONS.md` (SPEC §12)
 
 **Host-Annahmen und Ersatzwege.** Fällt eine Prüfung negativ aus, gilt der Ersatzweg; Umfangsänderungen
 brauchen eine neue Entscheidung, bevor Phase 1b beginnt.
