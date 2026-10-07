@@ -146,6 +146,7 @@ Entscheidungen beschreiben teils den Zielzustand; ihr Release steht im Verweis.
   - **Tasten:** Live schließt das Plugin-Fenster mit Esc, Logic führt Cmd+Z als Logic-Undo aus; der Rest kommt im Plugin an (D-126). Die Prüfung mit belegbaren Tasten steht in Teil G der Checkliste.
   - **Versatz zwischen Instanzen** (Teil F): Zwei unabhängige Instanzen mit gleichem Pattern schlagen in Logic (Puffer 128, ausgewählte und nicht ausgewählte Spur) und in Live (Aufnahme per Resampling bei 128, Offline-Export bei 128 und 1024) **sample-genau gleichzeitig** an (linker und rechter Kanal des Bounces in allen Samples identisch). Das gilt für Instanzen ohne Hub und Voice. Folgen: Der Standardwert des Mindestvorlaufs bleibt bei 150 ms (D-90). **O-22 bleibt offen**, denn die Messung ersetzt nicht die Prüfung mit Hub, Voice und Slot-Automation (Einzelspur-Bounce, Freeze, Teil G).
   - **Weiter offen** (Teil G, erst mit späteren Phasen prüfbar): Registry über Instanzen, Hub plus Voice, geplanter Wechsel, Slot-Automation, Freeze, nicht aktive Parameter, Referenz-Instrumente, Tastenbelegung, Drag ins Fenster.
+- **D-130** Die CI überspringt reine Doku-Änderungen: `paths-ignore` für `docs/**` und `**/*.md` bei `pull_request` und `push` (`.github/workflows/ci.yml`). Grund: Ein Doku-PR baut denselben Code und prüft nichts Neues, ein Lauf dauert etwa 10 Minuten. Weder CMake noch Tests lesen `docs/` oder Markdown-Dateien. Von Hand lässt sich die CI weiter über `workflow_dispatch` starten (Windows, Linux, Sanitizer).
 
 ## Offen
 
