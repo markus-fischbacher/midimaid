@@ -1,10 +1,17 @@
 name: CI
 
 on:
+  # Docs-only changes do not build anything new; run the workflow by hand (workflow_dispatch) when needed.
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   # Windows and Linux are built on demand only: Actions tab -> CI -> Run workflow (or `gh workflow run ci.yml`).
   workflow_dispatch:
     inputs:
