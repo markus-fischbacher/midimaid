@@ -108,7 +108,7 @@ Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind gr�
 ## Phase 1b – Engine, Slots, Hub & Voices
 - [x] **Vorab:** Transport- und Wechsel-Zustandsautomat mit testbaren Beispielen in SPEC §6.1 ergänzen und
       O-22 entscheiden (auf Basis der Messungen aus Phase 0) (SPEC §6.1a, D-131)
-- [ ] Engine: PatternPlayer, Echtzeit-Vertrag (ausstehende Wechsel je Art, Rückgabe-Queue mit Überlaufregel,
+- [ ] Engine (Teil 1 erledigt: quantisierter Wechsel, D-132; offen: lock-freie Übergabe, Rückgabe-Queue, O-23): PatternPlayer, Echtzeit-Vertrag (ausstehende Wechsel je Art, Rückgabe-Queue mit Überlaufregel,
       reservierter MIDI-Puffer, Bearbeitungen ohne Quantisierung), Note-Off-Tabelle, quantisierter Wechsel
       mit PPQ-Zeitstempel und Mindestvorlauf, Neustart an Taktgrenzen (SPEC §3.4, §6)
 - [ ] Engine-Tests mit simulierten Playheads (inkl. Wechsel kurz vor Quantisierungspunkt, Sprünge, fehlende

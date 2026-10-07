@@ -63,6 +63,7 @@ public:
     }
 
     void setPpq(double ppq) { nextPpq_ = ppq; }
+    PatternPlayer& player() { return player_; }
     const std::vector<Event>& events() const { return events_; }
     size_t soundingCount() const { return sounding_.size(); }
     long long clock() const { return clock_; }
@@ -132,6 +133,35 @@ private:
 /// Sample position of a PPQ position at 120 BPM.
 long long samplesAtPpq(double ppq) {
     return std::llround(ppq * 60.0 / 120.0 * kSampleRate);
+}
+
+// Patterns for the switch tests (all one channel, 4 PPQ long).
+const PatternNote kLongNotes[] = {{3000, 900, 1, 40, 100}}; // 7.125 to 8.0625 in the second cycle: sounds at 8.0
+const PatternNote kNextNotes[] = {{0, 240, 1, 50, 100}, {1920, 240, 1, 50, 100}}; // position 0 and 2
+const PatternNote kEdgeNotes[] = {
+    {3839, 240, 1, 41, 100}}; // starts a fraction of a sample before the bar line at very high tempo
+
+PatternView viewOf(const PatternNote* notes, size_t count) {
+    return {notes, count, 4 * kTicksPerQuarter};
+}
+PatternView longPattern() {
+    return viewOf(kLongNotes, 1);
+}
+PatternView nextPattern() {
+    return viewOf(kNextNotes, 2);
+}
+PatternView edgePattern() {
+    return viewOf(kEdgeNotes, 1);
+}
+
+std::vector<Event> ofPitch(const std::vector<Event>& events, uint8_t pitch, bool noteOn) {
+    std::vector<Event> result;
+    for (const auto& e : events) {
+        if (e.pitch == pitch && e.noteOn == noteOn) {
+            result.push_back(e);
+        }
+    }
+    return result;
 }
 
 } // namespace
@@ -487,4 +517,161 @@ TEST_CASE("event list sorting is stable and puts note-offs first", "[engine]") {
     CHECK(list[1].pitch == 41);
     CHECK(list[2].pitch == 42);
     CHECK(list[3].pitch == 40);
+}
+
+TEST_CASE("a switch waits for the next bar line and cuts sounding notes there", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.setPpq(5.3);
+    sim.block(512); // running; the long note of the old pattern starts at 7.125
+    sim.player().requestSwitch(nextPattern(), 4.0);
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    const long long bar = std::llround((8.0 - 5.3) * kSampleRate / 2.0);
+    const auto offs = ofPitch(sim.events(), 40, false);
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(offs.size() >= 1);
+    REQUIRE(ons.size() >= 1);
+    CHECK(offs.front().sample == Catch::Approx(static_cast<double>(bar)).margin(1.0)); // cut at the bar line
+    CHECK(ons.front().sample == Catch::Approx(static_cast<double>(bar)).margin(1.0));  // new pattern from position 0
+    CHECK(ons.front().sample >= offs.front().sample);
+    CHECK_FALSE(sim.player().switchPending());
+    // The old pattern played up to the bar line only.
+    for (const auto& e : ofPitch(sim.events(), 40, true)) {
+        CHECK(e.sample < bar);
+    }
+}
+
+TEST_CASE("a switch read in a block that starts on the bar line acts at its first sample", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.blockAt(6.0, 24000);
+    sim.blockAt(7.0, 24000); // ends exactly at 8.0
+    sim.player().requestSwitch(nextPattern(), 4.0);
+    sim.block(512);
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() == 1);
+    CHECK(ons.front().sample == 48000);
+}
+
+TEST_CASE("a switch is never applied retroactively", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.blockAt(7.0, 24512); // ends 512 samples after the bar line at 8.0
+    sim.player().requestSwitch(nextPattern(), 4.0);
+    while (sim.clock() < 7 * 24000) {
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx(5.0 * 24000).margin(1.0)); // bar line at 12.0
+    CHECK(sim.soundingCount() <= 1);
+}
+
+TEST_CASE("grids shorter than a bar are rounded up to the bar line", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().requestSwitch(nextPattern(), 1.0); // next beat would be 6.0
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx((8.0 - 5.3) * 24000).margin(1.0));
+}
+
+TEST_CASE("a planned switch uses its stamp, a stale stamp falls back to the next grid point", "[engine][switch]") {
+    SECTION("stamp ahead of the block") {
+        Simulation sim(longPattern());
+        sim.setPpq(5.3);
+        sim.block(512);
+        sim.player().requestSwitchAt(nextPattern(), 12.0, 4.0);
+        while (sim.clock() < 8 * 24000) {
+            sim.block(512);
+        }
+        const auto ons = ofPitch(sim.events(), 50, true);
+        REQUIRE(ons.size() >= 1);
+        CHECK(ons.front().sample == Catch::Approx((12.0 - 5.3) * 24000).margin(1.0));
+    }
+    SECTION("stamp behind the block start") {
+        Simulation sim(longPattern());
+        sim.blockAt(7.0, 24000 + 2400); // ends at 8.1
+        sim.player().requestSwitchAt(nextPattern(), 8.0, 4.0);
+        while (sim.clock() < 7 * 24000) {
+            sim.block(512);
+        }
+        const auto ons = ofPitch(sim.events(), 50, true);
+        REQUIRE(ons.size() >= 1);
+        CHECK(ons.front().sample == Catch::Approx(5.0 * 24000).margin(1.0)); // 12.0
+    }
+}
+
+TEST_CASE("start and jump apply a pending switch at once", "[engine][switch]") {
+    SECTION("jump") {
+        Simulation sim(longPattern());
+        sim.setPpq(5.3);
+        sim.block(512);
+        sim.player().requestSwitch(nextPattern(), 4.0); // point 8.0
+        sim.blockAt(7.0, 512);
+        sim.blockAt(20.5, 24000 * 2);
+        const auto ons = ofPitch(sim.events(), 50, true);
+        REQUIRE(ons.size() >= 1);
+        CHECK(ons.front().sample == 1024 + samplesAtPpq(22.0) - samplesAtPpq(20.5)); // position 2.0 of the new pattern
+        CHECK_FALSE(sim.player().switchPending());
+    }
+    SECTION("stop keeps it for the next start") {
+        Simulation sim(longPattern());
+        sim.setPpq(5.3);
+        sim.block(512);
+        sim.player().requestSwitch(nextPattern(), 4.0);
+        sim.block(512, false);
+        CHECK(sim.player().switchPending());
+        sim.blockAt(0.5, 24000 * 2);
+        CHECK_FALSE(sim.player().switchPending());
+        const auto ons = ofPitch(sim.events(), 50, true);
+        REQUIRE(ons.size() >= 1); // the new pattern plays from the start, not from the next bar line (4.0)
+        CHECK(ons.front().sample == 1024 + samplesAtPpq(2.0) - samplesAtPpq(0.5));
+    }
+    SECTION("start in the middle of the arrangement") {
+        Simulation sim(longPattern());
+        sim.player().requestSwitch(nextPattern(), 4.0);
+        sim.blockAt(148.0, 24000 * 3);
+        const auto ons = ofPitch(sim.events(), 50, true);
+        REQUIRE(ons.size() >= 1);
+        CHECK(ons.front().sample == 0); // position 0 of the new pattern at 148.0
+    }
+}
+
+TEST_CASE("a loop wrap applies a pending switch whose point is out of reach", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.setLoop(0.0, 3.75);
+    sim.setPpq(0.0);
+    for (int i = 0; i < 150; ++i) { // a little over 3 PPQ
+        sim.blockWithLoopWrap(512);
+    }
+    sim.player().requestSwitch(nextPattern(), 4.0); // point 4.0 lies behind the loop end
+    for (int i = 0; i < 60; ++i) {
+        sim.blockWithLoopWrap(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx(3.75 * 24000).margin(1.0)); // the wrap sample, position 0
+    CHECK_FALSE(sim.player().switchPending());
+}
+
+TEST_CASE("a note that starts in the sample of the switch point is never left hanging", "[engine][switch]") {
+    // At 8000 BPM one tick is 0.375 samples, so the note at tick 3839 starts in the sample of the bar line.
+    Simulation sim(edgePattern());
+    sim.setPpq(5.3);
+    sim.block(512, true, 8000.0);
+    sim.player().requestSwitch(nextPattern(), 4.0);
+    for (int i = 0; i < 12; ++i) {
+        sim.block(512, true, 8000.0);
+    }
+    CHECK(ofPitch(sim.events(), 41, true).size() >= 1);
+    CHECK(sim.soundingCount() <= 2); // only notes of the new pattern may still sound
+    for (const auto& e : sim.events()) {
+        if (e.pitch == 41 && !e.noteOn) {
+            CHECK(e.sample > 0);
+        }
+    }
 }

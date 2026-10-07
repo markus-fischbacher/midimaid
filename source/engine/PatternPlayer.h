@@ -64,7 +64,18 @@ class PatternPlayer {
 public:
     explicit PatternPlayer(PatternView pattern = placeholderPattern());
 
+    /// Replaces the pattern at once (no quantization, no note-offs): for tests and the initial pattern.
     void setPattern(PatternView pattern);
+
+    /// Asks for a switch to `next` at the next quantization point (SPEC 6.1a, D-131). The point is the first
+    /// multiple of `gridPpq` (rounded up to a bar line, v1.0 restarts on bars only) that is not before the start of
+    /// the block that first sees the request; it is never in the past. Start and jumps apply the switch at once, a
+    /// stop keeps it for the next start. A newer request replaces an older one.
+    void requestSwitch(PatternView next, double gridPpq);
+    /// Same, with a point planned by the hub (PPQ stamp). A stamp already behind the block start falls back to the
+    /// next grid point.
+    void requestSwitchAt(PatternView next, double stampPpq, double gridPpq);
+    bool switchPending() const { return pending_.active; }
 
     /// Call from prepareToPlay. Keeps the active-note table: notes still sounding get their note-off in
     /// the first block afterwards (SPEC 6.2).
@@ -88,9 +99,24 @@ private:
     /// host position deviates from the expected one (tempo change inside the previous block).
     void processSegment(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
                         MidiEventList& out);
+    /// Plays [scanFrom, to), cutting at the pending switch point when it lies inside.
+    void playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
+                   MidiEventList& out);
+    void releaseAt(MidiEventList& out, int sampleOffset, bool guardOwnStarts);
     void startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out);
 
+    struct PendingSwitch {
+        PatternView pattern;
+        double gridPpq = 4.0;
+        double stampPpq = 0.0;
+        bool hasStamp = false;
+        bool active = false;
+        bool resolved = false; // the point is fixed in the block that first sees the request
+        double pointPpq = 0.0;
+    };
+
     PatternView pattern_;
+    PendingSwitch pending_;
     std::array<std::array<ActiveNote, 128>, 16> active_{};
     size_t activeCount_ = 0;
     bool playing_ = false;
