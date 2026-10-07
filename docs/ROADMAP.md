@@ -55,7 +55,7 @@ brauchen eine neue Entscheidung, bevor Phase 1b beginnt.
 | Logic lädt den MIDI-FX `aumi`, Sync, Loop und Stop laufen sauber | Logic-Unterstützung zurückstellen, neue Entscheidung zum Umfang |
 | Instanzen einer DAW teilen eine prozessweite Registry | Keine Kopplung in diesem Host: Solo-Instanzen und Hinweis „Kopplung nicht verfügbar“; Kopplung per Prozess-Kommunikation nur per neuer Entscheidung |
 | Geplanter Wechsel trifft bei 150 ms Vorlauf in allen Instanzen denselben PPQ | Standardwert des Mindestvorlaufs anhand der Messung erhöhen (D-90) |
-| Slot-Automation im Hub erreicht Voices rechtzeitig, auch bei Bounce und Freeze | Entscheidung O-22 (Automation vorziehen oder Slot-Automation pro Spur) |
+| Slot-Automation im Hub erreicht Voices rechtzeitig, auch bei Bounce und Freeze | Modus „Slot: eigen“ pro Voice (D-131); Setup-Hilfe nennt ihn für Bounce und Freeze |
 | Drag & Drop aus dem Plugin in die DAW | Export in einen Ordner mit „Im Finder/Explorer zeigen“, Aufnahme-Workflow |
 | Clip bzw. Region lässt sich ins Plugin ziehen | Import über Dateidialog und Drag aus Finder/Explorer; in Logic vorher als .mid exportieren (Setup-Hilfe) |
 | „Record MIDI to Track Here“ nimmt die Ausgabe hinter MidiMaid auf | Drag & Drop als einziger Weg in Logic, Hinweis in der Setup-Hilfe |
@@ -106,8 +106,8 @@ Ersatzweg beschlossen.
 Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind grün.
 
 ## Phase 1b – Engine, Slots, Hub & Voices
-- [ ] **Vorab:** Transport- und Wechsel-Zustandsautomat mit testbaren Beispielen in SPEC §6.1 ergänzen und
-      O-22 entscheiden (auf Basis der Messungen aus Phase 0)
+- [x] **Vorab:** Transport- und Wechsel-Zustandsautomat mit testbaren Beispielen in SPEC §6.1 ergänzen und
+      O-22 entscheiden (auf Basis der Messungen aus Phase 0) (SPEC §6.1a, D-131)
 - [ ] Engine: PatternPlayer, Echtzeit-Vertrag (ausstehende Wechsel je Art, Rückgabe-Queue mit Überlaufregel,
       reservierter MIDI-Puffer, Bearbeitungen ohne Quantisierung), Note-Off-Tabelle, quantisierter Wechsel
       mit PPQ-Zeitstempel und Mindestvorlauf, Neustart an Taktgrenzen (SPEC §3.4, §6)
@@ -286,7 +286,7 @@ Euklidische Rhythmen als Feature
 | Slot-Wechsel 50 ms vor Taktgrenze: alle Instanzen gleichzeitig | v1.0 | | | |
 | Start bei Takt 37 mit Slot-Automation | v1.0 | | | |
 | Offline-Rendern / Bounce mit Slot-Automation | v1.0 | | | |
-| Einzelspur-Bounce bzw. Freeze einer Voice mit Slot-Automation (nach O-22) | v1.0 | | | |
+| Einzelspur-Bounce bzw. Freeze einer Voice mit Slot-Automation (Modus „eigen“, D-131) | v1.0 | | | |
 | Piano-Roll-Bearbeitung während der Wiedergabe: kein Versatz, keine hängenden Noten | v1.0 | | | |
 | Bypass während der Wiedergabe | v1.0 | | | |
 | Slides über Loop-Grenze, Synth im Legato-Modus | v1.0 | | | |

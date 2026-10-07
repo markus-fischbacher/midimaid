@@ -198,7 +198,7 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
     Experten-Ebene, D-90), wird der übernächste gewählt. Gemessen wird ab der am weitesten
     fortgeschrittenen Position aller Instanzen der Gruppe (jede Instanz meldet ihre zuletzt verarbeitete
     PPQ-Position, §6.5); die Zeit wird mit dem aktuellen Tempo in PPQ umgerechnet. So erreichen Wechsel
-    auch Voices auf anderen Spuren rechtzeitig. Für Slot-Automation in Hub-Gruppen siehe O-22.
+    auch Voices auf anderen Spuren rechtzeitig. Für Slot-Automation in Hub-Gruppen siehe §6.1a (D-131).
 - **Clip:** Das Pattern wird per Drag & Drop als .mid-Datei aus dem Plugin in die DAW gezogen, eine
   Datei pro Stimme.
   - Die Datei enthält **das aktuelle DAW-Tempo** als Tempo-Event sowie Taktart und Spurname
@@ -348,7 +348,7 @@ tragen sie schon ihren späteren Namen. Wie Live und Logic sie anzeigen, prüft 
 - **Parameter für 8 Stimmen werden schon in v1 angelegt** (inaktive ausgeblendet), weil Parameter-IDs
   später nicht mehr hinzugefügt werden sollten, ohne Automationen zu gefährden
 - In einer Voice wirken Mute und Transponieren auf die eigene Stimme, Trigger werden an den Hub weitergereicht.
-  Der Slot-Parameter einer Voice ist in v1.0 ohne Wirkung; die Voice folgt dem Hub (D-41, offen: O-22).
+  Der Slot-Parameter einer Voice wirkt nur im Modus „Slot: eigen“; im Standard „folgt Hub“ folgt die Voice dem Hub (D-41, D-131, §6.1a).
 - **Start mitten im Arrangement:** Beim Start der Wiedergabe und nach jedem Sprung gilt der Wert des
   Slot-Parameters **sofort**, ohne Quantisierung. Wer bei Takt 37 startet, hört direkt den dort
   automatisierten Slot. Die Position im Pattern richtet sich dann am Taktraster des Songs aus (§6.1);
@@ -842,9 +842,88 @@ Echtzeit-Übergabe lock-free bleibt.
   v1.0 spielt 4/4: Meldet der Host eine andere Taktart, rechnet MidiMaid im 4/4-Raster ab PPQ 0 weiter
   und zeigt einen Hinweis.
 - Der vollständige Zustandsautomat (Stop, Start, Sprung, Loop, quantisierter Wechsel, geplanter
-  Gruppenwechsel) mit testbaren Beispielen wird vor der Engine-Implementierung hier ergänzt (ROADMAP
-  Phase 1b).
+  Gruppenwechsel) mit testbaren Beispielen steht in §6.1a.
 - [v1.1] Im Modus „Legato“ bleibt die Position beim Wechsel erhalten
+
+### 6.1a Zustandsautomat (normativ, D-131)
+Jede Instanz hat pro Block einen **Transportzustand** und höchstens einen **ausstehenden Wechsel** je Art (§6.3).
+Eingaben pro Block: `hasPosition`, `isPlaying`, PPQ am Blockanfang, Tempo, Loop-Bereich. Alle Zeiten sind PPQ
+des Songs (PPQ 0 = Taktanfang); Sample-Offsets werden aus PPQ und Tempo des Blocks berechnet und gerundet.
+
+**Zustände**
+| Zustand | Bedeutung |
+|---|---|
+| **Ruhend** | Transport steht, Host liefert keine Daten (Position oder Tempo fehlen), nach `prepareToPlay` und im Bypass. Keine neuen Noten. |
+| **Laufend** | Der Transport läuft und die PPQ-Position ist stetig. Das Pattern wird gespielt. |
+
+**Übergänge** (jeweils in dieser Reihenfolge innerhalb des Blocks)
+| Nr. | Von → Nach | Auslöser | Wirkung |
+|---|---|---|---|
+| T1 | Ruhend → Laufend | `isPlaying` und Daten vorhanden | **Start.** Offene Note-Offs (z. B. nach `prepareToPlay`) im Offset 0. Ausstehende Wechsel und der Slot-Parameter gelten **sofort**. Position = PPQ modulo Pattern-Länge (Wechselzeitpunkt PPQ 0). Noten ab PPQ 0 (D-128: negative Positionen, also der Vorzähler, bleiben still). |
+| T2 | Laufend → Ruhend | `isPlaying` fällt, Daten fehlen, Bypass | Note-Off für alle klingenden Noten im Offset 0 des Blocks. Ausstehende Wechsel bleiben stehen und gelten beim nächsten Start (T1). |
+| T3 | Laufend → Laufend | PPQ stetig (Abweichung höchstens eine Sample-Länge plus Toleranz für Tempowechsel, D-125) | Der Scan setzt dort an, wo der letzte Block endete: keine Lücke, keine Doppelung. |
+| T4 | Laufend → Laufend | **Sprung** (Abweichung größer als die Toleranz, auch nach hinten) | Wie T1 ohne Zustandswechsel: Note-Offs im Offset 0, ausstehende Wechsel und Slot-Parameter gelten sofort, Position richtet sich am Songraster aus. |
+| T5 | Laufend → Laufend | **Loop-Rücksprung im Block** | Noten bis zum Loop-Ende, Note-Off für alle im Sample des Rücksprungs, danach Noten ab Loop-Anfang. Endet der Block genau auf dem Loop-Ende, folgen die Note-Offs im ersten Sample des nächsten Blocks (D-95). |
+| T6 | Laufend → Laufend | **Quantisierungspunkt Q** im Block erreicht, Wechsel ausstehend | Noten des alten Patterns mit Start vor Q spielen normal. Im Sample von Q: Note-Offs aller klingenden Noten, danach Note-Ons des neuen Patterns ab Position 0. Note-Off steht im selben Sample immer vor Note-On. |
+
+**Regeln für Wechsel**
+1. **Lesezeitpunkt:** Der Audio-Thread liest ausstehende Wechsel und den Slot-Parameter am **Blockanfang**.
+   Änderungen des Slot-Parameters innerhalb eines Blocks gelten ab dem nächsten (wie Tempo, §6.1).
+2. **Wahl von Q:** Q ist der erste Punkt des Quantisierungsrasters, der **nicht vor dem Blockanfang** liegt, in dem
+   der Wechsel gelesen wurde. Liegt Q genau auf dem Blockanfang, wirkt der Wechsel im Offset 0. Ein Q in der
+   Vergangenheit gibt es nie: Ein verpasster Punkt verschiebt den Wechsel auf den nächsten Rasterpunkt, nie rückwirkend.
+3. **Raster:** Schlag = 1 PPQ, Takt = 4 PPQ, n Takte = 4n PPQ, jeweils ab PPQ 0; „Ende des Patterns“ und
+   „Ende der Phrase“ sind das nächste Vielfache der Pattern- bzw. Phrasenlänge. v1.0 kennt nur „Neustart“
+   (§3.4): Ein Q, das nicht auf einer Taktgrenze liegt (Quantisierung „nächster Schlag“), wird auf die nächste
+   Taktgrenze aufgerundet. „Legato“ ist [v1.1].
+4. **Sofort statt quantisiert:** Start (T1), Sprung (T4) und Bearbeitungen (§6.3). Beim Stop (T2) wird nichts
+   übernommen; der Wechsel gilt erst beim nächsten Start.
+5. **Mehrere Wechsel am selben Punkt:** Vorrang nach §6.8. Ein neuer ausstehender Wechsel ersetzt einen älteren
+   derselben Art (§6.3). Ist die Rückgabe-Queue voll, verschiebt der Audio-Thread den Wechsel auf das nächste Q (§6.3).
+6. **Offline-Rendern und Bounce:** Dieselben Regeln. Q hängt nur von PPQ und Block ab, nicht von der Uhrzeit;
+   deshalb ist die Slot-Automation deterministisch. Der Mindestvorlauf (D-90) wird dabei in PPQ umgerechnet.
+7. **Bypass und `prepareToPlay`:** Bypass gilt wie T2. `invalidateTransport` (von `prepareToPlay`) setzt den
+   Zustand auf „Ruhend“, die Aktiv-Tabelle bleibt (§6.2); der nächste Block mit Position ist ein Start (T1).
+
+**Hub-Gruppen und O-22 (D-131)**
+- Jede Voice hat im State den Schalter **„Slot: folgt Hub / eigen“** (Standard: folgt Hub). Er ist kein Host-Parameter,
+  die Parameter-IDs bleiben unverändert (§3.13).
+- **Eigen:** Die Voice wertet ihren eigenen Slot-Parameter wie eine Solo-Instanz aus (Regeln 1 bis 6). Das
+  funktioniert auch beim Einzelspur-Bounce und beim Freeze, weil nichts vom Hub abhängt. Der Anwender automatisiert
+  dann den Slot auf jeder MidiMaid-Spur (Setup-Hilfe, Vorlagen).
+- **Folgt Hub:** Der Hub verteilt einen Slot-Wechsel mit PPQ-Zeitstempel Q (§3.4, §6.5). Q wird aus der am weitesten
+  fortgeschrittenen PPQ-Position der Gruppe plus Mindestvorlauf gewählt, aufgerundet auf das Raster. Jede Voice
+  führt den Wechsel bei ihrem Q aus (T6). Liegt Q bei der Voice schon hinter dem Blockanfang, wechselt sie am
+  nächsten Rasterpunkt, an dem der Wechsel vorliegt (Regel 2), und protokolliert den Versatz.
+- **Start und Sprung in „folgt Hub“:** Die Voice übernimmt den zuletzt gemeldeten Slot des Hubs sofort, wenn die
+  gemeldete Position des Hubs den Blockanfang der Voice erreicht hat. Sonst spielt sie ihren gespeicherten Slot
+  weiter und übernimmt den des Hubs am ersten Rasterpunkt, nachdem er gemeldet wurde. Der Anwender legt Slot-Wechsel
+  in „folgt Hub“ deshalb auf Taktgrenzen und friert Voices im Modus „eigen“ ein.
+- Fehlt der Hub, bleibt der Schalter wirkungslos: Die Voice spielt ihren Slot weiter (§6.5, Persistenz).
+
+**Testbare Beispiele.** Alle bei 120 BPM, 44,1 kHz (1 PPQ = 22 050 Samples), Platzhalter-Pattern (Länge 4 PPQ,
+Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel wird ein Engine-Test (Phase 1b).
+| Nr. | Ausgangslage | Erwartung |
+|---|---|---|
+| Z1 | Start bei PPQ 0,0, Blöcke zu 512 Samples | Erster Note-On bei PPQ 0,5 = Sample 11 025 (Block 21, Offset 273); Note-Off bei Sample 19 294 (Block 37, Offset 350) |
+| Z2 | Start bei PPQ 5,0 (Position 1,0) | Die Note bei 4,5 entfällt; erster Note-On bei 5,5 = 11 025 Samples nach dem Blockanfang |
+| Z3 | Start bei PPQ −4,0 (Vorzähler) | Bis PPQ 0 keine Ereignisse, erster Note-On bei 0,5 (D-128) |
+| Z4 | Note klingt (Note-On bei 0,5), nächster Block mit `isPlaying = false` | Note-Off im Offset 0, danach keine Ereignisse |
+| Z5 | Note bei 5,5 klingt, nächster Block beginnt bei PPQ 1,0 (Sprung zurück) | Note-Off im Offset 0, erster Note-On bei 1,5 (11 025 Samples später); das alte Note-Off bei 5,875 entfällt |
+| Z6 | Loop 0,0 bis 3,75; Block (2048 Samples) beginnt bei 3,7, Note bei 3,5 klingt | Note-Off im Sample 1103 (Loop-Ende), Fortsetzung ab PPQ 0,0 ohne zweites Note-Off |
+| Z7 | Tempo wechselt zwischen zwei Blöcken von 120 auf 121 BPM, Position stetig im Rahmen von D-125 | Kein Sprung, kein Note-Off, keine fehlende oder doppelte Note |
+| Z8 | Host meldet keine Position, danach wieder Position bei PPQ 8,0 | Note-Offs beim Ausfall, beim Wiedereinstieg Start nach T1 |
+| Z9 | Laufend bei 5,3, Slot-Wechsel gelesen, Quantisierung „nächster Takt“ | Q = 8,0: Das alte Pattern spielt bis Q; im Sample von Q Note-Offs, danach das neue Pattern ab Position 0 |
+| Z10 | Wechsel wird im Block gelesen, der genau bei PPQ 8,0 beginnt | Q = 8,0, Wirkung im Offset 0 |
+| Z11 | Wechsel wird erst im Block bei 8,0232 gelesen | Q = 12,0, nie rückwirkend |
+| Z12 | Wechsel ausstehend (Q = 8,0), Sprung bei PPQ 7,0 nach 20,5 | Wechsel gilt sofort (T4), Note-Offs im Offset 0, Position = 20,5 modulo Pattern-Länge |
+| Z13 | Wechsel ausstehend, Stop bei 7,0, später Start bei 3,0 | Beim Start (T1) spielt das neue Pattern, kein Wechsel zwischendurch |
+| Z14 | Start bei PPQ 148,0 mit Slot-Parameter 3 | Slot 3 sofort, Position = 148,0 modulo Pattern-Länge |
+| Z15 | Wechsel fällig, Rückgabe-Queue voll | Wechsel erst am nächsten Rasterpunkt, bis dahin spielt das alte Pattern, kein Absturz |
+| Z16 | Hub meldet bei Position 7,8 einen Slot-Wechsel, Quantisierung „nächster Takt“ | Q = 8,0 liegt 0,2 PPQ = 100 ms voraus, weniger als 150 ms: Q = 12,0 für Hub und alle Voices (D-90) |
+| Z17 | Voice „folgt Hub“ hat bei Eintreffen des Stempels Q = 8,0 schon PPQ 8,1 erreicht | Wechsel am nächsten Rasterpunkt (12,0), Versatz im Protokoll |
+| Z18 | Voice „eigen“, Slot-Parameter wird bei 7,0 von 1 auf 2 automatisiert | Q = 8,0, unabhängig vom Hub; beim Einzelspur-Bounce identisch |
+| Z19 | Voice „folgt Hub“ startet bei 148,0, Hub meldet dort Slot 3 | Slot 3 sofort. Hat der Hub die Position noch nicht erreicht: gespeicherter Slot, Wechsel zu Slot 3 am ersten Rasterpunkt nach seiner Meldung |
 
 ### 6.2 Note-Off-Garantie
 - Aktiv-Tabelle 16 × 128 (fest allokiert). Gespeichert wird die tatsächlich gesendete Tonhöhe
@@ -954,9 +1033,10 @@ Kanalkonflikte (D-63).
   Message-Thread-only. Über denselben Kanal meldet jede Instanz ihre zuletzt verarbeitete PPQ-Position;
   der Hub plant ab der weitesten. Liegt einer Voice zum Zeitstempel das zugehörige Pattern noch nicht vor,
   wechselt sie am nächsten Quantisierungspunkt, an dem es vorliegt, und protokolliert den Versatz.
-- **Slot-Automation und Start mitten im Arrangement in Gruppen:** Voices erfahren eine Slot-Automation erst,
-  wenn der Hub den betreffenden Block verarbeitet hat. Ob das bei versetzt gerechneten Spuren,
-  Einzelspur-Bounce und Freeze reicht, ist offen (O-22, Messung in Phase 0).
+- **Slot-Automation und Start mitten im Arrangement in Gruppen:** Voices erfahren eine Slot-Automation des Hubs
+  erst, wenn der Hub den betreffenden Block verarbeitet hat. Deshalb gibt es pro Voice den Schalter „Slot: folgt
+  Hub / eigen“ (Standard: folgt Hub, im State gespeichert). Im Modus „eigen“ wertet die Voice ihre eigene
+  Slot-Automation aus, auch bei Einzelspur-Bounce und Freeze. Regeln und Beispiele: §6.1a (D-131).
 - **Mute** wirkt doppelt: Mute im Hub für Stimme X oder Mute in der Voice selbst schaltet die Stimme stumm.
 - Wird der Hub gelöscht, bietet die älteste Voice an, Hub zu werden (keine stille Übernahme)
 - **Gleiches Format:** Globale Daten werden zwischen AU- und VST3-Instanzen nicht zuverlässig geteilt.
@@ -1190,7 +1270,7 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
 - Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Knopf
   und Tastenkürzel
 - **Voice-Oberfläche** (kompakt, ca. 600 × 320 px): Gruppe und Stimme wählen, Spur der eigenen Stimme
-  (nur lesend, Bearbeitung im Hub), Mute, Oktave, Drag & Drop, Ablage für Drum-Referenzen,
+  (nur lesend, Bearbeitung im Hub), Mute, Oktave, Schalter „Slot: folgt Hub / eigen“ (§6.1a), Drag & Drop, Ablage für Drum-Referenzen,
   Status „mit Hub verbunden“, [v1.1] Anzeige der Gruppen-Transposition,
   Knopf „Hub öffnen“ (bringt das Hub-Fenster nach vorn, soweit der Host das erlaubt)
 
