@@ -92,6 +92,9 @@ void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset
 
 void PatternPlayer::processSegment(double scanFrom, double origin, double to, int sampleBase, int numSamples,
                                    double ppqPerSample, MidiEventList& out) {
+    // Hosts report negative positions during a count-in: stay silent there (O-24). A block that crosses zero
+    // starts its notes from zero on.
+    scanFrom = std::max(scanFrom, 0.0);
     if (pattern_.count > 0 && pattern_.lengthTicks > 0 && to > scanFrom) {
         const double ticksToPpq = 1.0 / kTicksPerQuarter;
         const double lengthPpq = pattern_.lengthTicks * ticksToPpq;
