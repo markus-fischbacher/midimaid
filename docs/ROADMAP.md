@@ -23,14 +23,14 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
 - [x] Drag & Drop eines fest codierten .mid aus dem Plugin
 - [x] GitHub-Actions-CI: macOS und Windows (Build, Tests, pluginval), Linux (core-Tests, VST3-Kompiliertest)
 - [ ] **Host-Verifikation** (manuell, Ergebnisse in `DECISIONS.md`):
-  - [ ] Live 12 macOS VST3 und AU, Windows VST3: MIDI From → MidiMaid-Spur. **Bestätigen**, dass Live beim
+  - [ ] Live 12 macOS VST3 und AU (erledigt, D-129), Windows VST3 (offen): MIDI From → MidiMaid-Spur. **Bestätigen**, dass Live beim
         Spur-Routing keine Kanäle trennt (Grundlage für D-55)
-  - [ ] Logic: MIDI-FX-Slot, Sync, Loop, Stop
+  - [x] Logic: MIDI-FX-Slot, Sync, Loop, Stop (D-129)
   - [ ] Zwei Instanzen teilen sich eine prozessweite Registry (Logic, Live)
   - [ ] Logic: Hub + Voice auf zwei Synth-Spuren, Aufnahme per „Record MIDI to Track Here“
   - [ ] Live: Hub + Voice auf zwei MidiMaid-Spuren, zwei Synth-Spuren per „MIDI From“, Monitoring „In“, Aufnahme
   - [ ] Geplanter Wechsel: Hub und Voice wechseln zum selben PPQ, auch bei Klick 50 ms vor der Taktgrenze
-  - [ ] Drag & Drop aus dem Plugin in Live und Logic, Tempo-Event wird übernommen
+  - [x] Drag & Drop aus dem Plugin in Live und Logic; Tempo-Event wird nicht übernommen, die Datei trägt das DAW-Tempo (D-129)
   - [ ] Clip (Live) bzw. Region (Logic) direkt ins Plugin-Fenster ziehen: kommt eine .mid-Datei an?
   - [ ] Parameter-Automation (Slot), Start mitten im Arrangement mit automatisiertem Slot
   - [ ] Live: Freeze einer Synth-Spur, die nur über „MIDI From“ gespielt wird (Erwartung: still)
@@ -38,7 +38,7 @@ Claude Code hakt Aufgaben ab, sobald alle Kriterien aus `CLAUDE.md` („Arbeitsw
         Live: Esc schließt das Fenster; Logic: Cmd+Z führt das Logic-Undo aus; der Rest kommt an (D-126)
   - [ ] Referenz-Instrumente: Legato-Glide für Slides und Velocity-Reaktion der Kandidaten prüfen,
         Auswahl pro Rolle festlegen (SPEC §12)
-  - [ ] Versatz zwischen Spuren messen: Wie weit rechnet eine Voice dem Hub voraus oder hinterher? (Logic mit
+  - [x] Versatz zwischen Spuren messen (D-129: unabhängige Instanzen ohne Versatz; mit Hub und Voice noch offen): Wie weit rechnet eine Voice dem Hub voraus oder hinterher? (Logic mit
         ausgewählter und nicht ausgewählter Spur, Live, Offline-Bounce; Grundlage für Mindestvorlauf und O-22)
   - [ ] Einzelspur-Bounce bzw. Freeze einer Voice-Spur mit Slot-Automation im Hub (Logic „Bounce in Place“,
         Freeze): Läuft der Hub mit, folgt die Voice? (O-22)
