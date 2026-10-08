@@ -121,6 +121,9 @@ void appendNotes(Pattern& pattern, size_t voice, std::vector<Note> notes) {
 } // namespace
 
 Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& request, uint64_t seed) {
+    if (request.cancel != nullptr && request.cancel->load(std::memory_order_relaxed)) {
+        return makeEmptyPattern(request.lengthBars, style.id); // no archetype: never a valid candidate
+    }
     Pcg32 rng = Pcg32::fromSeed(seed);
     Pattern pattern = makeEmptyPattern(request.lengthBars, style.id);
     pattern.kickGridId = request.kickGridId.value_or(style.kickDefault);
@@ -184,9 +187,7 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
 
 SelectionResult generatePattern(const StyleProfile& style, const GenerationRequest& request) {
     const auto generate = [&](uint64_t seed) { return generateCandidate(style, request, seed); };
-    const auto contextFor = [&](const Pattern& pattern) {
-        return qualityContextFor(pattern, style, request.settings);
-    };
+    const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
     HardCheck copyCheck;
     if (!request.referenceSet.empty()) {
         copyCheck = copyProtectionCheck(request.referenceSet);

@@ -6,6 +6,7 @@
 #include "core/Quality.h"
 #include "core/StyleProfile.h"
 
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -19,23 +20,26 @@ struct GenerationRequest {
     uint32_t lengthBars = 4; ///< 1, 2, 4, 8 or 16
     uint64_t seed = 1;       ///< the user-visible seed
     ArchetypeSettings settings;
-    std::optional<PitchClass> root;             ///< fixed root, else drawn
-    std::optional<std::string> scaleId;         ///< fixed scale, else drawn by the weights of the style
-    std::optional<std::string> kickGridId;      ///< else the default grid of the style
-    std::optional<std::string> bassArchetype;   ///< manual choice, else automatic
-    std::optional<std::string> melodyArchetype; ///< manual choice, else automatic
-    std::vector<VoiceRole> voices;              ///< voice roles in order; empty = bass and melody (at most kMaxVoices)
+    std::optional<PitchClass> root;              ///< fixed root, else drawn
+    std::optional<std::string> scaleId;          ///< fixed scale, else drawn by the weights of the style
+    std::optional<std::string> kickGridId;       ///< else the default grid of the style
+    std::optional<std::string> bassArchetype;    ///< manual choice, else automatic
+    std::optional<std::string> melodyArchetype;  ///< manual choice, else automatic
+    std::vector<VoiceRole> voices;               ///< voice roles in order; empty = bass and melody (at most kMaxVoices)
     std::optional<std::vector<Phrase>> formPlan; ///< fixed phrases (valid for the length), else drawn (FormPlan.h)
-    std::vector<ReferenceEntry> referenceSet;   ///< active set for the copy protection (empty = none)
+    std::vector<ReferenceEntry> referenceSet;    ///< active set for the copy protection (empty = none)
+    /// Optional cancel flag (background jobs). Once set, every further candidate is an empty one that the hard check
+    /// rejects, so `generatePattern` ends quickly with `success == false`. Without it nothing changes.
+    const std::atomic<bool>* cancel = nullptr;
 };
 
 /// One candidate, a pure function of `seed`: harmony, style groove, form plan, bass, melody (in this order, so that
 /// the melody knows the bass), then the constraint layer. Patterns of up to 4 bars are generated in one piece; patterns
 /// of 8 and 16 bars phrase by phrase (D-121): every phrase is a pattern of its own length with the chords, the kick
 /// grid and the energy and creativity of its role, generated from a seed of its role (phrases of one role share it,
-/// so they repeat their rhythm), and joined at the phrase starts. All draws come from one `Pcg32::fromSeed(seed)`. `info` carries the
-/// user seed of the request and `seed` as winner seed. A voice that cannot be generated (unknown scale, range too
-/// narrow) stays empty without archetype; `generatePattern` never accepts such a candidate.
+/// so they repeat their rhythm), and joined at the phrase starts. All draws come from one `Pcg32::fromSeed(seed)`.
+/// `info` carries the user seed of the request and `seed` as winner seed. A voice that cannot be generated (unknown
+/// scale, range too narrow) stays empty without archetype; `generatePattern` never accepts such a candidate.
 Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& request, uint64_t seed);
 
 /// Generates the candidates of the selection (SPEC 4.4, D-88) from `request.seed` and returns the best valid one with

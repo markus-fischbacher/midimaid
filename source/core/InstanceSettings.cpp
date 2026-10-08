@@ -34,6 +34,15 @@ OutputMode parseOutputMode(std::string_view text) {
     return text == "none" ? OutputMode::None : OutputMode::OneVoice;
 }
 
+GenerationSettings sanitize(GenerationSettings settings) {
+    if (!isValidPatternLength(settings.lengthBars)) {
+        settings.lengthBars = 4;
+    }
+    settings.energyPct = std::clamp(settings.energyPct, 0, 100);
+    settings.creativityPct = std::clamp(settings.creativityPct, 0, 100);
+    return settings;
+}
+
 int clampOutputVoice(int voice) {
     return std::clamp(voice, 1, kMaxVoices);
 }

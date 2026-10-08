@@ -119,7 +119,7 @@ TEST_CASE("instance settings convert to text and back, unknown text gives the de
     CHECK(parseRole("conductor") == InstanceRole::Solo);
     CHECK(parseRole("") == InstanceRole::Solo);
     CHECK(parseOutputMode("everything") == OutputMode::OneVoice);
-    CHECK(InstanceSettings{} == InstanceSettings{InstanceRole::Solo, OutputMode::OneVoice, 1});
+    CHECK(InstanceSettings{} == InstanceSettings{InstanceRole::Solo, OutputMode::OneVoice, 1, GenerationSettings{}});
 }
 
 TEST_CASE("the output voice is limited to 1 to the voice maximum", "[instance-core]") {
@@ -128,4 +128,22 @@ TEST_CASE("the output voice is limited to 1 to the voice maximum", "[instance-co
     CHECK(clampOutputVoice(3) == 3);
     CHECK(clampOutputVoice(kMaxVoices) == kMaxVoices);
     CHECK(clampOutputVoice(kMaxVoices + 1) == kMaxVoices);
+}
+
+TEST_CASE("generation settings are brought into their valid range", "[instance-core]") {
+    GenerationSettings settings;
+    CHECK(sanitize(settings) == settings); // the defaults are valid
+    settings.lengthBars = 3;
+    settings.energyPct = 140;
+    settings.creativityPct = -1;
+    settings.styleId = "anything";
+    const GenerationSettings clean = sanitize(settings);
+    CHECK(clean.lengthBars == 4);
+    CHECK(clean.energyPct == 100);
+    CHECK(clean.creativityPct == 0);
+    CHECK(clean.styleId == "anything"); // an unknown style falls back at generation time
+    for (const uint32_t bars : {1u, 2u, 4u, 8u, 16u}) {
+        settings.lengthBars = bars;
+        CHECK(sanitize(settings).lengthBars == bars);
+    }
 }

@@ -17,6 +17,8 @@ public:
     static StyleLibrary fromTexts(const std::vector<std::string_view>& texts);
 
     size_t size() const { return profiles_.size(); }
+    /// All profiles in load order (for pick lists).
+    const std::vector<StyleProfile>& profiles() const { return profiles_; }
     /// The profile with this id, or null.
     const StyleProfile* find(std::string_view id) const;
     /// The profile for `id`; an unknown id gives the fallback (`peak_time`, else the first one). Null when empty.

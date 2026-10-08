@@ -2,9 +2,9 @@
 #include "core/Archetype.h"
 #include "core/Constraints.h"
 #include "core/Groove.h"
-#include "core/Progression.h"
 #include "core/PatternGenerator.h"
 #include "core/PatternValidation.h"
+#include "core/Progression.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
@@ -357,4 +357,30 @@ TEST_CASE("the rating of every candidate uses its own archetypes (long_tied may 
     const SelectionResult result = generatePattern(style, request);
     REQUIRE(result.success);
     CHECK(result.score == score(result.pattern, style, request));
+}
+
+TEST_CASE("a set cancel flag ends the selection without a result", "[generator]") {
+    const StyleProfile style = loadShipped("peak_time");
+    std::atomic<bool> cancel{true};
+    GenerationRequest request = requestFor(4, 11);
+    request.cancel = &cancel;
+    const SelectionResult result = generatePattern(style, request);
+    CHECK_FALSE(result.success);
+    CHECK(generateCandidate(style, request, 11).voices[0].archetypeId.empty());
+}
+
+TEST_CASE("a cancel flag that is not set changes nothing", "[generator]") {
+    for (const auto& name : kStyles) {
+        const StyleProfile style = loadShipped(name);
+        std::atomic<bool> cancel{false};
+        GenerationRequest plain = requestFor(4, 5);
+        GenerationRequest flagged = plain;
+        flagged.cancel = &cancel;
+        const SelectionResult a = generatePattern(style, plain);
+        const SelectionResult b = generatePattern(style, flagged);
+        REQUIRE(a.success);
+        CHECK(b.success);
+        CHECK(a.pattern == b.pattern);
+        CHECK(a.seed == b.seed);
+    }
 }
