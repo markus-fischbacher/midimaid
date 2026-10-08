@@ -1,8 +1,10 @@
 #pragma once
 
 #include "core/Pattern.h"
+#include "core/Theory.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -17,13 +19,17 @@ enum class OutputMode { OneVoice, None };
 /// What a voice does with the slot (SPEC 6.1a, D-131): play the slot of the hub, or follow its own slot parameter.
 enum class SlotFollow { Hub, Own };
 
-/// What "Generate" asks for (SPEC 3.1). Key, scale and seed are not settings of the instance: the seed is drawn for
-/// every request (and stored in the pattern), key and scale stay automatic until the hub UI offers them.
+/// What "Generate" asks for (SPEC 3.1, 3.3 basic parameters). A new instance starts in A minor (SPEC 8.1); an empty
+/// key or scale means "auto": drawn for every request (older states, D-149). No seed means a new random seed for every
+/// request; a seed makes a request repeat the same pattern.
 struct GenerationSettings {
     std::string styleId = "peak_time";
-    uint32_t lengthBars = 4; ///< 1, 2, 4, 8 or 16
-    int energyPct = 50;      ///< 0 to 100
-    int creativityPct = 40;  ///< 0 to 100
+    uint32_t lengthBars = 4;                              ///< 1, 2, 4, 8 or 16
+    int energyPct = 50;                                   ///< 0 to 100
+    int creativityPct = 40;                               ///< 0 to 100
+    std::optional<PitchClass> root = PitchClass{9};       ///< 0 to 11 (0 = C), A by default
+    std::optional<std::string> scaleId = "natural_minor"; ///< an id of `allScales()`
+    std::optional<uint64_t> seed;                         ///< fixed seed, else random per request
 
     bool operator==(const GenerationSettings&) const = default;
 };
@@ -53,6 +59,9 @@ OutputMode parseOutputMode(std::string_view text);
 SlotFollow parseSlotFollow(std::string_view text);
 /// Clamps to 1 to `kMaxVoices`.
 int clampOutputVoice(int voice);
+/// The seed text of the state and of the seed field: decimal digits. Anything else (empty, sign, letters, overflow)
+/// gives no seed, so a bad entry means "random".
+std::optional<uint64_t> parseSeed(std::string_view text);
 /// Clamps to -2 to +2.
 int clampOctave(int octave);
 

@@ -21,6 +21,8 @@ mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atom
     request.seed = job.seed;
     request.settings.energyPct = job.settings.energyPct;
     request.settings.creativityPct = job.settings.creativityPct;
+    request.root = job.settings.root;
+    request.scaleId = job.settings.scaleId;
     request.cancel = cancel;
     return request;
 }

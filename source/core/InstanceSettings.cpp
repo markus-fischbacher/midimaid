@@ -48,7 +48,31 @@ GenerationSettings sanitize(GenerationSettings settings) {
     }
     settings.energyPct = std::clamp(settings.energyPct, 0, 100);
     settings.creativityPct = std::clamp(settings.creativityPct, 0, 100);
+    if (settings.root && *settings.root > 11) {
+        settings.root.reset();
+    }
+    if (settings.scaleId && findScale(*settings.scaleId) == nullptr) {
+        settings.scaleId.reset();
+    }
     return settings;
+}
+
+std::optional<uint64_t> parseSeed(std::string_view text) {
+    if (text.empty() || text.size() > 20) {
+        return std::nullopt;
+    }
+    uint64_t value = 0;
+    for (const char c : text) {
+        if (c < '0' || c > '9') {
+            return std::nullopt;
+        }
+        const auto digit = static_cast<uint64_t>(c - '0');
+        if (value > (UINT64_MAX - digit) / 10) {
+            return std::nullopt; // does not fit
+        }
+        value = value * 10 + digit;
+    }
+    return value;
 }
 
 int clampOctave(int octave) {
