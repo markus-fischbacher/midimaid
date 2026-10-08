@@ -89,6 +89,33 @@ void PatternPlayer::setSlot(int slot) {
     }
 }
 
+void PatternPlayer::setSlotAt(int slot, double stampPpq) {
+    setSlot(slot);
+    if (switchPending()) {
+        timing_.stampPpq = stampPpq;
+        timing_.hasStamp = true;
+        timing_.resolved = false;
+    }
+}
+
+double PatternPlayer::positionTolerance(double ppqPerSample) const {
+    // The position may deviate by one sample. After a tempo change the previous block advanced at a rate between
+    // the old and the new tempo, so it deviates by at most its length times the rate change as well.
+    return ppqPerSample + 1e-6 + lastNumSamples_ * std::abs(ppqPerSample - lastPpqPerSample_);
+}
+
+bool PatternPlayer::startsOrJumps(const TransportInfo& transport, int numSamples, double sampleRate) const {
+    if (!transport.hasPosition || !transport.isPlaying || transport.bpm <= 0.0 || sampleRate <= 0.0 ||
+        numSamples <= 0) {
+        return false;
+    }
+    if (!playing_ || pendingWrapRelease_) {
+        return true;
+    }
+    const double ppqPerSample = transport.bpm / 60.0 / sampleRate;
+    return std::abs(transport.ppq - expectedPpq_) > positionTolerance(ppqPerSample);
+}
+
 void PatternPlayer::setPattern(PatternView pattern) {
     retire(slots_[static_cast<size_t>(selected_)].owner);
     slots_[static_cast<size_t>(selected_)] = {pattern, nullptr};
@@ -364,9 +391,7 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     }
 
     const double ppqPerSample = transport.bpm / 60.0 / sampleRate;
-    // The position may deviate by one sample. After a tempo change the previous block advanced at a rate between
-    // the old and the new tempo, so it deviates by at most its length times the rate change as well.
-    const double tolerance = ppqPerSample + 1e-6 + lastNumSamples_ * std::abs(ppqPerSample - lastPpqPerSample_);
+    const double tolerance = positionTolerance(ppqPerSample);
 
     // Without a jump the scan continues exactly where the previous block ended: no gap (swallowed note-on) and
     // no overlap (double note-on), whatever the host reports within the tolerance.
