@@ -647,7 +647,8 @@ TEST_CASE("a loaded slot plays without any further call", "[plugin][instance]") 
 
 TEST_CASE("a state without slots or settings gives an empty bank and the defaults", "[plugin][instance]") {
     mm::plugin::InstrumentProcessor processor("Test");
-    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, generatedPattern("peak_time", 1))); });
+    processor.editSlots(
+        [&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, generatedPattern("peak_time", 1))); });
     mm::core::InstanceSettings changed;
     changed.role = mm::core::InstanceRole::Voice;
     changed.outputVoice = 3;
@@ -676,7 +677,8 @@ TEST_CASE("a state without slots or settings gives an empty bank and the default
     }
 }
 
-TEST_CASE("unreadable slot data leaves the bank empty and is reported, the rest of the state loads", "[plugin][instance]") {
+TEST_CASE("unreadable slot data leaves the bank empty and is reported, the rest of the state loads",
+          "[plugin][instance]") {
     mm::plugin::InstrumentProcessor source("Test");
     setParameter(source, "slot", 6.0f);
     mm::core::InstanceSettings settings;

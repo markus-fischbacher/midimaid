@@ -53,7 +53,8 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
       publisher_(handover_, styles_), returnCollector_(handover_) {
     slotValue_ = parameters_.getRawParameterValue("slot");
     for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
-        muteValues_[static_cast<size_t>(voice - 1)] = parameters_.getRawParameterValue(mm::core::muteParameterId(voice));
+        muteValues_[static_cast<size_t>(voice - 1)] =
+            parameters_.getRawParameterValue(mm::core::muteParameterId(voice));
     }
     player_.attach(&handover_);
 }

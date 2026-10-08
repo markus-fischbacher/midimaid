@@ -99,9 +99,9 @@ private:
 
     juce::String name_;
     juce::AudioProcessorValueTreeState parameters_;
-    std::atomic<float>* slotValue_ = nullptr; // raw values, read in the audio thread
+    std::atomic<float>* slotValue_ = nullptr;                            // raw values, read in the audio thread
     std::array<std::atomic<float>*, mm::core::kMaxVoices> muteValues_{}; // raw values, read in the audio thread
-    std::atomic<int> outputVoice_{1}; // the voice this instance plays (1 = first)
+    std::atomic<int> outputVoice_{1};                                    // the voice this instance plays (1 = first)
     const mm::core::StyleLibrary& styles_;
     mutable juce::CriticalSection slotsLock_; // message and state threads only, never the audio thread
     mm::core::SlotBank slots_;

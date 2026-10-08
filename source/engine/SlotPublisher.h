@@ -42,7 +42,7 @@ private:
     const core::StyleLibrary& styles_;
     int outputVoice_ = 1;
     std::array<std::optional<uint64_t>, kSlotCount> published_{}; ///< revision last published per slot
-    std::array<bool, kSlotCount> everPublished_{};                 ///< survives `reset`: the engine holds something
+    std::array<bool, kSlotCount> everPublished_{};                ///< survives `reset`: the engine holds something
     size_t styleFallbacks_ = 0;
 };
 
