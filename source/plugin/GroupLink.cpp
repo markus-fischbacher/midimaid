@@ -54,10 +54,10 @@ void GroupLink::sync() {
     }
 }
 
-void GroupLink::publish(mm::core::SlotSnapshot snapshot) {
-    onMessageThread([self = shared_from_this(), snapshot = std::move(snapshot)] {
+void GroupLink::publish(mm::core::SlotSnapshot snapshot, std::optional<double> stampPpq) {
+    onMessageThread([self = shared_from_this(), snapshot = std::move(snapshot), stampPpq] {
         if (self->id_ != 0) {
-            processGroup().publish(self->id_, snapshot);
+            processGroup().publish(self->id_, snapshot, stampPpq);
         }
     });
 }
@@ -85,10 +85,10 @@ void GroupLink::detach() {
     onMessageThread([self = shared_from_this()] { self->leave(); });
 }
 
-void GroupLink::onSnapshot(const mm::core::SlotSnapshot& snapshot) {
+void GroupLink::onSnapshot(const mm::core::SlotSnapshot& snapshot, std::optional<double> stampPpq) {
     const juce::ScopedLock lock(lock_);
     if (owner_ != nullptr) {
-        owner_->adoptHubSlots(snapshot);
+        owner_->adoptHubSlots(snapshot, stampPpq);
     }
 }
 

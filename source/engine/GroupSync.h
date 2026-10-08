@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 
 namespace mm::engine {
 
@@ -21,6 +22,12 @@ struct SlotDecision {
     bool stamped = false;
     double stampPpq = 0.0;
 };
+
+/// The stamp for a change planned now: the first bar line at or after the furthest block end among the playing members
+/// plus the minimum lead. `ownEndPpq` is the planner's own block end, when it is one of the playing members (the audio
+/// thread of the hub passes it; the message thread leaves it out). Empty when nobody plays: nothing to align then.
+/// Reads only atomics, so any thread may call it.
+std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std::optional<double> ownEndPpq = {});
 
 /// Audio-thread logic of a group member (one per instance): reports the block position to the channel, lets the hub
 /// plan slot changes and lets a voice follow them. No allocation, no lock. Call `beginBlock` once per block before

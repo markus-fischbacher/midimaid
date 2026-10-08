@@ -234,3 +234,21 @@ TEST_CASE("a copy of the bank keeps its origin and is not published again", "[sl
     CHECK(copy.origin() == rig.bank.origin());
     CHECK(rig.publisher.sync(copy) == 0);
 }
+
+TEST_CASE("a stamped sync publishes every changed slot with the same stamp", "[slot-publisher]") {
+    Rig rig;
+    REQUIRE(rig.bank.setResult(0, generated("peak_time", 1)));
+    REQUIRE(rig.bank.setResult(3, generated("peak_time", 2)));
+    CHECK(rig.publisher.sync(rig.bank, 4.0, 12.0) == 2);
+    for (const size_t slot : {size_t{0}, size_t{3}}) {
+        const auto owned = takeResult(rig.handover, slot);
+        REQUIRE(owned != nullptr);
+        CHECK(owned->hasStamp);
+        CHECK(owned->stampPpq == 12.0);
+    }
+    REQUIRE(rig.bank.setResult(0, generated("peak_time", 3)));
+    CHECK(rig.publisher.sync(rig.bank) == 1); // without a stamp: the grid decides
+    const auto plain = takeResult(rig.handover, 0);
+    REQUIRE(plain != nullptr);
+    CHECK_FALSE(plain->hasStamp);
+}

@@ -116,7 +116,7 @@ Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind gr�
       Host-Daten, volle Rückgabe-Queue) (Z1 bis Z15 und Z17; Z16, Z18, Z19 mit Hub und Voice)
 - [x] 16 Pattern-Slots, Slot sofort bei Start und nach Sprung, Vorrangregeln (SPEC §3.10, §3.13, §6.8)
       (Engine D-135, Datenmodell mit Name, Farbe, Verlauf, Kopieren/Leeren/Tauschen und Serialisierung D-137)
-- [ ] Hub & Voices (Zuschnitt H1 bis H6; **H1 Instanzkern** (D-139) **H2 Generieren im Hintergrund** (D-140) und **H3 Registry und Gruppe** (D-141) **H4a Kanal und geplante Wechsel, Engine-Teil** (D-142) und **H4b Plugin-Verdrahtung, Schalter „folgt Hub / eigen“** (D-143) **erledigt**, H4c (Pattern-Wechsel des Hubs mit Stempel) offen; Drag & Drop exportiert noch das Platzhalter-Pattern, die Umstellung auf die echten Stimmen kommt mit der Hub-UI): Rollen Hub/Voice/Solo, Ausgabemodus eine Stimme/keine, Registry, lock-freier Kanal
+- [ ] Hub & Voices (Zuschnitt H1 bis H6; **H1 Instanzkern** (D-139) **H2 Generieren im Hintergrund** (D-140) und **H3 Registry und Gruppe** (D-141) **H4a Kanal und geplante Wechsel, Engine-Teil** (D-142) **H4b Plugin-Verdrahtung, Schalter „folgt Hub / eigen“** (D-143) und **H4c Pattern-Wechsel des Hubs mit Stempel** (D-144) **erledigt**; Drag & Drop exportiert noch das Platzhalter-Pattern, die Umstellung auf die echten Stimmen kommt mit der Hub-UI): Rollen Hub/Voice/Solo, Ausgabemodus eine Stimme/keine, Registry, lock-freier Kanal
       für geplante Wechsel, eine Gruppe, Persistenz des kompletten Slot-Satzes, Hub-Verlust (SPEC §6.5)
 - [ ] Voice-Oberfläche (SPEC §8.1)
 - [x] Alle Host-Parameter nach dem Parameter-Register mit fester ID anlegen; aktiv: Slot, Mute 1–8;

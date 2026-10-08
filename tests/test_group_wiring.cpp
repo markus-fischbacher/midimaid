@@ -450,3 +450,57 @@ TEST_CASE("audio threads run while roles, switches and slots change on the messa
     voiceB.reset();
     CHECK(mm::engine::processGroupChannel().memberCount() == 0);
 }
+
+TEST_CASE("a pattern change by the hub shortly before the bar line reaches hub and voices at the same bar",
+          "[group-wiring]") {
+    // The voice runs half a quarter ahead of the hub (it has passed bar 8 when the hub still has 0.2 to go) or behind
+    // it (it would switch at bar 8 on its own while the hub waits for bar 12).
+    for (const bool voiceAhead : {true, false}) {
+        INFO("voiceAhead " << voiceAhead);
+        Quiet quiet;
+        Instance hub("Hub");
+        Instance voice("Voice");
+        hub.setRole(InstanceRole::Hub);
+        voice.setRole(InstanceRole::Voice);
+        fillSlots(hub);
+        (voiceAhead ? voice : hub).setPpq(0.5);
+        runTo({&hub, &voice}, 7.8);
+        hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, marked(50)); });
+        runTo({&hub, &voice}, 13.0);
+        for (const Instance* instance : {&hub, &voice}) {
+            CHECK(near(instance->firstWith(50), at(12.0)));
+            CHECK(instance->firstWith(41, at(8.0)) > 0);
+            CHECK(instance->firstWith(41, at(12.0) - 1) == -1);
+        }
+    }
+}
+
+TEST_CASE("a pattern change by a hub without company takes effect at the next bar line", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    fillSlots(hub);
+    runTo({&hub}, 7.8);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, marked(50)); });
+    runTo({&hub}, 9.0);
+    CHECK(near(hub.firstWith(50), at(8.0)));
+}
+
+TEST_CASE("a pattern change while nobody plays has no stamp and plays from the start", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    fillSlots(hub);
+    hub.setPlaying(false);
+    voice.setPlaying(false);
+    hub.step();
+    voice.step();
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, marked(50)); });
+    hub.setPlaying(true);
+    voice.setPlaying(true);
+    runTo({&hub, &voice}, 1.0);
+    CHECK(near(hub.firstWith(50), at(0.0)));
+    CHECK(near(voice.firstWith(50), at(0.0)));
+}

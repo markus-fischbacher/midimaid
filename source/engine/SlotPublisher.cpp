@@ -40,7 +40,7 @@ std::unique_ptr<OwnedPattern> SlotPublisher::render(const core::Slot& slot) {
     return owned;
 }
 
-size_t SlotPublisher::sync(const core::SlotBank& bank, double gridPpq) {
+size_t SlotPublisher::sync(const core::SlotBank& bank, double gridPpq, std::optional<double> stampPpq) {
     if (bank.origin() != origin_) {
         if (origin_ != 0) {
             reset(); // a first bank has nothing published to forget
@@ -58,7 +58,11 @@ size_t SlotPublisher::sync(const core::SlotBank& bank, double gridPpq) {
         if (!changed || (!everPublished_[index] && !slot->pattern)) {
             continue;
         }
-        handover_.publishResult(index, render(*slot), gridPpq);
+        if (stampPpq) {
+            handover_.publishResultAt(index, render(*slot), *stampPpq, gridPpq);
+        } else {
+            handover_.publishResult(index, render(*slot), gridPpq);
+        }
         published_[index] = slot->revision;
         everPublished_[index] = true;
         ++count;

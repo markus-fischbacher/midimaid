@@ -587,3 +587,21 @@ TEST_CASE("a voice that joins later ignores the plans of before", "[group-sync]"
     CHECK(late.sync().lateSwitches() == 0); // the old stamp 4.0 was not applied behind its back
     CHECK(late.played(42));                 // it still joins the hub's slot, from the hub's state
 }
+
+TEST_CASE("the planned stamp is the first bar line after the furthest playing block end plus the lead",
+          "[group-channel]") {
+    GroupChannel channel;
+    const int a = channel.acquire();
+    const int b = channel.acquire();
+    CHECK_FALSE(plannedStamp(channel, 120.0).has_value()); // nobody plays: nothing to align
+    channel.reportBlock(a, 7.8, true);
+    channel.reportBlock(b, 8.3, true);
+    CHECK(plannedStamp(channel, 120.0) == 12.0);       // 8.3 + 0.3 lies in bar 8..12
+    CHECK(plannedStamp(channel, 120.0, 11.8) == 16.0); // the planner's own block end counts too
+    channel.reportBlock(b, 8.3, false);
+    CHECK(plannedStamp(channel, 120.0) == 12.0); // 7.8 + 0.3 = 8.1: only members that play count
+    channel.reportBlock(a, 7.6, true);
+    CHECK(plannedStamp(channel, 120.0) == 8.0); // 7.6 + 0.3 = 7.9 still fits before bar 8
+    channel.setMinLeadMs(1000.0);
+    CHECK(plannedStamp(channel, 120.0) == 12.0); // 7.6 + 2.0 = 9.6
+}

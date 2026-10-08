@@ -162,26 +162,33 @@ juce::AudioProcessorValueTreeState& ProcessorBase::parameters() {
 
 void ProcessorBase::editSlots(const std::function<void(mm::core::SlotBank&)>& change) {
     mm::core::SlotSnapshot forVoices;
+    std::optional<double> stamp;
     {
         const juce::ScopedLock lock(slotsLock_);
         change(slots_);
-        publisher_.sync(slots_);
-        if (settings_.role == mm::core::InstanceRole::Hub) {
+        const bool distributing = settings_.role == mm::core::InstanceRole::Hub;
+        // A hub with company plans the switch for the whole group: the same bar line for every instance (D-144).
+        if (distributing && groupLink_->status() == mm::core::GroupStatus::Hub &&
+            mm::engine::processGroupChannel().memberCount() > 1) {
+            stamp = mm::engine::plannedStamp(mm::engine::processGroupChannel(), lastKnownBpm());
+        }
+        publisher_.sync(slots_, 4.0, stamp);
+        if (distributing) {
             forVoices = std::make_shared<const mm::core::SlotBank>(slots_);
         }
     }
     if (forVoices) {
-        groupLink_->publish(std::move(forVoices)); // outside the lock: the registry may call back
+        groupLink_->publish(std::move(forVoices), stamp); // outside the lock: the registry may call back
     }
 }
 
-void ProcessorBase::adoptHubSlots(const mm::core::SlotSnapshot& snapshot) {
+void ProcessorBase::adoptHubSlots(const mm::core::SlotSnapshot& snapshot, std::optional<double> stampPpq) {
     const juce::ScopedLock lock(slotsLock_);
     if (settings_.role != mm::core::InstanceRole::Voice || snapshot == nullptr) {
         return;
     }
     slots_ = *snapshot; // a copy: the hub's snapshot stays immutable
-    publisher_.sync(slots_);
+    publisher_.sync(slots_, 4.0, stampPpq);
 }
 
 mm::core::GroupStatus ProcessorBase::groupStatus() const {

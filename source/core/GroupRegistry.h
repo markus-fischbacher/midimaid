@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace mm::core {
@@ -28,8 +29,10 @@ using SlotSnapshot = std::shared_ptr<const SlotBank>;
 class GroupMember {
 public:
     virtual ~GroupMember() = default;
-    /// Voice: the hub's slot set to adopt (sent whenever it changes and when the voice joins).
-    virtual void onSnapshot(const SlotSnapshot& snapshot) = 0;
+    /// Voice: the hub's slot set to adopt (sent whenever it changes and when the voice joins). `stampPpq` is the PPQ
+    /// position at which the hub's changes take effect, when the hub planned one (D-144); it is only sent with the
+    /// change itself, never to a voice that joins later.
+    virtual void onSnapshot(const SlotSnapshot& snapshot, std::optional<double> stampPpq) = 0;
     /// The status or, for a hub, the number of voices changed.
     virtual void onStatus(GroupStatus status, size_t voices) = 0;
     /// The slot set of this member as it is now (the registry asks when a member becomes hub).
@@ -56,8 +59,9 @@ public:
     /// `HubRefused`. Returns the role the member has now.
     InstanceRole setRole(MemberId id, InstanceRole role);
     void setOutputVoice(MemberId id, int outputVoice);
-    /// The hub reports a new slot set. False when `id` is not the hub.
-    bool publish(MemberId id, SlotSnapshot snapshot);
+    /// The hub reports a new slot set, optionally with the PPQ stamp at which it takes effect. False when `id` is not
+    /// the hub.
+    bool publish(MemberId id, SlotSnapshot snapshot, std::optional<double> stampPpq = std::nullopt);
     /// A member with status `HubOffered` becomes the hub. False when it is not offered the role.
     bool acceptOffer(MemberId id);
 
@@ -90,6 +94,7 @@ private:
     std::vector<Entry> members_; ///< in order of id
     MemberId hub_ = 0;
     SlotSnapshot hubSnapshot_;
+    std::optional<double> hubStamp_; ///< stamp of the change being distributed; only set during `publish`
     MemberId nextId_ = 1;
 };
 

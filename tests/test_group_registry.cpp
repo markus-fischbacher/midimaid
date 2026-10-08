@@ -28,8 +28,9 @@ public:
         }
     }
 
-    void onSnapshot(const SlotSnapshot& snapshot) override {
+    void onSnapshot(const SlotSnapshot& snapshot, std::optional<double> stampPpq) override {
         snapshots.push_back(snapshot);
+        stamps.push_back(stampPpq);
         if (onSnapshotHook) {
             onSnapshotHook();
         }
@@ -51,6 +52,7 @@ public:
 
     SlotBank bank;
     std::vector<SlotSnapshot> snapshots;
+    std::vector<std::optional<double>> stamps;
     std::vector<GroupStatus> statuses;
     size_t voices = 0;
     std::function<void()> onSnapshotHook;
@@ -254,4 +256,32 @@ TEST_CASE("unknown ids are ignored", "[group]") {
     registry.remove(99);
     registry.setOutputVoice(99, 3);
     CHECK(registry.memberCount() == 0);
+}
+
+TEST_CASE("the hub's stamp travels with the change to every voice, and only with it", "[group]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(60);
+    auto voiceA = std::make_shared<FakeMember>(40);
+    auto voiceB = std::make_shared<FakeMember>(41);
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    registry.add(voiceA, InstanceRole::Voice);
+    registry.add(voiceB, InstanceRole::Voice);
+    REQUIRE(voiceA->stamps.size() == 1);
+    CHECK_FALSE(voiceA->stamps.back().has_value()); // adopting the hub's state on joining has no stamp
+
+    CHECK(registry.publish(hubId, bankWith(62), 12.0));
+    REQUIRE(voiceA->stamps.size() == 2);
+    REQUIRE(voiceB->stamps.size() == 2);
+    CHECK(voiceA->stamps.back() == 12.0);
+    CHECK(voiceB->stamps.back() == 12.0);
+
+    CHECK(registry.publish(hubId, bankWith(63))); // a change without plan carries no stamp
+    CHECK_FALSE(voiceA->stamps.back().has_value());
+
+    // A voice that joins later hears the current state, not the stamp of an earlier change.
+    CHECK(registry.publish(hubId, bankWith(64), 20.0));
+    auto late = std::make_shared<FakeMember>();
+    registry.add(late, InstanceRole::Voice);
+    REQUIRE(late->stamps.size() == 1);
+    CHECK_FALSE(late->stamps.back().has_value());
 }
