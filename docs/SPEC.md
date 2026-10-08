@@ -1399,7 +1399,8 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
   JSON aus `core` eingebettet (§5, dieselbe Form wie in der Bibliothek).
   Stand D-139: Attribute `role` (`solo`/`hub`/`voice`), `outputMode` (`one_voice`/`none`), `outputVoice` (1 bis 8) und das
   Kindelement `Slots` mit dem Slot-Satz als JSON (D-137). Fehlende oder unbekannte Werte ergeben Solo, eine Stimme, Stimme 1
-  und leere Slots; ein unlesbarer Slot-Satz bleibt leer und wird gemeldet, der übrige State lädt
+  und leere Slots; ein unlesbarer Slot-Satz bleibt leer und wird gemeldet, der übrige State lädt.
+  Dazu (D-140) die Einstellungen für „Generieren“: `genStyle`, `genBars`, `genEnergy`, `genCreativity`
 - Laden eines Projekts aus einer neueren Plugin-Version darf nicht abstürzen
 
 ### 9.2 Bibliothek und Einstellungen
