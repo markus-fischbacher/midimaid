@@ -114,8 +114,8 @@ Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind gr�
       mit PPQ-Zeitstempel und Mindestvorlauf, Neustart an Taktgrenzen (SPEC §3.4, §6)
 - [x] Engine-Tests mit simulierten Playheads (inkl. Wechsel kurz vor Quantisierungspunkt, Sprünge, fehlende
       Host-Daten, volle Rückgabe-Queue) (Z1 bis Z15 und Z17; Z16, Z18, Z19 mit Hub und Voice)
-- [ ] 16 Pattern-Slots, Slot sofort bei Start und nach Sprung, Vorrangregeln (SPEC §3.10, §3.13, §6.8)
-      (Engine erledigt, D-135; offen: Datenmodell mit Name, Farbe, Verlauf, Kopieren/Leeren/Tauschen)
+- [x] 16 Pattern-Slots, Slot sofort bei Start und nach Sprung, Vorrangregeln (SPEC §3.10, §3.13, §6.8)
+      (Engine D-135, Datenmodell mit Name, Farbe, Verlauf, Kopieren/Leeren/Tauschen und Serialisierung D-137)
 - [ ] Hub & Voices: Rollen Hub/Voice/Solo, Ausgabemodus eine Stimme/keine, Registry, lock-freier Kanal
       für geplante Wechsel, eine Gruppe, Persistenz des kompletten Slot-Satzes, Hub-Verlust (SPEC §6.5)
 - [ ] Voice-Oberfläche (SPEC §8.1)

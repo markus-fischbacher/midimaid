@@ -297,6 +297,14 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
   erkennbar. Kopieren, Einfügen, Leeren, Tauschen per Ziehen.
 - Wechsel quantisiert nach §3.4. Generieren und Variieren wirken auf den gewählten Slot.
 - Hub-Gruppe: Ein Slot-Wechsel im Hub wechselt alle Voices auf denselben Slot.
+- **Datenmodell (`core/SlotBank`, D-137):** Ein Slot hat ein Pattern (alle Stimmen; leer = kein Pattern), einen
+  Namen (höchstens 32 Bytes UTF-8, ohne Steuerzeichen; leer zeigt die UI als „Slot n“), eine Farbmarke (0 = keine,
+  1 bis 8 = Palette der UI) und den Verlauf der letzten 20 Ergebnisse (§3.6). Generieren, Variation, Verfeinern,
+  Einfügen, Laden aus der Bibliothek und Import sind Ergebnisse (ein Verlaufseintrag, das alte Pattern bleibt
+  über ◀ erreichbar); Notenbearbeitungen ersetzen nur das aktuelle Pattern. ◀ und ▶ setzen das aktuelle Pattern
+  auf den Eintrag. Kopieren übernimmt Pattern, Noten-IDs, Zähler, Name und Farbe; Leeren setzt den Slot
+  vollständig zurück; Tauschen vertauscht alles. Jedes gespeicherte Pattern bekommt die nächste fortlaufende
+  `Pattern::version` der Instanz.
 - Bibliothek: einzelne Slots speichern und laden, zusätzlich ganze Slot-Sets (16 Slots) als „Set“.
 - **[v1.1] Session-Ansicht in Live:** Slots lassen sich mit Szenen verknüpfen, indem man auf der Hub-Spur leere
   Clips mit einer Clip-Hüllkurve für den Slot-Parameter anlegt. Startet eine Szene, wechselt der Slot
@@ -1367,7 +1375,8 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
 ## 9. Persistenz
 
 ### 9.1 Plugin-State (im DAW-Projekt)
-- Alle 16 Slots (aller Stimmen), Verlauf (begrenzt), Verfeinerungs-Kontext, Parameter, Rolle, Gruppe,
+- Alle 16 Slots (aller Stimmen) mit Name und Farbe, Verlauf (begrenzt: das aktuelle Pattern und die letzten 5 Ergebnisse
+  je Slot, D-137), Verfeinerungs-Kontext, Parameter, Rolle, Gruppe,
   (nicht gespeichert: die Evolve-Ebene, §6.7),
   zugeordnete Stimme, Ausgabemodus, gewählter Provider und Modell, **keine Keys**
 - Instanzübergreifende Einstellungen (Drum-Zuordnung, Provider-Konfiguration, Notennamen-Konvention)
