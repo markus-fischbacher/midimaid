@@ -77,6 +77,16 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addAndMakeVisible(voiceBox_);
 
+    followBox_.addItem("Slot: follows hub", 1);
+    followBox_.addItem("Slot: own", 2);
+    followBox_.setSelectedId(settings.slotFollow == mm::core::SlotFollow::Own ? 2 : 1, juce::dontSendNotification);
+    followBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.slotFollow = followBox_.getSelectedId() == 2 ? mm::core::SlotFollow::Own : mm::core::SlotFollow::Hub;
+        processor_.setInstanceSettings(next);
+    };
+    addChildComponent(followBox_);
+
     takeOverButton_.onClick = [this] { processor_.acceptHubOffer(); };
     addChildComponent(takeOverButton_);
 
@@ -147,7 +157,17 @@ void PlaceholderEditor::updateStatus() {
         break;
     }
     takeOverButton_.setVisible(processor_.groupStatus() == GroupStatus::HubOffered);
-    generateButton_.setEnabled(processor_.instanceSettings().role != mm::core::InstanceRole::Voice);
+    const auto role = processor_.instanceSettings().role;
+    const int roleId = role == mm::core::InstanceRole::Hub ? 2 : role == mm::core::InstanceRole::Voice ? 3 : 1;
+    if (roleBox_.getSelectedId() != roleId) {
+        roleBox_.setSelectedId(roleId, juce::dontSendNotification); // e.g. a voice that took over the hub
+    }
+    const bool isVoice = role == mm::core::InstanceRole::Voice;
+    generateButton_.setEnabled(!isVoice);
+    followBox_.setVisible(isVoice);
+    if (isVoice && processor_.lateSwitches() > 0) {
+        group += " (" + juce::String(static_cast<int>(processor_.lateSwitches())) + " late)";
+    }
     groupText_ = group;
 
     switch (processor_.generationStatus()) {
@@ -195,6 +215,8 @@ void PlaceholderEditor::resized() {
     dragHandle_->setBounds(area.removeFromBottom(56).reduced(16));
     auto roles = area.removeFromTop(48).reduced(16, 10);
     takeOverButton_.setBounds(roles.removeFromRight(120));
+    roles.removeFromRight(8);
+    followBox_.setBounds(roles.removeFromRight(150));
     roles.removeFromRight(8);
     voiceBox_.setBounds(roles.removeFromRight(120));
     roles.removeFromRight(8);
