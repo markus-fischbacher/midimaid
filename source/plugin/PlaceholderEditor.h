@@ -27,6 +27,7 @@ private:
     ProcessorBase& processor_;
     juce::ComboBox roleBox_;
     juce::ComboBox voiceBox_;
+    juce::ComboBox followBox_;
     juce::ComboBox styleBox_;
     juce::TextButton takeOverButton_{"Become hub"};
     juce::TextButton generateButton_{"Generate"};

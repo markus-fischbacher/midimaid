@@ -19,6 +19,7 @@ double ceilToBar(double ppq) {
 SlotDecision GroupSync::beginBlock(SlotMode mode, int ownSlot, const TransportInfo& transport, int numSamples,
                                    double sampleRate, bool restart) {
     ownSlot = std::clamp(ownSlot, 1, 16);
+    const int member = member_.load(std::memory_order_acquire);
     const bool playing =
         transport.hasPosition && transport.isPlaying && transport.bpm > 0.0 && sampleRate > 0.0 && numSamples > 0;
     const double ppqPerSample = playing ? transport.bpm / 60.0 / sampleRate : 0.0;
@@ -30,8 +31,8 @@ SlotDecision GroupSync::beginBlock(SlotMode mode, int ownSlot, const TransportIn
         current_ = ownSlot; // a voice starts with its stored slot (SPEC 6.1a, Z19)
     }
     // The hub plans from the furthest position of the group including its own block.
-    if (member_ != GroupChannel::kNone) {
-        channel_.reportBlock(member_, endPpq, playing);
+    if (member != GroupChannel::kNone) {
+        channel_.reportBlock(member, endPpq, playing);
     }
 
     SlotDecision decision;
@@ -63,7 +64,7 @@ SlotDecision GroupSync::beginBlock(SlotMode mode, int ownSlot, const TransportIn
 
     case SlotMode::FollowHub: {
         const int hub = channel_.hub();
-        if (hub == GroupChannel::kNone || hub == member_) {
+        if (hub == GroupChannel::kNone || hub == member) {
             knownHub_ = GroupChannel::kNone;
             decision.slot = current_; // without a hub the voice plays on with the slot it has
             return decision;

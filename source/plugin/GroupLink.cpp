@@ -95,6 +95,10 @@ void GroupLink::onSnapshot(const mm::core::SlotSnapshot& snapshot) {
 void GroupLink::onStatus(mm::core::GroupStatus status, size_t voices) {
     status_.store(status);
     voices_.store(voices);
+    const juce::ScopedLock lock(lock_);
+    if (owner_ != nullptr) {
+        owner_->onGroupStatusChanged(status);
+    }
 }
 
 mm::core::SlotSnapshot GroupLink::currentSlots() {

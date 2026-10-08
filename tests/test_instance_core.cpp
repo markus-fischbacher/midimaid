@@ -119,7 +119,13 @@ TEST_CASE("instance settings convert to text and back, unknown text gives the de
     CHECK(parseRole("conductor") == InstanceRole::Solo);
     CHECK(parseRole("") == InstanceRole::Solo);
     CHECK(parseOutputMode("everything") == OutputMode::OneVoice);
-    CHECK(InstanceSettings{} == InstanceSettings{InstanceRole::Solo, OutputMode::OneVoice, 1, GenerationSettings{}});
+    for (const auto follow : {SlotFollow::Hub, SlotFollow::Own}) {
+        CHECK(parseSlotFollow(toString(follow)) == follow);
+    }
+    CHECK(parseSlotFollow("") == SlotFollow::Hub);
+    CHECK(parseSlotFollow("sideways") == SlotFollow::Hub);
+    CHECK(InstanceSettings{} ==
+          InstanceSettings{InstanceRole::Solo, OutputMode::OneVoice, 1, GenerationSettings{}, SlotFollow::Hub});
 }
 
 TEST_CASE("the output voice is limited to 1 to the voice maximum", "[instance-core]") {

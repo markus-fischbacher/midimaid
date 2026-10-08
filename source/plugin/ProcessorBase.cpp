@@ -77,7 +77,56 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
 }
 
 ProcessorBase::~ProcessorBase() {
-    groupLink_->detach(); // first: from here on no registry callback reaches this instance
+    groupLink_->detach();                              // first: from here on no registry callback reaches this instance
+    onGroupStatusChanged(mm::core::GroupStatus::Solo); // gives the channel slot back
+}
+
+void ProcessorBase::onGroupStatusChanged(mm::core::GroupStatus status) {
+    using mm::core::GroupStatus;
+    auto& channel = mm::engine::processGroupChannel();
+    // Hub and voices report to the channel; a solo instance does not take part in the planning.
+    const bool member = status == GroupStatus::Hub || status == GroupStatus::VoiceConnected ||
+                        status == GroupStatus::HubMissing || status == GroupStatus::HubOffered;
+    if (member && channelMember_ == mm::engine::GroupChannel::kNone) {
+        channelMember_ = channel.acquire();
+        groupSync_.setMember(channelMember_);
+    } else if (!member && channelMember_ != mm::engine::GroupChannel::kNone) {
+        groupSync_.setMember(mm::engine::GroupChannel::kNone); // before the slot goes back
+        channel.release(channelMember_);                       // also clears the hub if it was this one
+        channelMember_ = mm::engine::GroupChannel::kNone;
+    }
+    if (channelMember_ != mm::engine::GroupChannel::kNone) {
+        if (status == GroupStatus::Hub) {
+            channel.setHub(channelMember_);
+        } else if (channel.hub() == channelMember_) {
+            channel.setHub(mm::engine::GroupChannel::kNone);
+        }
+    }
+    if (status == GroupStatus::Hub) {
+        // A voice that took over the hub (acceptHubOffer) is a hub from now on: in its settings, its state and for the
+        // distribution of its own changes.
+        const juce::ScopedLock lock(slotsLock_);
+        settings_.role = mm::core::InstanceRole::Hub;
+    }
+    updateSlotMode();
+}
+
+void ProcessorBase::updateSlotMode() {
+    mm::core::InstanceRole role;
+    mm::core::SlotFollow follow;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        role = settings_.role;
+        follow = settings_.slotFollow;
+    }
+    auto mode = mm::engine::SlotMode::Own;
+    if (role == mm::core::InstanceRole::Hub && groupLink_ != nullptr &&
+        groupLink_->status() == mm::core::GroupStatus::Hub) {
+        mode = mm::engine::SlotMode::Hub;
+    } else if (role == mm::core::InstanceRole::Voice && follow == mm::core::SlotFollow::Hub) {
+        mode = mm::engine::SlotMode::FollowHub;
+    }
+    slotMode_.store(static_cast<int>(mode), std::memory_order_release);
 }
 
 void ProcessorBase::switchPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq) {
@@ -166,6 +215,7 @@ void ProcessorBase::setInstanceSettings(const mm::core::InstanceSettings& settin
         role = settings_.role;
         voice = settings_.outputVoice;
     }
+    updateSlotMode();
     groupLink_->setRole(role, voice); // outside the lock: the registry may call back
 }
 
@@ -271,7 +321,15 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
     }
 
     // Host parameters are read once per block and never written here (SPEC 3.13, 6.1a rule 1).
-    player_.setSlot(static_cast<int>(std::lround(slotValue_->load())));
+    const auto decision = groupSync_.beginBlock(
+        static_cast<mm::engine::SlotMode>(slotMode_.load(std::memory_order_acquire)),
+        static_cast<int>(std::lround(slotValue_->load())), transport, audio.getNumSamples(), getSampleRate(),
+        player_.startsOrJumps(transport, audio.getNumSamples(), getSampleRate()));
+    if (decision.stamped) {
+        player_.setSlotAt(decision.slot, decision.stampPpq);
+    } else {
+        player_.setSlot(decision.slot);
+    }
     const int voice = outputVoice_.load(std::memory_order_relaxed);
     player_.setMuted(muteValues_[static_cast<size_t>(voice - 1)]->load() >= 0.5f);
     player_.process(transport, audio.getNumSamples(), getSampleRate(), events_);
@@ -355,6 +413,8 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         root.setAttribute("role", juce::String(role.data(), role.size()));
         root.setAttribute("outputMode", juce::String(mode.data(), mode.size()));
         root.setAttribute("outputVoice", settings_.outputVoice);
+        root.setAttribute("slotFollow", juce::String(mm::core::toString(settings_.slotFollow).data(),
+                                                     mm::core::toString(settings_.slotFollow).size()));
         root.setAttribute("genStyle", juce::String(settings_.generation.styleId));
         root.setAttribute("genBars", static_cast<int>(settings_.generation.lengthBars));
         root.setAttribute("genEnergy", settings_.generation.energyPct);
@@ -378,6 +438,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     settings.role = mm::core::parseRole(root->getStringAttribute("role").toStdString());
     settings.outputMode = mm::core::parseOutputMode(root->getStringAttribute("outputMode").toStdString());
     settings.outputVoice = root->getIntAttribute("outputVoice", 1);
+    settings.slotFollow = mm::core::parseSlotFollow(root->getStringAttribute("slotFollow").toStdString());
     const mm::core::GenerationSettings defaults;
     if (root->hasAttribute("genStyle")) {
         settings.generation.styleId = root->getStringAttribute("genStyle").toStdString();
@@ -409,6 +470,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
         role = settings_.role;
         voice = settings_.outputVoice;
     }
+    updateSlotMode();
     groupLink_->setRole(role, voice); // a hub then hands its loaded slots to the voices
 }
 

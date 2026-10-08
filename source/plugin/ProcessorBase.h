@@ -4,6 +4,8 @@
 #include "core/ParameterRegister.h"
 #include "core/SlotBank.h"
 #include "core/StyleLibrary.h"
+#include "engine/GroupChannel.h"
+#include "engine/GroupSync.h"
 #include "engine/PatternHandover.h"
 #include "engine/PatternPlayer.h"
 #include "engine/SlotPublisher.h"
@@ -86,6 +88,11 @@ public:
     mm::core::GroupStatus groupStatus() const;
     size_t groupVoices() const;
     void acceptHubOffer();
+    /// Called by the group link on the message thread when the group status changes: takes or gives back the slot in
+    /// the group channel and recomputes the slot mode.
+    void onGroupStatusChanged(mm::core::GroupStatus status);
+    /// Planned slot changes that reached this voice too late for their point (SPEC 6.5, D-142).
+    uint32_t lateSwitches() const { return groupSync_.lateSwitches(); }
     /// Called by the group link on the message thread: a voice takes over the hub's slot set. Other roles ignore it.
     void adoptHubSlots(const mm::core::SlotSnapshot& snapshot);
     /// Slots that were left empty by the last state load because their data was bad (path and reason).
@@ -101,6 +108,7 @@ private:
     void onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern);
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
+    void updateSlotMode(); // message thread
 
     /// Empties the handover's return queue on the message thread (SPEC 6.3: patterns are freed there only).
     class ReturnCollector : private juce::Timer {
@@ -143,6 +151,9 @@ private:
     std::atomic<double> lastBpm_{120.0};
     MidiExporter exporter_;
 
+    mm::engine::GroupSync groupSync_{mm::engine::processGroupChannel(), mm::engine::GroupChannel::kNone};
+    std::atomic<int> slotMode_{static_cast<int>(mm::engine::SlotMode::Own)}; // read in the audio thread
+    int channelMember_ = mm::engine::GroupChannel::kNone;                    // message thread
     std::shared_ptr<GroupLink> groupLink_;
     GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance
 
