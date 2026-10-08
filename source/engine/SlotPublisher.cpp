@@ -41,6 +41,12 @@ std::unique_ptr<OwnedPattern> SlotPublisher::render(const core::Slot& slot) {
 }
 
 size_t SlotPublisher::sync(const core::SlotBank& bank, double gridPpq) {
+    if (bank.origin() != origin_) {
+        if (origin_ != 0) {
+            reset(); // a first bank has nothing published to forget
+        }
+        origin_ = bank.origin();
+    }
     size_t count = 0;
     for (size_t index = 0; index < kSlotCount; ++index) {
         const core::Slot* slot = bank.slot(index);

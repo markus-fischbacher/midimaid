@@ -13,9 +13,10 @@ namespace mm::engine {
 /// Message-thread side of the slots (SPEC 3.10, 6.3): renders what changed in a `SlotBank` for the voice this
 /// instance plays and hands it to the engine. JUCE-free; not thread-safe (the caller serialises).
 ///
-/// A slot is published when its revision differs from the one last published. A slot that was published and is now
-/// empty gets a silent pattern, so the engine does not keep playing the old one. A slot that was never published
-/// stays untouched (the engine's built-in pattern keeps playing there). Results are quantized to `gridPpq`.
+/// A slot is published when its revision differs from the one last published; a bank of another origin (a state
+/// load, the adopted slots of a hub) counts as changed everywhere, because its revisions mean something else.
+/// A slot that was published and is now empty gets a silent pattern, so the engine does not keep playing the old
+/// one. A slot that was never published stays untouched (silent). Results are quantized to `gridPpq`.
 class SlotPublisher {
 public:
     SlotPublisher(PatternHandover& handover, const core::StyleLibrary& styles) : handover_(handover), styles_(styles) {}
@@ -41,6 +42,7 @@ private:
     PatternHandover& handover_;
     const core::StyleLibrary& styles_;
     int outputVoice_ = 1;
+    uint64_t origin_ = 0;                                         ///< origin of the bank that was last synced
     std::array<std::optional<uint64_t>, kSlotCount> published_{}; ///< revision last published per slot
     std::array<bool, kSlotCount> everPublished_{};                ///< survives `reset`: the engine holds something
     size_t styleFallbacks_ = 0;

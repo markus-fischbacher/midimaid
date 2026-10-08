@@ -209,3 +209,28 @@ TEST_CASE("the published notes play from the bar line once the slot is selected"
     CHECK(rig.handover.activeVersion() == rig.bank.slot(2)->pattern->version);
     CHECK(rig.handover.activeSlot() == 3);
 }
+
+TEST_CASE("a bank of another origin is published again even when the revisions look the same", "[slot-publisher]") {
+    Rig rig;
+    REQUIRE(rig.bank.setResult(0, generated("peak_time", 1)));
+    CHECK(rig.publisher.sync(rig.bank) == 1);
+    takeResult(rig.handover, 0);
+
+    core::SlotBank other; // same revision number in slot 1, different content, another origin
+    REQUIRE(other.setResult(0, generated("peak_time", 2)));
+    REQUIRE(other.slot(0)->revision == rig.bank.slot(0)->revision);
+    REQUIRE(other.origin() != rig.bank.origin());
+    CHECK(rig.publisher.sync(other) == 1);
+    CHECK(takeResult(rig.handover, 0) != nullptr);
+}
+
+TEST_CASE("a copy of the bank keeps its origin and is not published again", "[slot-publisher]") {
+    Rig rig;
+    REQUIRE(rig.bank.setResult(0, generated("peak_time", 1)));
+    CHECK(rig.publisher.sync(rig.bank) == 1);
+    takeResult(rig.handover, 0);
+
+    const core::SlotBank copy = rig.bank;
+    CHECK(copy.origin() == rig.bank.origin());
+    CHECK(rig.publisher.sync(copy) == 0);
+}

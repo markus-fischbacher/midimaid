@@ -3,6 +3,7 @@
 #include "core/PatternValidation.h"
 
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 namespace mm::core {
@@ -32,6 +33,11 @@ std::string sanitizeSlotName(std::string_view name) {
         cleaned.resize(last == std::string::npos ? 0 : last + 1);
     }
     return cleaned;
+}
+
+uint64_t SlotBank::nextOrigin() {
+    static std::atomic<uint64_t> counter{0};
+    return ++counter;
 }
 
 const Slot* SlotBank::slot(size_t index) const {
