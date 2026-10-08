@@ -47,6 +47,39 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
       dragHandle_(std::make_unique<DragHandle>(processor.midiExporter())) {
     addAndMakeVisible(*dragHandle_);
 
+    const auto settings = processor_.instanceSettings();
+    roleBox_.addItem("Solo", 1);
+    roleBox_.addItem("Hub", 2);
+    roleBox_.addItem("Voice", 3);
+    roleBox_.setSelectedId(settings.role == mm::core::InstanceRole::Hub     ? 2
+                           : settings.role == mm::core::InstanceRole::Voice ? 3
+                                                                            : 1,
+                           juce::dontSendNotification);
+    roleBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        const int id = roleBox_.getSelectedId();
+        next.role = id == 2   ? mm::core::InstanceRole::Hub
+                    : id == 3 ? mm::core::InstanceRole::Voice
+                              : mm::core::InstanceRole::Solo;
+        processor_.setInstanceSettings(next);
+        updateStatus();
+    };
+    addAndMakeVisible(roleBox_);
+
+    for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
+        voiceBox_.addItem("Voice " + juce::String(voice), voice);
+    }
+    voiceBox_.setSelectedId(settings.outputVoice, juce::dontSendNotification);
+    voiceBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.outputVoice = voiceBox_.getSelectedId();
+        processor_.setInstanceSettings(next);
+    };
+    addAndMakeVisible(voiceBox_);
+
+    takeOverButton_.onClick = [this] { processor_.acceptHubOffer(); };
+    addChildComponent(takeOverButton_);
+
     const auto& profiles = processor_.styles().profiles();
     const auto current = processor_.instanceSettings().generation.styleId;
     for (size_t i = 0; i < profiles.size(); ++i) {
@@ -79,7 +112,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     statusLabel_.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(statusLabel_);
 
-    setSize(600, 320);
+    setSize(600, 360);
     processor_.midiExporter().requestExport(processor_.lastKnownBpm());
     updateStatus();
     startTimerHz(4); // keep the exported tempo equal to the DAW tempo and the status line current
@@ -90,6 +123,33 @@ PlaceholderEditor::~PlaceholderEditor() {
 }
 
 void PlaceholderEditor::updateStatus() {
+    using mm::core::GroupStatus;
+    juce::String group;
+    switch (processor_.groupStatus()) {
+    case GroupStatus::Hub: {
+        const auto voices = processor_.groupVoices();
+        group = "Hub: " + juce::String(static_cast<int>(voices)) + (voices == 1 ? " voice" : " voices");
+        break;
+    }
+    case GroupStatus::VoiceConnected:
+        group = "Connected to the hub";
+        break;
+    case GroupStatus::HubMissing:
+        group = "Hub not found";
+        break;
+    case GroupStatus::HubOffered:
+        group = "Hub not found: you can take over";
+        break;
+    case GroupStatus::HubRefused:
+        group = "There is already a hub";
+        break;
+    case GroupStatus::Solo:
+        break;
+    }
+    takeOverButton_.setVisible(processor_.groupStatus() == GroupStatus::HubOffered);
+    generateButton_.setEnabled(processor_.instanceSettings().role != mm::core::InstanceRole::Voice);
+    groupText_ = group;
+
     switch (processor_.generationStatus()) {
     case GenerationStatus::Generating:
         statusLabel_.setText("Generating...", juce::dontSendNotification);
@@ -100,9 +160,17 @@ void PlaceholderEditor::updateStatus() {
     case GenerationStatus::NoResult:
         statusLabel_.setText("No result: the slot is unchanged", juce::dontSendNotification);
         break;
+    case GenerationStatus::UseHub:
+        statusLabel_.setText("A voice plays what the hub generates", juce::dontSendNotification);
+        break;
     case GenerationStatus::Idle:
         statusLabel_.setText({}, juce::dontSendNotification);
         break;
+    }
+    if (groupText_.isNotEmpty()) {
+        const auto generation = statusLabel_.getText();
+        statusLabel_.setText(generation.isEmpty() ? groupText_ : groupText_ + "  |  " + generation,
+                             juce::dontSendNotification);
     }
 }
 
@@ -125,6 +193,12 @@ void PlaceholderEditor::paint(juce::Graphics& g) {
 void PlaceholderEditor::resized() {
     auto area = getLocalBounds();
     dragHandle_->setBounds(area.removeFromBottom(56).reduced(16));
+    auto roles = area.removeFromTop(48).reduced(16, 10);
+    takeOverButton_.setBounds(roles.removeFromRight(120));
+    roles.removeFromRight(8);
+    voiceBox_.setBounds(roles.removeFromRight(120));
+    roles.removeFromRight(8);
+    roleBox_.setBounds(roles);
     auto top = area.removeFromTop(48).reduced(16, 10);
     generateButton_.setBounds(top.removeFromRight(120));
     top.removeFromRight(8);

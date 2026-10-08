@@ -53,6 +53,9 @@ struct Slot {
 class SlotBank {
 public:
     const Slot* slot(size_t index) const;
+    /// Identifies this bank and its copies: unique per constructed bank in the process, kept by copies. Revisions are
+    /// only comparable between banks of the same origin (the slot publisher resets when the origin changes).
+    uint64_t origin() const { return origin_; }
     bool isEmpty(size_t index) const;
     /// The version the next stored pattern gets.
     uint64_t nextVersion() const { return nextVersion_; }
@@ -85,8 +88,11 @@ private:
     bool valid(size_t index) const { return index < kSlotCount; }
     bool store(size_t index, Pattern pattern, bool asResult);
 
+    static uint64_t nextOrigin();
+
     std::array<Slot, kSlotCount> slots_{};
     uint64_t nextVersion_ = 1;
+    uint64_t origin_ = nextOrigin();
 };
 
 } // namespace mm::core

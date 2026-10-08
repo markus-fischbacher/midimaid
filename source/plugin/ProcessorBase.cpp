@@ -72,9 +72,13 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
             parameters_.getRawParameterValue(mm::core::muteParameterId(voice));
     }
     player_.attach(&handover_);
+    groupLink_ = GroupLink::create(*this);
+    groupLink_->setRole(settings_.role, settings_.outputVoice);
 }
 
-ProcessorBase::~ProcessorBase() = default;
+ProcessorBase::~ProcessorBase() {
+    groupLink_->detach(); // first: from here on no registry callback reaches this instance
+}
 
 void ProcessorBase::switchPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq) {
     handover_.publishSwitch(std::move(pattern), gridPpq);
@@ -108,9 +112,39 @@ juce::AudioProcessorValueTreeState& ProcessorBase::parameters() {
 }
 
 void ProcessorBase::editSlots(const std::function<void(mm::core::SlotBank&)>& change) {
+    mm::core::SlotSnapshot forVoices;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        change(slots_);
+        publisher_.sync(slots_);
+        if (settings_.role == mm::core::InstanceRole::Hub) {
+            forVoices = std::make_shared<const mm::core::SlotBank>(slots_);
+        }
+    }
+    if (forVoices) {
+        groupLink_->publish(std::move(forVoices)); // outside the lock: the registry may call back
+    }
+}
+
+void ProcessorBase::adoptHubSlots(const mm::core::SlotSnapshot& snapshot) {
     const juce::ScopedLock lock(slotsLock_);
-    change(slots_);
+    if (settings_.role != mm::core::InstanceRole::Voice || snapshot == nullptr) {
+        return;
+    }
+    slots_ = *snapshot; // a copy: the hub's snapshot stays immutable
     publisher_.sync(slots_);
+}
+
+mm::core::GroupStatus ProcessorBase::groupStatus() const {
+    return groupLink_->status();
+}
+
+size_t ProcessorBase::groupVoices() const {
+    return groupLink_->voices();
+}
+
+void ProcessorBase::acceptHubOffer() {
+    groupLink_->acceptOffer();
 }
 
 mm::core::SlotBank ProcessorBase::slotsSnapshot() const {
@@ -124,8 +158,15 @@ mm::core::InstanceSettings ProcessorBase::instanceSettings() const {
 }
 
 void ProcessorBase::setInstanceSettings(const mm::core::InstanceSettings& settings) {
-    const juce::ScopedLock lock(slotsLock_);
-    setInstanceSettingsLocked(settings);
+    mm::core::InstanceRole role;
+    int voice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        setInstanceSettingsLocked(settings);
+        role = settings_.role;
+        voice = settings_.outputVoice;
+    }
+    groupLink_->setRole(role, voice); // outside the lock: the registry may call back
 }
 
 void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& settings) {
@@ -142,6 +183,10 @@ void ProcessorBase::generate() {
     {
         const juce::ScopedLock lock(slotsLock_);
         job.settings = settings_.generation;
+        if (settings_.role == mm::core::InstanceRole::Voice) {
+            generationStatus_ = GenerationStatus::UseHub; // a voice plays what the hub generates (forwarding: H5)
+            return;
+        }
     }
     job.seed = static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     job.slot = std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
@@ -354,10 +399,17 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
             problems.push_back(loaded.error);
         }
     }
-    const juce::ScopedLock lock(slotsLock_);
-    slots_ = std::move(bank);
-    slotLoadProblems_ = std::move(problems);
-    setInstanceSettingsLocked(settings);
+    mm::core::InstanceRole role;
+    int voice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        slots_ = std::move(bank);
+        slotLoadProblems_ = std::move(problems);
+        setInstanceSettingsLocked(settings);
+        role = settings_.role;
+        voice = settings_.outputVoice;
+    }
+    groupLink_->setRole(role, voice); // a hub then hands its loaded slots to the voices
 }
 
 InstrumentProcessor::InstrumentProcessor(juce::String name)
