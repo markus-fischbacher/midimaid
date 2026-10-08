@@ -18,6 +18,7 @@ mm_warn_sources(
     GenerationService.cpp
     GroupLink.cpp
     GroupText.cpp
+    RollView.cpp
     PlaceholderEditor.cpp
     HostDetection.cpp
     MidiExporter.cpp
@@ -30,7 +31,7 @@ file(GLOB MIDIMAID_STYLE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/resources
 juce_add_binary_data(mm_styles_data HEADER_NAME "MidiMaidStyles.h" NAMESPACE MidiMaidStyles SOURCES ${MIDIMAID_STYLE_FILES})
 set_target_properties(mm_styles_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(mm_plugin_common STATIC ProcessorBase.cpp EmbeddedStyles.cpp GenerationService.cpp GroupLink.cpp GroupText.cpp PlaceholderEditor.cpp HostDetection.cpp MidiExporter.cpp)
+add_library(mm_plugin_common STATIC ProcessorBase.cpp EmbeddedStyles.cpp GenerationService.cpp GroupLink.cpp GroupText.cpp RollView.cpp PlaceholderEditor.cpp HostDetection.cpp MidiExporter.cpp)
 target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(
     mm_plugin_common

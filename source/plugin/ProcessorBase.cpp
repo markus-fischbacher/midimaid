@@ -390,51 +390,89 @@ void ProcessorBase::writeEvents(juce::MidiBuffer& midi) const {
     }
 }
 
-void ProcessorBase::updateExport() {
-    const double bpm = lastKnownBpm();
-    ExportKey key;
-    key.bpmCentis = std::llround(bpm * 100.0);
-    MidiExporter::Request request;
-    {
-        const juce::ScopedLock lock(slotsLock_);
-        const int playing = handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
-        const int slotIndex = std::clamp(playing, 1, static_cast<int>(mm::core::kSlotCount)) - 1;
-        key.slot = slotIndex;
-        key.voice = settings_.outputVoice;
-        key.octave = settings_.octave;
-        key.origin = slots_.origin();
-        const mm::core::Slot* slot = slots_.slot(static_cast<size_t>(slotIndex));
-        if (slot != nullptr) {
-            key.revision = slot->revision;
-        }
-        if (slot != nullptr && slot->pattern) {
-            const mm::core::Pattern& pattern = *slot->pattern;
-            const auto voiceIndex = static_cast<size_t>(settings_.outputVoice - 1);
-            if (const auto* style = styles_.findOrFallback(pattern.styleId)) {
-                auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, settings_.octave);
-                key.empty = false;
-                request.notes = std::move(rendered.notes);
-                request.lengthTicks = rendered.lengthTicks;
-                request.bpm = bpm;
-                const juce::String voiceName =
-                    voiceIndex < pattern.voices.size() && pattern.voices[voiceIndex].role == mm::core::VoiceRole::Melody
-                        ? "Melody"
-                    : voiceIndex == 0 ? "Bass"
-                                      : "Voice" + juce::String(settings_.outputVoice);
-                request.fileName = "MidiMaid_Slot" + juce::String(slotIndex + 1) + "_" + voiceName + ".mid";
-                request.trackName = "MidiMaid " + voiceName;
-            }
+ProcessorBase::VoiceView ProcessorBase::playingVoice() const {
+    VoiceView view;
+    const juce::ScopedLock lock(slotsLock_);
+    const int playing = handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
+    const int slotIndex = std::clamp(playing, 1, static_cast<int>(mm::core::kSlotCount)) - 1;
+    view.slot = slotIndex + 1;
+    view.voice = settings_.outputVoice;
+    view.octave = settings_.octave;
+    view.origin = slots_.origin();
+    const mm::core::Slot* slot = slots_.slot(static_cast<size_t>(slotIndex));
+    if (slot == nullptr) {
+        return view;
+    }
+    view.revision = slot->revision;
+    if (!slot->pattern) {
+        return view;
+    }
+    const mm::core::Pattern& pattern = *slot->pattern;
+    const auto voiceIndex = static_cast<size_t>(settings_.outputVoice - 1);
+    const auto* style = styles_.findOrFallback(pattern.styleId);
+    if (style == nullptr) {
+        return view;
+    }
+    auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, settings_.octave);
+    view.hasPattern = true;
+    view.notes = std::move(rendered.notes);
+    view.lengthTicks = rendered.lengthTicks;
+    view.voiceName =
+        voiceIndex < pattern.voices.size() && pattern.voices[voiceIndex].role == mm::core::VoiceRole::Melody ? "Melody"
+        : voiceIndex == 0 ? "Bass"
+                          : "Voice " + juce::String(settings_.outputVoice);
+    return view;
+}
+
+bool ProcessorBase::mutedByOwnSwitch() const {
+    const int voice = outputVoice_.load(std::memory_order_relaxed);
+    return muteValues_[static_cast<size_t>(voice - 1)]->load() >= 0.5f;
+}
+
+bool ProcessorBase::mutedByHub() const {
+    return voiceRole_.load(std::memory_order_acquire) &&
+           groupSync_.mutedByHub(outputVoice_.load(std::memory_order_relaxed));
+}
+
+void ProcessorBase::showHub() {
+    groupLink_->forward(mm::core::GroupAction::ShowHub);
+}
+
+void ProcessorBase::bringEditorToFront() {
+    frontRequests_.fetch_add(1);
+    if (auto* editor = getActiveEditor()) {
+        if (auto* top = editor->getTopLevelComponent()) {
+            top->toFront(true);
         }
     }
+}
+
+void ProcessorBase::updateExport() {
+    const double bpm = lastKnownBpm();
+    VoiceView view = playingVoice();
+    ExportKey key;
+    key.bpmCentis = std::llround(bpm * 100.0);
+    key.origin = view.origin;
+    key.revision = view.revision;
+    key.slot = view.slot - 1;
+    key.voice = view.voice;
+    key.octave = view.octave;
+    key.empty = !view.hasPattern;
     if (exportKey_ && *exportKey_ == key) {
         return;
     }
     exportKey_ = key;
     if (key.empty) {
         exporter_.clear();
-    } else {
-        exporter_.requestExport(std::move(request));
+        return;
     }
+    MidiExporter::Request request;
+    request.notes = std::move(view.notes);
+    request.lengthTicks = view.lengthTicks;
+    request.bpm = bpm;
+    request.fileName = "MidiMaid_Slot" + juce::String(view.slot) + "_" + view.voiceName.replace(" ", "") + ".mid";
+    request.trackName = "MidiMaid " + view.voiceName;
+    exporter_.requestExport(std::move(request));
 }
 
 MidiExporter& ProcessorBase::midiExporter() {

@@ -111,8 +111,16 @@ void GroupLink::onStatus(mm::core::GroupStatus status, size_t voices) {
 
 void GroupLink::onAction(mm::core::GroupAction action) {
     const juce::ScopedLock lock(lock_);
-    if (owner_ != nullptr && action == mm::core::GroupAction::Generate) {
+    if (owner_ == nullptr) {
+        return;
+    }
+    switch (action) {
+    case mm::core::GroupAction::Generate:
         owner_->generate();
+        break;
+    case mm::core::GroupAction::ShowHub:
+        owner_->bringEditorToFront();
+        break;
     }
 }
 

@@ -26,7 +26,7 @@ enum class GroupStatus {
 using SlotSnapshot = std::shared_ptr<const SlotBank>;
 
 /// What a voice asks of the hub (SPEC 6.5: voice actions are forwarded to the hub).
-enum class GroupAction { Generate };
+enum class GroupAction { Generate, ShowHub };
 
 /// An instance as the registry sees it. All calls come on the message thread.
 class GroupMember {

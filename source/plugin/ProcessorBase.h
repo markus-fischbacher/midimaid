@@ -52,6 +52,35 @@ public:
 
     /// Export for drag & drop (SPEC 3.4).
     MidiExporter& midiExporter();
+    /// What this instance plays now, for the editor's roll and the export: the pattern of the playing slot (the slot of
+    /// the audio thread, before the first block the slot parameter) rendered for its voice with the octave. Message
+    /// thread.
+    struct VoiceView {
+        bool hasPattern = false;
+        std::vector<mm::core::PatternNote> notes;
+        uint32_t lengthTicks = 0;
+        int slot = 1; ///< 1 to 16
+        int voice = 1;
+        int octave = 0;
+        uint64_t origin = 0;    ///< of the slot bank
+        uint64_t revision = 0;  ///< of the slot
+        juce::String voiceName; ///< Bass, Melody or Voice n
+        /// True when `other` shows the same thing (no need to redraw or export again).
+        bool sameSource(const VoiceView& other) const {
+            return hasPattern == other.hasPattern && slot == other.slot && voice == other.voice &&
+                   octave == other.octave && origin == other.origin && revision == other.revision;
+        }
+    };
+    VoiceView playingVoice() const;
+    /// True when this instance is silent because of a mute switch: its own, or (for a voice) the hub's. Any thread.
+    bool mutedByOwnSwitch() const;
+    bool mutedByHub() const;
+    /// Voice: asks the hub to bring its window to the front, as far as the host allows (SPEC 8.1).
+    void showHub();
+    /// Message thread: brings the window of this instance's editor to the front, if there is one.
+    void bringEditorToFront();
+    /// How often this instance was asked to bring its window to the front (for tests and diagnosis).
+    uint32_t frontRequests() const { return frontRequests_.load(); }
     /// Message thread: makes the exported file match what this instance plays now (the playing slot's pattern for its
     /// voice, with the octave, at the DAW tempo); writes in the background and only when something changed. An empty
     /// slot leaves nothing to drag. Called by the editor's timer.
@@ -165,6 +194,7 @@ private:
         bool operator==(const ExportKey&) const = default;
     };
     std::optional<ExportKey> exportKey_; // message thread
+    std::atomic<uint32_t> frontRequests_{0};
 
     mm::engine::GroupSync groupSync_{mm::engine::processGroupChannel(), mm::engine::GroupChannel::kNone};
     std::atomic<int> slotMode_{static_cast<int>(mm::engine::SlotMode::Own)}; // read in the audio thread

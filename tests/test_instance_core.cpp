@@ -2,8 +2,10 @@
 #include "core/OutputStage.h"
 #include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
+#include "core/RollLayout.h"
 #include "core/StyleLibrary.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
 #include <sstream>
@@ -202,4 +204,49 @@ TEST_CASE("the octave of playback notes is limited to two up and down", "[instan
     for (size_t i = 0; i < two.notes.size(); ++i) {
         CHECK(beyond.notes[i].pitch == two.notes[i].pitch);
     }
+}
+
+TEST_CASE("the roll layout maps ticks and pitches to unit rectangles", "[instance-core]") {
+    const std::vector<PatternNote> notes{{0, 960, 1, 40, 100}, {1920, 480, 1, 52, 90}};
+    const RollLayout layout = layoutRoll(notes, 4 * 960 * 2, 12); // two bars
+    CHECK(layout.bars == 2);
+    CHECK(layout.lowPitch == 39); // one row below the lowest note
+    CHECK(layout.highPitch == 53);
+    REQUIRE(layout.notes.size() == 2);
+    const float rows = 15.0f;
+    CHECK(layout.notes[0].x == 0.0f);
+    CHECK(layout.notes[0].width == Catch::Approx(960.0 / 7680.0));
+    CHECK(layout.notes[1].x == Catch::Approx(1920.0 / 7680.0));
+    CHECK(layout.notes[0].y == Catch::Approx((53.0f - 40.0f) / rows));
+    CHECK(layout.notes[1].y == Catch::Approx(1.0f / rows)); // the highest note is the second row from the top
+    CHECK(layout.notes[0].height == Catch::Approx(1.0f / rows));
+    CHECK(layout.notes[1].velocity == 90);
+}
+
+TEST_CASE("the roll shows at least the minimum number of rows around the notes", "[instance-core]") {
+    const RollLayout one = layoutRoll({{0, 480, 1, 45, 100}}, 3840, 12);
+    CHECK(one.highPitch - one.lowPitch + 1 == 12);
+    CHECK(one.lowPitch <= 44);
+    CHECK(one.highPitch >= 46);
+    REQUIRE(one.notes.size() == 1);
+    CHECK(one.notes[0].y >= 0.0f);
+    CHECK(one.notes[0].y + one.notes[0].height <= 1.0f);
+
+    const RollLayout low = layoutRoll({{0, 480, 1, 0, 100}}, 3840, 12); // at the bottom of the range
+    CHECK(low.lowPitch == 0);
+    CHECK(low.highPitch - low.lowPitch + 1 == 12);
+    const RollLayout high = layoutRoll({{0, 480, 1, 127, 100}}, 3840, 12);
+    CHECK(high.highPitch == 127);
+    CHECK(high.highPitch - high.lowPitch + 1 == 12);
+}
+
+TEST_CASE("an empty or zero length pattern gives a layout without notes", "[instance-core]") {
+    const RollLayout empty = layoutRoll({}, 3840);
+    CHECK(empty.notes.empty());
+    CHECK(empty.highPitch - empty.lowPitch + 1 >= 12);
+    const RollLayout zero = layoutRoll({{0, 100, 1, 50, 100}}, 0);
+    CHECK(zero.bars == 1);
+    REQUIRE(zero.notes.size() == 1);
+    const RollLayout partial = layoutRoll({}, 3840 + 1);
+    CHECK(partial.bars == 2); // a started bar counts
 }

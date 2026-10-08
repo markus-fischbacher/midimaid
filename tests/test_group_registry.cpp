@@ -316,3 +316,15 @@ TEST_CASE("an action without a hub is not forwarded", "[group]") {
     CHECK_FALSE(registry.forward(voiceId, GroupAction::Generate));
     CHECK_FALSE(registry.forward(soloId, GroupAction::Generate));
 }
+
+TEST_CASE("a voice can ask the hub to show itself", "[group]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(60);
+    auto voice = std::make_shared<FakeMember>(40);
+    registry.add(hub, InstanceRole::Hub);
+    const auto voiceId = registry.add(voice, InstanceRole::Voice);
+    CHECK(registry.forward(voiceId, GroupAction::ShowHub));
+    REQUIRE(hub->actions.size() == 1);
+    CHECK(hub->actions[0] == GroupAction::ShowHub);
+    CHECK(voice->actions.empty());
+}

@@ -1,5 +1,6 @@
 #include "plugin/PlaceholderEditor.h"
 
+#include "core/ParameterRegister.h"
 #include "plugin/GroupText.h"
 
 namespace mm::plugin {
@@ -124,6 +125,29 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addAndMakeVisible(styleBox_);
 
+    openHubButton_.setComponentID("openHub");
+    openHubButton_.onClick = [this] { processor_.showHub(); };
+    addChildComponent(openHubButton_);
+
+    muteButton_.setComponentID("mute");
+    addChildComponent(muteButton_);
+
+    octaveBox_.setComponentID("octave");
+    for (int octave = -2; octave <= 2; ++octave) {
+        octaveBox_.addItem(juce::String("Octave ") + (octave > 0 ? "+" : "") + juce::String(octave), octave + 3);
+    }
+    octaveBox_.setSelectedId(settings.octave + 3, juce::dontSendNotification);
+    octaveBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.octave = octaveBox_.getSelectedId() - 3;
+        processor_.setInstanceSettings(next);
+        updateVoiceView();
+    };
+    addChildComponent(octaveBox_);
+
+    rollView_.setComponentID("roll");
+    addChildComponent(rollView_);
+
     generateButton_.onClick = [this] {
         processor_.generate();
         updateStatus();
@@ -135,9 +159,8 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     statusLabel_.setMinimumHorizontalScale(1.0f); // the hub hint is long: wrap instead of squeezing
     addAndMakeVisible(statusLabel_);
 
-    setSize(600, 360);
     processor_.updateExport();
-    updateStatus();
+    updateStatus();  // chooses the layout and the size
     startTimerHz(4); // keep the exported tempo equal to the DAW tempo and the status line current
 }
 
@@ -155,8 +178,15 @@ void PlaceholderEditor::updateStatus() {
         roleBox_.setSelectedId(roleId, juce::dontSendNotification); // e.g. a voice that took over the hub
     }
     const bool isVoice = role == mm::core::InstanceRole::Voice;
+    if (isVoice != voiceLayout_ || getWidth() == 0) {
+        applyLayout(isVoice);
+    }
+    if (isVoice) {
+        updateVoiceView();
+    }
     generateButton_.setEnabled(!isVoice || processor_.groupStatus() == GroupStatus::VoiceConnected);
     followBox_.setVisible(isVoice);
+    openHubButton_.setEnabled(processor_.groupStatus() == GroupStatus::VoiceConnected);
     outputBox_.setVisible(role == mm::core::InstanceRole::Hub);
     if (isVoice && processor_.lateSwitches() > 0) {
         group += " (" + juce::String(static_cast<int>(processor_.lateSwitches())) + " late)";
@@ -190,6 +220,43 @@ void PlaceholderEditor::updateStatus() {
     }
 }
 
+void PlaceholderEditor::applyLayout(bool voiceLayout) {
+    voiceLayout_ = voiceLayout;
+    styleBox_.setVisible(!voiceLayout);
+    muteButton_.setVisible(voiceLayout);
+    octaveBox_.setVisible(voiceLayout);
+    openHubButton_.setVisible(voiceLayout);
+    rollView_.setVisible(voiceLayout);
+    setSize(600, voiceLayout ? 320 : 360); // the voice UI is compact (SPEC 8.1)
+    resized();
+}
+
+void PlaceholderEditor::updateVoiceView() {
+    // The mute button follows the host parameter of the voice this instance plays, also under automation.
+    const int voice = processor_.instanceSettings().outputVoice;
+    if (voice != muteVoice_) {
+        muteVoice_ = voice;
+        muteAttachment_.reset();
+        if (auto* parameter = processor_.parameters().getParameter(mm::core::muteParameterId(voice))) {
+            muteAttachment_ = std::make_unique<juce::ButtonParameterAttachment>(*parameter, muteButton_);
+        }
+    }
+    const bool mutedByHub = processor_.mutedByHub();
+    muteButton_.setButtonText(mutedByHub ? "Mute (by hub)" : "Mute");
+    rollView_.setDimmed(processor_.mutedByOwnSwitch() || mutedByHub);
+    const int octaveId = processor_.instanceSettings().octave + 3;
+    if (octaveBox_.getSelectedId() != octaveId) {
+        octaveBox_.setSelectedId(octaveId, juce::dontSendNotification);
+    }
+    auto view = processor_.playingVoice();
+    if (!view.sameSource(shown_) || shown_.origin == 0 /* nothing shown yet */) {
+        shown_ = view;
+        rollView_.setAccent(view.voiceName == "Melody" ? juce::Colour(0xffe0a458) : juce::Colour(0xff4fc3a1));
+        rollView_.setContent(mm::core::layoutRoll(view.notes, view.lengthTicks),
+                             "Slot " + juce::String(view.slot) + " - " + view.voiceName, !view.hasPattern);
+    }
+}
+
 void PlaceholderEditor::timerCallback() {
     updateStatus();
     processor_.updateExport();
@@ -217,8 +284,21 @@ void PlaceholderEditor::resized() {
     auto top = area.removeFromTop(48).reduced(16, 10);
     generateButton_.setBounds(top.removeFromRight(120));
     top.removeFromRight(8);
-    styleBox_.setBounds(top);
-    statusLabel_.setBounds(area.removeFromTop(48).reduced(16, 0));
+    if (voiceLayout_) {
+        openHubButton_.setBounds(top.removeFromRight(110));
+        top.removeFromRight(8);
+        octaveBox_.setBounds(top.removeFromRight(130));
+        top.removeFromRight(8);
+        muteButton_.setBounds(top.removeFromLeft(130));
+    } else {
+        styleBox_.setBounds(top);
+    }
+    if (voiceLayout_) {
+        statusLabel_.setBounds(area.removeFromBottom(40).reduced(16, 0));
+        rollView_.setBounds(area.reduced(16, 4));
+    } else {
+        statusLabel_.setBounds(area.removeFromTop(48).reduced(16, 0));
+    }
 }
 
 } // namespace mm::plugin
