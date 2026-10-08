@@ -14,6 +14,9 @@ enum class InstanceRole { Solo, Hub, Voice };
 /// What the instance sends to its MIDI output (SPEC 6.5): the notes of one voice, or nothing.
 enum class OutputMode { OneVoice, None };
 
+/// What a voice does with the slot (SPEC 6.1a, D-131): play the slot of the hub, or follow its own slot parameter.
+enum class SlotFollow { Hub, Own };
+
 /// What "Generate" asks for (SPEC 3.1). Key, scale and seed are not settings of the instance: the seed is drawn for
 /// every request (and stored in the pattern), key and scale stay automatic until the hub UI offers them.
 struct GenerationSettings {
@@ -34,15 +37,19 @@ struct InstanceSettings {
     OutputMode outputMode = OutputMode::OneVoice;
     int outputVoice = 1; ///< 1 to `kMaxVoices`
     GenerationSettings generation;
+    SlotFollow slotFollow = SlotFollow::Hub; ///< only a voice looks at it
 
     bool operator==(const InstanceSettings&) const = default;
 };
 
 std::string_view toString(InstanceRole role);
 std::string_view toString(OutputMode mode);
+std::string_view toString(SlotFollow follow);
 /// Unknown text gives the default (Solo, one voice), so that states of later versions still load.
 InstanceRole parseRole(std::string_view text);
 OutputMode parseOutputMode(std::string_view text);
+/// Unknown text gives `Hub`.
+SlotFollow parseSlotFollow(std::string_view text);
 /// Clamps to 1 to `kMaxVoices`.
 int clampOutputVoice(int voice);
 

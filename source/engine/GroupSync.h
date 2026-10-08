@@ -3,6 +3,7 @@
 #include "engine/GroupChannel.h"
 #include "engine/PatternPlayer.h"
 
+#include <atomic>
 #include <cstdint>
 
 namespace mm::engine {
@@ -35,6 +36,10 @@ class GroupSync {
 public:
     GroupSync(GroupChannel& channel, int member) : channel_(channel), member_(member) {}
 
+    /// The channel slot of this member (`GroupChannel::kNone` for none: nothing is reported then). Any thread; the
+    /// audio thread picks it up with the next block.
+    void setMember(int member) { member_.store(member, std::memory_order_release); }
+
     /// `restart`: this block is a start or a jump (`PatternPlayer::startsOrJumps`). `ownSlot` is the slot parameter.
     SlotDecision beginBlock(SlotMode mode, int ownSlot, const TransportInfo& transport, int numSamples,
                             double sampleRate, bool restart);
@@ -44,7 +49,7 @@ public:
 
 private:
     GroupChannel& channel_;
-    int member_;
+    std::atomic<int> member_;
     bool started_ = false;
     int lastOwnSlot_ = 1;
     int current_ = 1; // the slot a following voice plays

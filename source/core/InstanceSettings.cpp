@@ -20,6 +20,14 @@ std::string_view toString(OutputMode mode) {
     return mode == OutputMode::None ? "none" : "one_voice";
 }
 
+std::string_view toString(SlotFollow follow) {
+    return follow == SlotFollow::Own ? "own" : "hub";
+}
+
+SlotFollow parseSlotFollow(std::string_view text) {
+    return text == "own" ? SlotFollow::Own : SlotFollow::Hub;
+}
+
 InstanceRole parseRole(std::string_view text) {
     if (text == "hub") {
         return InstanceRole::Hub;
