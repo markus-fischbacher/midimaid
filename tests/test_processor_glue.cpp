@@ -4,6 +4,7 @@
 #include <cmath>
 #include <memory>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace {
@@ -351,4 +352,147 @@ TEST_CASE("selecting a slot on the processor plays its pattern from the next bar
     REQUIRE(played.size() == 1);
     CHECK(std::abs(played.front().sample - 96000) <= 1); // PPQ 4.0
     CHECK(processor.activePatternVersion() == 4);
+}
+
+// ---- host parameters (SPEC 3.13, D-93, D-138) ----
+
+namespace {
+
+void setParameter(mm::plugin::ProcessorBase& processor, const char* id, float unnormalised) {
+    auto* parameter = processor.parameters().getParameter(id);
+    REQUIRE(parameter != nullptr);
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(unnormalised));
+}
+
+} // namespace
+
+TEST_CASE("every register parameter exists with its ID, range, default and automation flag", "[plugin][parameters]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    CHECK(static_cast<size_t>(processor.getParameters().size()) == mm::core::kParameterCount);
+    for (const auto& spec : mm::core::parameterRegister()) {
+        auto* parameter = dynamic_cast<juce::RangedAudioParameter*>(
+            processor.parameters().getParameter(juce::String(spec.id.data(), spec.id.size())));
+        REQUIRE(parameter != nullptr);
+        INFO(std::string(spec.id));
+        const auto range = parameter->getNormalisableRange();
+        CHECK(static_cast<int>(range.start) == spec.min);
+        CHECK(static_cast<int>(range.end) == spec.max);
+        CHECK(static_cast<int>(std::lround(parameter->convertFrom0to1(parameter->getDefaultValue()))) ==
+              spec.defaultValue);
+        CHECK(parameter->getVersionHint() == mm::core::kParameterVersionHint);
+        CHECK(parameter->isAutomatable() == spec.isActive()); // later releases cannot be automated
+        CHECK(parameter->getName(64) == juce::String(spec.name.data(), spec.name.size()));
+    }
+}
+
+TEST_CASE("the slot parameter drives the playback and a start plays it at once", "[plugin][parameters]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    processor.submitResult(3, ownedPattern({{0, 240, 1, 57, 100}}, 8));
+    setParameter(processor, "slot", 3.0f);
+    CHECK(processor.activeSlot() == 3);
+    const auto notes = rig.run(10); // the first block is a start
+    REQUIRE_FALSE(notes.empty());
+    CHECK(notes.front().pitch == 57);
+    CHECK(notes.front().sample == 0);
+    CHECK(processor.activePatternVersion() == 8);
+}
+
+TEST_CASE("the mute parameter silences the voice and un-muting brings it back", "[plugin][parameters]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    auto notes = rig.run(30); // the first note (from sample 12000) sounds
+    REQUIRE_FALSE(notes.empty());
+    REQUIRE(notes.back().on);
+
+    setParameter(processor, "mute_1", 1.0f);
+    notes = rig.run(2);
+    int offs = 0;
+    for (const auto& n : notes) {
+        offs += n.on ? 0 : 1;
+    }
+    CHECK(offs == 1);
+    notes = rig.run(120); // more notes would start
+    CHECK(notes.empty());
+
+    setParameter(processor, "mute_1", 0.0f);
+    notes = rig.run(200);
+    CHECK_FALSE(notes.empty());
+}
+
+TEST_CASE("the mute of another voice does not silence this instance", "[plugin][parameters]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    setParameter(processor, "mute_2", 1.0f);
+    CHECK_FALSE(rig.run(100).empty());
+}
+
+TEST_CASE("the state keeps the parameter values and is stable", "[plugin][parameters]") {
+    mm::plugin::InstrumentProcessor source("Test");
+    setParameter(source, "slot", 5.0f);
+    setParameter(source, "mute_1", 1.0f);
+    juce::MemoryBlock saved;
+    source.getStateInformation(saved);
+
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.activeSlot() == 5);
+    CHECK(target.parameters().getRawParameterValue("mute_1")->load() >= 0.5f);
+
+    juce::MemoryBlock again;
+    target.getStateInformation(again);
+    CHECK(again == saved); // saving what was loaded gives the same bytes
+}
+
+TEST_CASE("damaged or foreign state data is ignored", "[plugin][parameters]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    setParameter(processor, "slot", 4.0f);
+
+    const char garbage[] = "this is not a state";
+    processor.setStateInformation(garbage, static_cast<int>(sizeof(garbage)));
+    processor.setStateInformation(nullptr, 0);
+    CHECK(processor.activeSlot() == 4);
+
+    juce::XmlElement foreign("SomethingElse");
+    juce::MemoryBlock block;
+    juce::AudioProcessor::copyXmlToBinary(foreign, block);
+    processor.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
+    CHECK(processor.activeSlot() == 4);
+
+    // A valid state without a version number is not trusted.
+    mm::plugin::InstrumentProcessor other("Test");
+    setParameter(other, "slot", 12.0f);
+    juce::MemoryBlock valid;
+    other.getStateInformation(valid);
+    auto unversioned = juce::AudioProcessor::getXmlFromBinary(valid.getData(), static_cast<int>(valid.getSize()));
+    REQUIRE(unversioned != nullptr);
+    unversioned->removeAttribute("stateVersion");
+    juce::MemoryBlock block2;
+    juce::AudioProcessor::copyXmlToBinary(*unversioned, block2);
+    processor.setStateInformation(block2.getData(), static_cast<int>(block2.getSize()));
+    CHECK(processor.activeSlot() == 4);
+}
+
+TEST_CASE("a newer state version loads as far as understood, unknown parameters are skipped", "[plugin][parameters]") {
+    mm::plugin::InstrumentProcessor source("Test");
+    setParameter(source, "slot", 9.0f);
+    juce::MemoryBlock saved;
+    source.getStateInformation(saved);
+
+    auto root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(root != nullptr);
+    root->setAttribute("stateVersion", 99);
+    root->setAttribute("somethingNew", "x");
+    if (auto* parameters = root->getChildElement(0)) {
+        auto* unknown = parameters->createNewChildElement("PARAM");
+        unknown->setAttribute("id", "no_such_parameter");
+        unknown->setAttribute("value", 3.0);
+    }
+    root->createNewChildElement("FutureSection");
+    juce::MemoryBlock newer;
+    juce::AudioProcessor::copyXmlToBinary(*root, newer);
+
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(newer.getData(), static_cast<int>(newer.getSize()));
+    CHECK(target.activeSlot() == 9);
 }

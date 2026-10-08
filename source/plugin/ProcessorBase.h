@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/ParameterRegister.h"
 #include "engine/PatternHandover.h"
 #include "engine/PatternPlayer.h"
 #include "plugin/MidiExporter.h"
@@ -46,11 +47,13 @@ public:
     void editPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern);
     /// Message thread: result for `slot` (1 to 16); it plays at the next grid point once that slot is selected.
     void submitResult(int slot, std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq = 4.0);
-    /// Message thread: the slot parameter (1 to 16). Stand-in until the host parameter `slot` exists; the audio
-    /// thread reads it at each block start (SPEC 3.13).
+    /// Message thread: sets the host parameter `slot` (1 to 16) as if the user had moved it. The audio thread reads
+    /// the parameter at each block start and never writes it (SPEC 3.13).
     void selectSlot(int slot);
-    /// Slot that is selected (1 to 16). Safe to read from any thread.
+    /// Value of the host parameter `slot` (1 to 16). Safe to read from any thread.
     int activeSlot() const;
+    /// The host parameters of SPEC 3.13, created from the register (D-93).
+    juce::AudioProcessorValueTreeState& parameters();
     /// Version of the pattern that is playing (0 for the built-in placeholder). Safe to read from any thread.
     uint64_t activePatternVersion() const;
 
@@ -71,13 +74,20 @@ private:
         mm::engine::PatternHandover& handover_;
     };
 
+    /// Version of the plugin state (SPEC 9.1); every change of its format raises it and gets a migration.
+    static constexpr int kStateVersion = 1;
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
     juce::String name_;
+    juce::AudioProcessorValueTreeState parameters_;
+    std::atomic<float>* slotValue_ = nullptr; // raw values, read in the audio thread
+    std::atomic<float>* muteValue_ = nullptr;
+    int outputVoice_ = 1; // the voice this instance plays (1 = first); roles come with the hub
     mm::engine::PatternHandover handover_;
     mm::engine::PatternPlayer player_;
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;
     std::atomic<double> lastBpm_{120.0};
-    std::atomic<int> requestedSlot_{1};
     MidiExporter exporter_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProcessorBase)

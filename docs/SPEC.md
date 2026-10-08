@@ -348,6 +348,16 @@ angelegten Parameter.
 | `creativity` | Kreativität | 0–100 % | 40 % | wirkt erst bei der nächsten Generierung (§7.6) | Backlog |
 | `energy` | Energie | 0–100 % | 50 % (Startwert) | wirkt erst bei der nächsten Generierung | Backlog |
 
+**Umsetzung (D-138):** Das Register liegt als Tabelle in `core/ParameterRegister` (ohne JUCE); der Test
+`the parameter IDs are fixed` schreibt die IDs fest. Die Namen sind host-sichtbar, englisch und sprachunabhängig
+(„Slot“, „Mute 1“, „Variation All“ …), weil sie in Automationsspuren und gespeicherten Projekten stehen; sie laufen
+nicht über die Übersetzungstabelle (§8.2). Ganzzahlige Parameter sind `AudioParameterInt`, Schalter und Trigger
+`AudioParameterBool`; nicht aktive Parameter sind mit `withAutomatable(false)` angelegt. Die JUCE-Wrapper machen
+daraus bei VST3 ein Parameter ohne `kCanAutomate` und bei AU das Flag `NonRealTime`; die Parameter bleiben sichtbar
+(Verhalten in Live und Logic: ROADMAP Phase 0, „Nicht aktive Parameter“). Der Audio-Thread liest `slot` und
+`mute_<Stimme>` am Blockanfang aus den Roh-Atomics und schreibt nie einen Parameter. Eine Instanz liest vorerst
+`mute_1` (die erste Stimme); die Zuordnung der Stimme kommt mit den Rollen (§6.5).
+
 Alle Parameter werden **schon in v1.0 mit fester ID angelegt**. Nicht aktive Parameter sind ohne Wirkung
 und als nicht automatisierbar markiert; VST3 und AU können Parameter nicht zuverlässig ausblenden, deshalb
 tragen sie schon ihren späteren Namen. Wie Live und Logic sie anzeigen, prüft Phase 0.
@@ -939,6 +949,10 @@ Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel 
 | Z24 | Bearbeitung von Slot 2, während Slot 1 klingt | Slot 1 bleibt unberührt (keine Note-Offs); der bearbeitete Stand spielt nach dem Wechsel zu Slot 2 |
 | Z25 | Slot-Parameter 3 beim Start, Slot 3 gefüllt (Start bei 148,0) | Slot 3 sofort, Position 0 bei 148,0; gemeldeter Slot 3 |
 | Z26 | Rückgabe-Queue voll, Wechsel zwischen zwei abgelegten Slots | Der Wechsel erfolgt bei Q, denn er gibt nichts zurück |
+| Z27 | Eine Note klingt, `mute_<Stimme>` wird gesetzt | Im Offset 0 des Blocks, der den Wert liest, Note-Off; danach beginnt keine Note, solange stumm geschaltet ist; Position und Wechsel laufen weiter |
+| Z28 | Mute wird aufgehoben, während eine Note des Patterns schon läuft | Diese Note wird nicht nachträglich gestartet; ab der nächsten Note-On-Zeit spielt die Stimme wieder |
+| Z29 | Mute bei Stop, danach Start | Stumm ab dem ersten Block, bis Mute aufgehoben wird |
+| Z30 | Slot-Wechsel fällig, während stumm geschaltet ist | Der Wechsel geschieht lautlos zum Wechselpunkt; nach dem Aufheben spielt das neue Pattern |
 
 ### 6.2 Note-Off-Garantie
 - Aktiv-Tabelle 16 × 128 (fest allokiert). Gespeichert wird die tatsächlich gesendete Tonhöhe
@@ -1381,7 +1395,7 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
   zugeordnete Stimme, Ausgabemodus, gewählter Provider und Modell, **keine Keys**
 - Instanzübergreifende Einstellungen (Drum-Zuordnung, Provider-Konfiguration, Notennamen-Konvention)
   liegen in den globalen Einstellungen (§9.2), nicht im Projekt
-- Format: `juce::ValueTree` → XML, mit `stateVersion` und Migrationsfunktionen; Patterns sind darin als
+- Format: `juce::ValueTree` → XML (Wurzel `MidiMaid` mit Attribut `stateVersion`, derzeit 1, darin der Parameterzustand), mit Migrationsfunktionen; Patterns sind darin als
   JSON aus `core` eingebettet (§5, dieselbe Form wie in der Bibliothek)
 - Laden eines Projekts aus einer neueren Plugin-Version darf nicht abstürzen
 

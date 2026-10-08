@@ -1335,3 +1335,75 @@ TEST_CASE("slots, results and edits from two threads are handed over without los
     }
     CHECK(token.use_count() == 1); // everything was freed exactly once
 }
+
+// ---- mute (SPEC 3.13, D-138) ----
+
+TEST_CASE("mute ends sounding notes at once and keeps the voice silent (Z27)", "[engine][mute]") {
+    Simulation sim;          // placeholder: notes at 0.5, 1.5, 2.5, 3.5, 0.375 long
+    sim.blockAt(0.0, 14400); // the note at 0.5 sounds
+    REQUIRE(sim.soundingCount() == 1);
+    sim.player().setMuted(true);
+    const long long before = sim.clock();
+    sim.block(512);
+    const auto offs = ofPitch(sim.events(), 45, false);
+    REQUIRE(offs.size() == 1);
+    CHECK(offs.front().sample == before); // offset 0 of the block that reads the mute
+    CHECK(sim.soundingCount() == 0);
+
+    const size_t onsBefore = ofPitch(sim.events(), 45, true).size();
+    while (sim.clock() < 8 * 24000) { // to about 4 PPQ, several notes pass
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 45, true).size() == onsBefore); // nothing started
+}
+
+TEST_CASE("after un-muting the next notes play, a note under way is not started late", "[engine][mute]") {
+    Simulation sim;
+    sim.blockAt(1.0, 12000); // to 1.5
+    sim.player().setMuted(true);
+    sim.block(512); // the note at 1.5 starts while muted
+    sim.player().setMuted(false);
+    sim.block(512); // 1.5 + ...: the note (to 1.875) is under way
+    CHECK(sim.soundingCount() == 0);
+    const size_t onsSoFar = ofPitch(sim.events(), 45, true).size();
+    while (sim.clock() < 2 * 24000) { // to about 2.6
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 45, true);
+    REQUIRE(ons.size() == onsSoFar + 1);
+    CHECK(ons.back().sample ==
+          Catch::Approx(1.5 * 24000.0).margin(1.0)); // the note at 2.5, 1.5 PPQ after the start at 1.0
+}
+
+TEST_CASE("a mute set while the transport stands holds after the start", "[engine][mute]") {
+    Simulation sim;
+    sim.player().setMuted(true);
+    sim.block(512, false);
+    sim.blockAt(0.0, 24000 * 2); // a whole bar and more with four notes
+    CHECK(sim.events().empty());
+    sim.player().setMuted(false);
+    sim.blockAt(0.0, 24000 * 2);
+    CHECK(sim.events().size() >= 2);
+}
+
+TEST_CASE("a slot change still happens while muted and plays after un-muting", "[engine][mute]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned(nextNotes(), 2), 4.0);
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().setMuted(true);
+    sim.player().setSlot(2);
+    while (sim.clock() < 3 * 24000) { // past the bar line at 8.0
+        sim.block(512);
+    }
+    CHECK_FALSE(sim.player().switchPending()); // the switch happened silently
+    CHECK(handover.activeSlot() == 2);
+    CHECK(ofPitch(sim.events(), 50, true).empty());
+    sim.player().setMuted(false);
+    while (sim.clock() < 6 * 24000) {
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 50, true).size() >= 1); // the new pattern plays
+}

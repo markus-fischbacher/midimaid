@@ -116,7 +116,7 @@ sondern in der Phase nachholen, in der das Feature entsteht.
 - [ ] Parameter-Automation (Slot), Start mitten im Arrangement mit automatisiertem Slot
 - [ ] Freeze einer Synth-Spur, die nur über „MIDI From“ gespielt wird (Erwartung: still)
 - [ ] Einzelspur-Bounce und Freeze einer Voice mit Slot-Automation im Hub (O-22)
-- [ ] Nicht aktive Parameter in Live und Logic (SPEC §3.13)
+- [ ] Nicht aktive Parameter in Live und Logic (SPEC §3.13): **jetzt prüfbar (D-138).** Neuen Build laden. Zeigen Live (VST3) und Logic (AU) die 15 nicht aktiven Parameter (u. a. „Transpose“, „Generate“, „Variation 1“ bis „Variation All“, „Evolve“, „Evolve Keep“, „Creativity“, „Energy“) in der Automationsliste, und lässt sich einer automatisieren? Und: Lässt sich „Slot“ automatisieren, wechselt das Pattern zum Taktstart, und schaltet „Mute 1“ den Bass stumm?
 - [ ] Clip bzw. Region ins Plugin-Fenster ziehen (D3): kommt eine `.mid` an? Erst prüfbar, wenn das Plugin Dateien
       annimmt (Import, Phase 1); bis dahin entfällt D3
 - [ ] Tastenbelegung: Wenn Tasten belegbar sind (v1.1, D-126), prüfen, welche Tasten Live, Logic und Windows-Hosts
