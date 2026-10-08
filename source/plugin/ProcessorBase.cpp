@@ -2,6 +2,8 @@
 
 #include "plugin/PlaceholderEditor.h"
 
+#include <algorithm>
+
 namespace mm::plugin {
 
 namespace {
@@ -39,6 +41,20 @@ void ProcessorBase::switchPattern(std::unique_ptr<mm::engine::OwnedPattern> patt
 void ProcessorBase::editPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern) {
     handover_.publishEdit(std::move(pattern));
     handover_.collectReturned();
+}
+
+void ProcessorBase::submitResult(int slot, std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq) {
+    const auto index = static_cast<size_t>(std::clamp(slot, 1, static_cast<int>(mm::engine::kSlotCount)) - 1);
+    handover_.publishResult(index, std::move(pattern), gridPpq);
+    handover_.collectReturned();
+}
+
+void ProcessorBase::selectSlot(int slot) {
+    requestedSlot_.store(std::clamp(slot, 1, static_cast<int>(mm::engine::kSlotCount)));
+}
+
+int ProcessorBase::activeSlot() const {
+    return requestedSlot_.load();
 }
 
 uint64_t ProcessorBase::activePatternVersion() const {
@@ -84,6 +100,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
         }
     }
 
+    player_.setSlot(requestedSlot_.load());
     player_.process(transport, audio.getNumSamples(), getSampleRate(), events_);
     writeEvents(midi);
 }

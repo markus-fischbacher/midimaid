@@ -924,6 +924,13 @@ Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel 
 | Z17 | Voice „folgt Hub“ hat bei Eintreffen des Stempels Q = 8,0 schon PPQ 8,1 erreicht | Wechsel am nächsten Rasterpunkt (12,0), Versatz im Protokoll |
 | Z18 | Voice „eigen“, Slot-Parameter wird bei 7,0 von 1 auf 2 automatisiert | Q = 8,0, unabhängig vom Hub; beim Einzelspur-Bounce identisch |
 | Z19 | Voice „folgt Hub“ startet bei 148,0, Hub meldet dort Slot 3 | Slot 3 sofort. Hat der Hub die Position noch nicht erreicht: gespeicherter Slot, Wechsel zu Slot 3 am ersten Rasterpunkt nach seiner Meldung |
+| Z20 | Slot 2 ist leer, laufend bei 5,3, Slot-Parameter wechselt auf 2 | Q = 8,0: Note-Offs im Sample von Q, danach Stille; Slot 1 wird dabei nicht zurückgegeben |
+| Z21 | Ein Ergebnis für Slot 2 trifft ein, Slot 1 spielt | Es wird nur in Slot 2 abgelegt; Slot 1 spielt unverändert weiter, die gemeldete Version ändert sich nicht |
+| Z22 | Slot-Wechsel 1 → 2 wartet auf Q = 8,0, davor trifft ein Ergebnis für Slot 1 ein | Bei Q spielt Slot 2 (SPEC §6.8, Punkt 1); das Ergebnis liegt in Slot 1 und klingt, sobald Slot 1 gewählt wird |
+| Z23 | Slot-Wechsel 1 → 2 wartet, davor trifft ein neueres Ergebnis für Slot 2 ein | Bei Q spielt das neuere Ergebnis, das ältere wird zurückgegeben |
+| Z24 | Bearbeitung von Slot 2, während Slot 1 klingt | Slot 1 bleibt unberührt (keine Note-Offs); der bearbeitete Stand spielt nach dem Wechsel zu Slot 2 |
+| Z25 | Slot-Parameter 3 beim Start, Slot 3 gefüllt (Start bei 148,0) | Slot 3 sofort, Position 0 bei 148,0; gemeldeter Slot 3 |
+| Z26 | Rückgabe-Queue voll, Wechsel zwischen zwei abgelegten Slots | Der Wechsel erfolgt bei Q, denn er gibt nichts zurück |
 
 ### 6.2 Note-Off-Garantie
 - Aktiv-Tabelle 16 × 128 (fest allokiert). Gespeichert wird die tatsächlich gesendete Tonhöhe
@@ -1076,7 +1083,9 @@ Auto-Evolve verändert **nie** den Slot selbst. Es spielt auf einer eigenen Eben
 ### 6.8 Vorrang bei gleichzeitigen Wechseln
 (Punkte zu Evolve, Transposition und Wahrscheinlichkeit gelten ab v1.1.) Treffen mehrere Wechsel am selben Quantisierungspunkt ein, gilt diese Reihenfolge (höchste zuerst):
 1. **Slot-Wechsel** (Automation oder Klick): gewinnt immer; eine laufende Evolve-Ebene des alten Slots
-   endet, wartende Ergebnisse für den alten Slot landen nur im Verlauf dieses Slots
+   endet, wartende Ergebnisse für den alten Slot landen nur im Verlauf dieses Slots. In der Engine ist das
+   die Regel „Am Wechselpunkt spielt der Eintrag des gewählten Slots“ (D-135): Ein Ergebnis für einen anderen
+   Slot wird nur abgelegt und klingt erst, wenn dieser Slot gewählt wird.
 2. **Manuelles Ergebnis** (Generieren, Variation, Verfeinern, Laden aus der Bibliothek, Stimme importieren)
 3. **Evolve-Stufe**: wird verworfen, wenn am selben Punkt ein manuelles Ergebnis kommt
 - **Transposition** ist unabhängig davon und wird zusätzlich angewendet

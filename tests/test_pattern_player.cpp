@@ -1023,3 +1023,315 @@ TEST_CASE("data returning after a gap start the pattern anew (Z8)", "[engine]") 
     }
     CHECK(firstOn == before + 12000); // position 0 at 8.0: the first note is at 8.5
 }
+
+// ---- slots (SPEC 3.10, 3.13, 6.8, D-135) ----
+
+TEST_CASE("the slot parameter is limited to 1 to 16", "[engine][slots]") {
+    PatternPlayer player;
+    CHECK(player.selectedSlot() == 1);
+    player.setSlot(0);
+    CHECK(player.selectedSlot() == 1);
+    player.setSlot(99);
+    CHECK(player.selectedSlot() == 16);
+    player.setSlot(7);
+    CHECK(player.selectedSlot() == 7);
+}
+
+TEST_CASE("a slot change plays from the next bar line, an empty slot is silent", "[engine][slots]") {
+    Simulation sim(longPattern());
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().setSlot(2); // empty
+    CHECK(sim.player().switchPending());
+    while (sim.clock() < 8 * 24000) {
+        sim.block(512);
+    }
+    const long long bar = std::llround((8.0 - 5.3) * kSampleRate / 2.0);
+    const auto offs = ofPitch(sim.events(), 40, false);
+    REQUIRE(offs.size() >= 1);
+    CHECK(offs.front().sample == Catch::Approx(static_cast<double>(bar)).margin(1.0)); // cut at the bar line
+    for (const auto& e : sim.events()) {
+        CHECK(e.sample <= bar + 1); // silent afterwards
+    }
+    CHECK(sim.soundingCount() == 0);
+    CHECK_FALSE(sim.player().switchPending());
+}
+
+TEST_CASE("a result for another slot is only stored and plays after the slot is selected", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    sim.setPpq(5.3);
+    sim.block(512);
+    handover.publishResult(1, owned(nextNotes(), 9), 4.0);
+    while (sim.clock() < 3 * 24000) {
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 50, true).empty()); // slot 1 keeps playing
+    CHECK_FALSE(sim.player().switchPending());
+    CHECK(handover.activeVersion() == 0);
+
+    sim.player().setSlot(2);
+    while (sim.clock() < 8 * 24000) {
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample >= 3 * 24000); // from the next bar line after the selection (12.0)
+    CHECK(handover.activeVersion() == 9);
+    CHECK(handover.activeSlot() == 2);
+}
+
+TEST_CASE("a start plays the selected slot at once (Z14)", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(2, owned(nextNotes(), 3), 4.0);
+    sim.player().setSlot(3);
+    sim.blockAt(148.0, 24000 * 3);
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == 0); // position 0 at 148.0
+    CHECK(handover.activeSlot() == 3);
+}
+
+TEST_CASE("a jump plays the selected slot at once", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned(nextNotes(), 2), 4.0);
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().setSlot(2);
+    sim.block(512);
+    sim.blockAt(20.5, 24000 * 2); // before the point 8.0
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == 1024 + samplesAtPpq(22.0) - samplesAtPpq(20.5)); // position 2.0
+}
+
+TEST_CASE("a stop keeps the slot change for the next start", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned(nextNotes(), 2), 4.0);
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().setSlot(2);
+    sim.block(512, false);
+    CHECK(sim.player().switchPending());
+    sim.blockAt(0.5, 24000 * 2);
+    CHECK_FALSE(sim.player().switchPending());
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == 1024 + samplesAtPpq(2.0) - samplesAtPpq(0.5));
+}
+
+TEST_CASE("a slot change beats a result for the old slot at the same point (SPEC 6.8)", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned(nextNotes(), 2), 4.0); // slot 2
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().setSlot(2);
+    sim.block(512);
+    // A result for the old slot 1 arrives before the point 8.0: it is stored, it does not play.
+    handover.publishResult(0, owned({{0, 240, 1, 61, 100}}, 3), 4.0);
+    while (sim.clock() < 3 * 24000) {
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 61, true).empty());
+    CHECK(ofPitch(sim.events(), 50, true).size() >= 1); // slot 2 plays from the point
+    CHECK(handover.activeSlot() == 2);
+
+    // The stored result is in slot 1: selecting it plays it.
+    sim.player().setSlot(1);
+    while (sim.clock() < 8 * 24000) {
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 61, true).size() >= 1);
+    CHECK(handover.activeVersion() == 3);
+}
+
+TEST_CASE("a result for the new slot that arrives before the point is the one that plays", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned({{0, 240, 1, 60, 100}}, 2), 4.0);
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().setSlot(2);
+    sim.block(512);
+    handover.publishResult(1, owned({{0, 240, 1, 62, 100}}, 3), 4.0); // newer result for slot 2
+    while (sim.clock() < 3 * 24000) {
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 60, true).empty());
+    CHECK(ofPitch(sim.events(), 62, true).size() >= 1);
+    CHECK(handover.activeVersion() == 3);
+}
+
+TEST_CASE("a result for the playing slot waits for the point while the old pattern keeps playing", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    sim.setPpq(5.3);
+    sim.block(512);
+    handover.publishResult(0, owned(nextNotes(), 4), 4.0);
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    const long long bar = std::llround((8.0 - 5.3) * kSampleRate / 2.0);
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx(static_cast<double>(bar)).margin(1.0));
+    CHECK(handover.activeVersion() == 4);
+}
+
+TEST_CASE("an edit of a slot that is not playing only replaces its pattern", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned(nextNotes(), 2), 4.0);
+    sim.blockAt(7.0, 12000); // the long note sounds
+    REQUIRE(sim.soundingCount() == 1);
+    handover.publishEdit(1, owned({{0, 240, 1, 63, 100}}, 5)); // edit of slot 2
+    sim.block(512);
+    CHECK(sim.soundingCount() == 1); // the playing pattern is untouched
+    CHECK(ofPitch(sim.events(), 40, false).empty());
+    sim.player().setSlot(2);
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 63, true).size() >= 1); // the edited pattern plays
+    CHECK(ofPitch(sim.events(), 50, true).empty());
+}
+
+TEST_CASE("an edit of the playing slot by its number applies at once", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    sim.blockAt(7.0, 12000);
+    REQUIRE(sim.soundingCount() == 1);
+    handover.publishEdit(0, owned(nextNotes(), 6)); // slot 1 removes the sounding note
+    const long long before = sim.clock();
+    sim.block(512);
+    const auto offs = ofPitch(sim.events(), 40, false);
+    REQUIRE(offs.size() == 1);
+    CHECK(offs.front().sample == before);
+}
+
+TEST_CASE("changing between slots hands nothing back", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned(nextNotes(), 2), 4.0);
+    sim.setPpq(5.3);
+    sim.block(512);
+    for (int round = 0; round < 6; ++round) {
+        sim.player().setSlot(round % 2 == 0 ? 2 : 1);
+        for (int i = 0; i < 400; ++i) { // about 4 PPQ, past the next bar line
+            sim.block(512);
+        }
+    }
+    CHECK(handover.collectReturned() == 0);
+}
+
+TEST_CASE("replacing a stored result hands the old one back", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    auto first = std::make_shared<int>(0);
+    handover.publishResult(2, owned(nextNotes(), 1, first), 4.0);
+    sim.block(512);
+    CHECK(first.use_count() == 2); // stored in slot 3
+    handover.publishResult(2, owned(longNotes(), 2), 4.0);
+    sim.block(512);
+    CHECK(handover.collectReturned() == 1);
+    CHECK(first.use_count() == 1);
+}
+
+TEST_CASE("a full return queue does not block slot changes between stored patterns", "[engine][slots]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishResult(1, owned(nextNotes(), 2), 4.0);
+    sim.setPpq(5.3);
+    sim.block(512);
+    // Fill the queue: each edit of the playing slot retires the previous pattern.
+    for (uint64_t version = 10; version < 10 + PatternHandover::kReturnCapacity + 1; ++version) {
+        handover.publishEdit(0, owned(longNotes(), version));
+        sim.block(512);
+    }
+    REQUIRE(handover.freeReturnSlots() == 0);
+    sim.player().setSlot(2);
+    while (sim.clock() < 3 * 24000) {
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 50, true).size() >= 1); // plays at the first point, not postponed
+    CHECK(handover.activeSlot() == 2);
+}
+
+TEST_CASE("slots, results and edits from two threads are handed over without loss", "[engine][slots]") {
+    auto token = std::make_shared<int>(0);
+    {
+        PatternHandover handover;
+        PatternPlayer player;
+        player.attach(&handover);
+        std::atomic<bool> stop{false};
+        std::atomic<bool> failed{false};
+
+        std::thread audio([&] {
+            MidiEventList out;
+            std::set<std::pair<uint8_t, uint8_t>> sounding;
+            double ppq = 0.0;
+            int block = 0;
+            while (!stop.load()) {
+                player.setSlot(1 + (block / 37) % 4);
+                TransportInfo info;
+                info.hasPosition = true;
+                info.isPlaying = true;
+                info.ppq = ppq;
+                info.bpm = 120.0;
+                player.process(info, 256, kSampleRate, out);
+                ppq += 256 * 120.0 / 60.0 / kSampleRate;
+                ++block;
+                for (const auto& e : out) {
+                    const auto key = std::make_pair(e.channel, e.pitch);
+                    if (e.noteOn ? !sounding.insert(key).second : sounding.erase(key) == 0) {
+                        failed = true;
+                    }
+                }
+            }
+            out.clear();
+            player.releaseAll(out, 0);
+            for (const auto& e : out) {
+                if (sounding.erase(std::make_pair(e.channel, e.pitch)) == 0) {
+                    failed = true;
+                }
+            }
+            if (!sounding.empty()) {
+                failed = true;
+            }
+        });
+
+        for (uint64_t i = 1; i <= 4000; ++i) {
+            auto pattern = owned(i % 2 == 0 ? nextNotes() : longNotes(), i, token);
+            const size_t slot = i % 5 == 0 ? kActiveSlot : i % 4;
+            if (i % 3 == 0) {
+                handover.publishEdit(slot, std::move(pattern));
+            } else {
+                handover.publishResult(slot, std::move(pattern), 1.0);
+            }
+            handover.collectReturned();
+            if (i % 8 == 0) {
+                std::this_thread::yield();
+            }
+        }
+        stop = true;
+        audio.join();
+        CHECK_FALSE(failed.load());
+    }
+    CHECK(token.use_count() == 1); // everything was freed exactly once
+}

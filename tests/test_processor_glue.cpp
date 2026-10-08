@@ -332,3 +332,23 @@ TEST_CASE("the host MIDI buffer keeps its storage across blocks", "[plugin][hand
     }
     CHECK(blocksWithEvents >= 6);
 }
+
+TEST_CASE("selecting a slot on the processor plays its pattern from the next bar line", "[plugin][handover]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    processor.submitResult(2, ownedPattern({{0, 240, 1, 55, 100}}, 4)); // stored, slot 1 keeps playing
+    rig.run(10);
+    CHECK(processor.activePatternVersion() == 0);
+    processor.selectSlot(2);
+    CHECK(processor.activeSlot() == 2);
+    const auto notes = rig.run(200); // to about 4.3 PPQ
+    std::vector<Rig::Note> played;
+    for (const auto& n : notes) {
+        if (n.pitch == 55 && n.on) {
+            played.push_back(n);
+        }
+    }
+    REQUIRE(played.size() == 1);
+    CHECK(std::abs(played.front().sample - 96000) <= 1); // PPQ 4.0
+    CHECK(processor.activePatternVersion() == 4);
+}

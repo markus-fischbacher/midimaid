@@ -44,6 +44,13 @@ public:
     /// (`gridPpq`, rounded up to a bar line), an edit at the next block without restarting the position.
     void switchPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq = 4.0);
     void editPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern);
+    /// Message thread: result for `slot` (1 to 16); it plays at the next grid point once that slot is selected.
+    void submitResult(int slot, std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq = 4.0);
+    /// Message thread: the slot parameter (1 to 16). Stand-in until the host parameter `slot` exists; the audio
+    /// thread reads it at each block start (SPEC 3.13).
+    void selectSlot(int slot);
+    /// Slot that is selected (1 to 16). Safe to read from any thread.
+    int activeSlot() const;
     /// Version of the pattern that is playing (0 for the built-in placeholder). Safe to read from any thread.
     uint64_t activePatternVersion() const;
 
@@ -70,6 +77,7 @@ private:
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;
     std::atomic<double> lastBpm_{120.0};
+    std::atomic<int> requestedSlot_{1};
     MidiExporter exporter_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProcessorBase)
