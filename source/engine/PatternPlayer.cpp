@@ -13,6 +13,18 @@ int clampOffset(int base, double samples, int numSamples) {
     return static_cast<int>(std::clamp<long long>(offset, 0, numSamples > 0 ? numSamples - 1 : 0));
 }
 
+/// First multiple of `gridPpq` not before `ppq`, rounded up to a bar line (4/4, SPEC 6.1a rule 3).
+double firstSwitchPoint(double ppq, double gridPpq) {
+    constexpr double kBarPpq = 4.0;
+    constexpr double kEpsilon = 1e-9;
+    const double grid = gridPpq > 0.0 ? gridPpq : kBarPpq;
+    double point = std::ceil((ppq - kEpsilon) / grid) * grid;
+    if (std::fmod(point, kBarPpq) > kEpsilon && kBarPpq - std::fmod(point, kBarPpq) > kEpsilon) {
+        point = std::ceil((point - kEpsilon) / kBarPpq) * kBarPpq;
+    }
+    return point;
+}
+
 } // namespace
 
 bool MidiEventList::push(const MidiEvent& event) {
@@ -48,6 +60,14 @@ void PatternPlayer::setPattern(PatternView pattern) {
     pattern_ = pattern;
 }
 
+void PatternPlayer::requestSwitch(PatternView next, double gridPpq) {
+    pending_ = {next, gridPpq, 0.0, false, true, false, 0.0};
+}
+
+void PatternPlayer::requestSwitchAt(PatternView next, double stampPpq, double gridPpq) {
+    pending_ = {next, gridPpq, stampPpq, true, true, false, 0.0};
+}
+
 void PatternPlayer::invalidateTransport() {
     playing_ = false;
     pendingWrapRelease_ = false;
@@ -55,19 +75,34 @@ void PatternPlayer::invalidateTransport() {
 }
 
 void PatternPlayer::releaseAll(MidiEventList& out, int sampleOffset) {
+    releaseAt(out, sampleOffset, false);
+}
+
+void PatternPlayer::releaseAt(MidiEventList& out, int sampleOffset, bool guardOwnStarts) {
     if (activeCount_ == 0) {
         return;
     }
     for (size_t channel = 0; channel < active_.size(); ++channel) {
         for (size_t pitch = 0; pitch < active_[channel].size(); ++pitch) {
             auto& note = active_[channel][pitch];
-            if (note.active) {
-                out.push({sampleOffset, static_cast<uint8_t>(channel + 1), static_cast<uint8_t>(pitch), 0, false});
-                note.active = false;
+            if (!note.active) {
+                continue;
             }
+            int offset = sampleOffset;
+            if (guardOwnStarts && note.startedInCall == call_ && note.startOffset >= offset) {
+                // A note-off on or before its own note-on would sort before it and the note would hang: end it
+                // one sample later, or in the next block's first sample when the block is used up.
+                offset = note.startOffset + 1;
+                if (offset >= lastNumSamples_) {
+                    note.endPpq = 0.0;
+                    continue;
+                }
+            }
+            out.push({offset, static_cast<uint8_t>(channel + 1), static_cast<uint8_t>(pitch), 0, false});
+            note.active = false;
+            --activeCount_;
         }
     }
-    activeCount_ = 0;
 }
 
 void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out) {
@@ -133,6 +168,20 @@ void PatternPlayer::processSegment(double scanFrom, double origin, double to, in
     }
 }
 
+void PatternPlayer::playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples,
+                              double ppqPerSample, MidiEventList& out) {
+    if (pending_.active && pending_.resolved && pending_.pointPpq < to) {
+        const double point = std::max(pending_.pointPpq, scanFrom);
+        processSegment(scanFrom, origin, point, sampleBase, numSamples, ppqPerSample, out);
+        releaseAt(out, clampOffset(sampleBase, (point - origin) / ppqPerSample, numSamples), true);
+        pattern_ = pending_.pattern;
+        pending_.active = false;
+        processSegment(point, origin, to, sampleBase, numSamples, ppqPerSample, out);
+    } else {
+        processSegment(scanFrom, origin, to, sampleBase, numSamples, ppqPerSample, out);
+    }
+}
+
 void PatternPlayer::process(const TransportInfo& transport, int numSamples, double sampleRate, MidiEventList& out) {
     out.clear();
     ++call_;
@@ -153,17 +202,34 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     // Without a jump the scan continues exactly where the previous block ended: no gap (swallowed note-on) and
     // no overlap (double note-on), whatever the host reports within the tolerance.
     double scanFrom = transport.ppq;
+    bool restart = false; // start or jump: a pending switch applies at once (SPEC 6.1a, T1 and T4)
     if (!playing_) {
         releaseAll(out, 0);
         playing_ = true;
+        restart = true;
     } else if (pendingWrapRelease_ || std::abs(transport.ppq - expectedPpq_) > tolerance) {
         releaseAll(out, 0); // jump
+        restart = true;
     } else {
         scanFrom = expectedPpq_;
     }
     pendingWrapRelease_ = false;
     lastPpqPerSample_ = ppqPerSample;
     lastNumSamples_ = numSamples;
+
+    if (pending_.active) {
+        if (restart) {
+            pattern_ = pending_.pattern;
+            pending_.active = false;
+        } else if (!pending_.resolved) {
+            // Fixed once, in the block that first sees the request (rule 2): never in the past.
+            const double point = pending_.hasStamp && pending_.stampPpq >= transport.ppq - 1e-9
+                                     ? pending_.stampPpq
+                                     : firstSwitchPoint(transport.ppq, pending_.gridPpq);
+            pending_.pointPpq = point;
+            pending_.resolved = true;
+        }
+    }
 
     const double blockEnd = transport.ppq + numSamples * ppqPerSample;
     const bool loops = transport.isLooping && transport.loopEndPpq > transport.loopStartPpq;
@@ -172,14 +238,19 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     if (loops && transport.ppq < transport.loopEndPpq && blockEnd > transport.loopEndPpq + kEpsilon) {
         // The loop wraps inside this block: handle both halves sample-accurately.
         const int wrapOffset = clampOffset(0, (transport.loopEndPpq - transport.ppq) / ppqPerSample, numSamples);
-        processSegment(scanFrom, transport.ppq, transport.loopEndPpq, 0, numSamples, ppqPerSample, out);
-        releaseAll(out, wrapOffset);
+        playRange(scanFrom, transport.ppq, transport.loopEndPpq, 0, numSamples, ppqPerSample, out);
+        releaseAt(out, wrapOffset, true);
+        if (pending_.active) {
+            // The loop wrap is a jump: a switch whose point was not reached before it applies here (T4).
+            pattern_ = pending_.pattern;
+            pending_.active = false;
+        }
         const double secondEnd = transport.loopStartPpq + (blockEnd - transport.loopEndPpq);
         processSegment(transport.loopStartPpq, transport.loopStartPpq, secondEnd, wrapOffset, numSamples, ppqPerSample,
                        out);
         expectedPpq_ = secondEnd;
     } else {
-        processSegment(scanFrom, transport.ppq, blockEnd, 0, numSamples, ppqPerSample, out);
+        playRange(scanFrom, transport.ppq, blockEnd, 0, numSamples, ppqPerSample, out);
         expectedPpq_ = blockEnd;
         if (loops && blockEnd >= transport.loopEndPpq - kEpsilon && transport.ppq < transport.loopEndPpq) {
             // The block ends exactly on the loop end: the wrap happens at the next block's first sample.
