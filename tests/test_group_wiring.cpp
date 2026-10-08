@@ -453,20 +453,25 @@ TEST_CASE("audio threads run while roles, switches and slots change on the messa
 
 TEST_CASE("a pattern change by the hub shortly before the bar line reaches hub and voices at the same bar",
           "[group-wiring]") {
-    Quiet quiet;
-    Instance hub("Hub");
-    Instance voice("Voice");
-    hub.setRole(InstanceRole::Hub);
-    voice.setRole(InstanceRole::Voice);
-    fillSlots(hub);
-    voice.setPpq(0.5); // the voice is half a quarter ahead: it has passed bar 8 when the hub still has 0.2 to go
-    runTo({&hub, &voice}, 7.8);
-    hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, marked(50)); });
-    runTo({&hub, &voice}, 13.0);
-    for (const Instance* instance : {&hub, &voice}) {
-        CHECK(near(instance->firstWith(50), at(12.0)));
-        CHECK(instance->firstWith(41, at(8.0)) > 0);
-        CHECK(instance->firstWith(41, at(12.0) - 1) == -1);
+    // The voice runs half a quarter ahead of the hub (it has passed bar 8 when the hub still has 0.2 to go) or behind
+    // it (it would switch at bar 8 on its own while the hub waits for bar 12).
+    for (const bool voiceAhead : {true, false}) {
+        INFO("voiceAhead " << voiceAhead);
+        Quiet quiet;
+        Instance hub("Hub");
+        Instance voice("Voice");
+        hub.setRole(InstanceRole::Hub);
+        voice.setRole(InstanceRole::Voice);
+        fillSlots(hub);
+        (voiceAhead ? voice : hub).setPpq(0.5);
+        runTo({&hub, &voice}, 7.8);
+        hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, marked(50)); });
+        runTo({&hub, &voice}, 13.0);
+        for (const Instance* instance : {&hub, &voice}) {
+            CHECK(near(instance->firstWith(50), at(12.0)));
+            CHECK(instance->firstWith(41, at(8.0)) > 0);
+            CHECK(instance->firstWith(41, at(12.0) - 1) == -1);
+        }
     }
 }
 
