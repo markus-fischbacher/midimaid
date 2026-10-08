@@ -14,6 +14,7 @@ target_link_libraries(mm_juce_config INTERFACE juce::juce_recommended_config_fla
 # Warnings as errors for our own files only (the targets below also compile JUCE module sources).
 mm_warn_sources(
     ProcessorBase.cpp
+    EmbeddedStyles.cpp
     PlaceholderEditor.cpp
     HostDetection.cpp
     MidiExporter.cpp
@@ -21,11 +22,16 @@ mm_warn_sources(
     MidiFxEntry.cpp)
 
 # Code shared by both variants.
-add_library(mm_plugin_common STATIC ProcessorBase.cpp PlaceholderEditor.cpp HostDetection.cpp MidiExporter.cpp)
+# The style profiles travel inside the plugin binary (D-139).
+file(GLOB MIDIMAID_STYLE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/resources/styles/*.json)
+juce_add_binary_data(mm_styles_data HEADER_NAME "MidiMaidStyles.h" NAMESPACE MidiMaidStyles SOURCES ${MIDIMAID_STYLE_FILES})
+set_target_properties(mm_styles_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_library(mm_plugin_common STATIC ProcessorBase.cpp EmbeddedStyles.cpp PlaceholderEditor.cpp HostDetection.cpp MidiExporter.cpp)
 target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(
     mm_plugin_common
-    PUBLIC mm_core mm_engine mm_host_capabilities mm_juce_config juce::juce_audio_processors)
+    PUBLIC mm_core mm_engine mm_host_capabilities mm_juce_config juce::juce_audio_processors mm_styles_data)
 
 # Instrument variant: VST3, AU (aumu), Standalone.
 juce_add_plugin(

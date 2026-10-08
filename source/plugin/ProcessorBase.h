@@ -1,10 +1,16 @@
 #pragma once
 
+#include "core/InstanceSettings.h"
 #include "core/ParameterRegister.h"
+#include "core/SlotBank.h"
+#include "core/StyleLibrary.h"
 #include "engine/PatternHandover.h"
 #include "engine/PatternPlayer.h"
+#include "engine/SlotPublisher.h"
 #include "plugin/MidiExporter.h"
 
+#include <array>
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace mm::plugin {
@@ -54,6 +60,18 @@ public:
     int activeSlot() const;
     /// The host parameters of SPEC 3.13, created from the register (D-93).
     juce::AudioProcessorValueTreeState& parameters();
+    /// The styles of this plugin (embedded profiles, D-139).
+    const mm::core::StyleLibrary& styles() const { return styles_; }
+    /// Any thread: runs `change` on the slot bank under the instance lock, then hands every changed slot to the
+    /// engine (quantized to the next bar). The audio thread never touches the bank.
+    void editSlots(const std::function<void(mm::core::SlotBank&)>& change);
+    /// A copy of the slot bank.
+    mm::core::SlotBank slotsSnapshot() const;
+    /// Role, output mode and output voice (SPEC 6.5, 9.1). The voice also selects the mute parameter that applies.
+    mm::core::InstanceSettings instanceSettings() const;
+    void setInstanceSettings(const mm::core::InstanceSettings& settings);
+    /// Slots that were left empty by the last state load because their data was bad (path and reason).
+    std::vector<std::string> slotLoadProblems() const;
     /// Version of the pattern that is playing (0 for the built-in placeholder). Safe to read from any thread.
     uint64_t activePatternVersion() const;
 
@@ -62,6 +80,7 @@ public:
 
 private:
     void writeEvents(juce::MidiBuffer& midi) const;
+    void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
 
     /// Empties the handover's return queue on the message thread (SPEC 6.3: patterns are freed there only).
     class ReturnCollector : private juce::Timer {
@@ -80,10 +99,16 @@ private:
 
     juce::String name_;
     juce::AudioProcessorValueTreeState parameters_;
-    std::atomic<float>* slotValue_ = nullptr; // raw values, read in the audio thread
-    std::atomic<float>* muteValue_ = nullptr;
-    int outputVoice_ = 1; // the voice this instance plays (1 = first); roles come with the hub
+    std::atomic<float>* slotValue_ = nullptr;                            // raw values, read in the audio thread
+    std::array<std::atomic<float>*, mm::core::kMaxVoices> muteValues_{}; // raw values, read in the audio thread
+    std::atomic<int> outputVoice_{1};                                    // the voice this instance plays (1 = first)
+    const mm::core::StyleLibrary& styles_;
+    mutable juce::CriticalSection slotsLock_; // message and state threads only, never the audio thread
+    mm::core::SlotBank slots_;
+    mm::core::InstanceSettings settings_;
+    std::vector<std::string> slotLoadProblems_;
     mm::engine::PatternHandover handover_;
+    mm::engine::SlotPublisher publisher_;
     mm::engine::PatternPlayer player_;
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;
