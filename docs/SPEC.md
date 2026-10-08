@@ -943,8 +943,10 @@ Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel 
 
 ### 6.3 Lock-freie Pattern-Übergabe
 - Message-Thread erzeugt ein neues unveränderliches Pattern
-- Übergabe an den Audio-Thread über einen atomaren Zeiger auf einen vorallozierten Pool (kein
-  `std::atomic<std::shared_ptr>`, das ist auf gängigen Plattformen nicht lock-free)
+- Übergabe an den Audio-Thread über je einen atomaren Zeiger pro Art (Wechsel, Bearbeitung) auf ein
+  unveränderliches Pattern (kein `std::atomic<std::shared_ptr>`, das ist auf gängigen Plattformen nicht
+  lock-free). Einen Pool braucht es nicht: Höchstens ein ausstehendes Pattern je Art plus die Plätze der
+  Rückgabe-Queue leben gleichzeitig; der Audio-Thread legt nie etwas an (D-133)
 - Der Audio-Thread übernimmt zum eingestellten Quantisierungszeitpunkt (§3.4) und legt das alte Pattern
   in eine lock-freie Rückgabe-Queue
 - Freigabe des alten Patterns **nur** auf dem Message-Thread (Timer), nie im Audio-Thread
@@ -955,7 +957,7 @@ Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel 
   einem atomaren Zeiger; damit entsteht kein ABA-Problem. Trifft ein neueres Ergebnis ein, bevor das
   ausstehende übernommen wurde, ersetzt es dieses; das ältere landet nur im Verlauf und wird vom
   Message-Thread freigegeben. Am Quantisierungspunkt entscheidet der Vorrang nach §6.8.
-- **Rückgabe-Queue:** SPSC mit fester Kapazität (Engine-Konstante). Ist sie voll, verschiebt der
+- **Rückgabe-Queue:** SPSC mit fester Kapazität (Engine-Konstante, 8). Ist sie voll, verschiebt der
   Audio-Thread den Wechsel auf den nächsten Quantisierungspunkt; er gibt nie selbst frei. Ein Engine-Test
   erzwingt diesen Fall.
 - **Version:** Jedes Pattern trägt eine fortlaufende Version (`Pattern::version`). Der Audio-Thread meldet

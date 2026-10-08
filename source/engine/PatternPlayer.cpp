@@ -56,16 +56,103 @@ void MidiEventList::sort() {
 
 PatternPlayer::PatternPlayer(PatternView pattern) : pattern_(pattern) {}
 
+PatternPlayer::~PatternPlayer() {
+    // The audio thread no longer runs (host contract): the patterns in use are freed here.
+    dispose(activeOwner_);
+    dispose(pending_.owner);
+}
+
+void PatternPlayer::dispose(OwnedPattern* pattern) {
+    std::unique_ptr<OwnedPattern> owner(pattern);
+}
+
 void PatternPlayer::setPattern(PatternView pattern) {
+    dispose(activeOwner_);
+    activeOwner_ = nullptr;
     pattern_ = pattern;
 }
 
 void PatternPlayer::requestSwitch(PatternView next, double gridPpq) {
-    pending_ = {next, gridPpq, 0.0, false, true, false, 0.0};
+    dispose(pending_.owner);
+    pending_ = {next, gridPpq, 0.0, false, true, false, 0.0, nullptr};
 }
 
 void PatternPlayer::requestSwitchAt(PatternView next, double stampPpq, double gridPpq) {
-    pending_ = {next, gridPpq, stampPpq, true, true, false, 0.0};
+    dispose(pending_.owner);
+    pending_ = {next, gridPpq, stampPpq, true, true, false, 0.0, nullptr};
+}
+
+bool PatternPlayer::canRetire() const {
+    return activeOwner_ == nullptr || (handover_ != nullptr && handover_->freeReturnSlots() >= 1);
+}
+
+void PatternPlayer::commitPending() {
+    if (activeOwner_ != nullptr) {
+        handover_->giveBack(activeOwner_); // canRetire() guaranteed the room
+    }
+    pattern_ = pending_.pattern;
+    activeOwner_ = pending_.owner;
+    pending_.owner = nullptr;
+    pending_.active = false;
+    if (handover_ != nullptr && activeOwner_ != nullptr) {
+        handover_->reportActiveVersion(activeOwner_->version);
+    }
+}
+
+void PatternPlayer::applyEdit(OwnedPattern* edit, MidiEventList& out) {
+    const PatternView next = edit->view();
+    if (next.lengthTicks != pattern_.lengthTicks) {
+        releaseAt(out, 0, false); // positions shift: nothing sounding can be kept
+    } else {
+        // Notes that are not in the new pattern exactly as they sound now end at once (SPEC 6.3).
+        for (size_t channel = 0; channel < active_.size(); ++channel) {
+            for (size_t pitch = 0; pitch < active_[channel].size(); ++pitch) {
+                auto& note = active_[channel][pitch];
+                if (!note.active) {
+                    continue;
+                }
+                bool kept = false;
+                for (size_t i = 0; i < next.count && !kept; ++i) {
+                    const PatternNote& candidate = next.notes[i];
+                    kept = candidate.channel == channel + 1 && candidate.pitch == pitch &&
+                           candidate.startTick == note.startTick && candidate.lengthTicks == note.lengthTicks;
+                }
+                if (!kept) {
+                    out.push({0, static_cast<uint8_t>(channel + 1), static_cast<uint8_t>(pitch), 0, false});
+                    note.active = false;
+                    --activeCount_;
+                }
+            }
+        }
+    }
+    if (activeOwner_ != nullptr) {
+        handover_->giveBack(activeOwner_);
+    }
+    pattern_ = next;
+    activeOwner_ = edit;
+    handover_->reportActiveVersion(edit->version);
+}
+
+void PatternPlayer::pollHandover(MidiEventList& out) {
+    if (handover_ == nullptr) {
+        return;
+    }
+    // A request is only taken when the pattern it displaces can be handed back; otherwise it stays in the mailbox
+    // (and may be replaced there) until the message thread has emptied the return queue.
+    if (pending_.owner == nullptr || handover_->freeReturnSlots() >= 1) {
+        if (OwnedPattern* request = handover_->takeSwitch()) {
+            if (pending_.owner != nullptr) {
+                handover_->giveBack(pending_.owner);
+            }
+            pending_ = {request->view(), request->gridPpq, request->stampPpq, request->hasStamp, true, false, 0.0,
+                        request};
+        }
+    }
+    if (canRetire()) {
+        if (OwnedPattern* edit = handover_->takeEdit()) {
+            applyEdit(edit, out);
+        }
+    }
 }
 
 void PatternPlayer::invalidateTransport() {
@@ -122,6 +209,8 @@ void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset
     slot.endPpq = endPpq;
     slot.startedInCall = call_;
     slot.startOffset = offset;
+    slot.startTick = note.startTick;
+    slot.lengthTicks = note.lengthTicks;
     ++activeCount_;
 }
 
@@ -170,12 +259,16 @@ void PatternPlayer::processSegment(double scanFrom, double origin, double to, in
 
 void PatternPlayer::playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples,
                               double ppqPerSample, MidiEventList& out) {
+    if (pending_.active && pending_.resolved && pending_.pointPpq < to && !canRetire()) {
+        // The return queue is full: the old pattern cannot be handed back, so the switch waits for the next grid
+        // point (SPEC 6.3). Until then the old pattern keeps playing.
+        pending_.pointPpq = firstSwitchPoint(std::max(pending_.pointPpq, scanFrom) + 1e-6, pending_.gridPpq);
+    }
     if (pending_.active && pending_.resolved && pending_.pointPpq < to) {
         const double point = std::max(pending_.pointPpq, scanFrom);
         processSegment(scanFrom, origin, point, sampleBase, numSamples, ppqPerSample, out);
         releaseAt(out, clampOffset(sampleBase, (point - origin) / ppqPerSample, numSamples), true);
-        pattern_ = pending_.pattern;
-        pending_.active = false;
+        commitPending();
         processSegment(point, origin, to, sampleBase, numSamples, ppqPerSample, out);
     } else {
         processSegment(scanFrom, origin, to, sampleBase, numSamples, ppqPerSample, out);
@@ -185,6 +278,7 @@ void PatternPlayer::playRange(double scanFrom, double origin, double to, int sam
 void PatternPlayer::process(const TransportInfo& transport, int numSamples, double sampleRate, MidiEventList& out) {
     out.clear();
     ++call_;
+    pollHandover(out);
 
     if (!transport.hasPosition || !transport.isPlaying || transport.bpm <= 0.0 || sampleRate <= 0.0 ||
         numSamples <= 0) {
@@ -218,9 +312,8 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     lastNumSamples_ = numSamples;
 
     if (pending_.active) {
-        if (restart) {
-            pattern_ = pending_.pattern;
-            pending_.active = false;
+        if (restart && canRetire()) {
+            commitPending();
         } else if (!pending_.resolved) {
             // Fixed once, in the block that first sees the request (rule 2): never in the past.
             const double point = pending_.hasStamp && pending_.stampPpq >= transport.ppq - 1e-9
@@ -242,8 +335,11 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
         releaseAt(out, wrapOffset, true);
         if (pending_.active) {
             // The loop wrap is a jump: a switch whose point was not reached before it applies here (T4).
-            pattern_ = pending_.pattern;
-            pending_.active = false;
+            if (canRetire()) {
+                commitPending();
+            } else {
+                pending_.resolved = false; // queue full: choose a new point in the next block
+            }
         }
         const double secondEnd = transport.loopStartPpq + (blockEnd - transport.loopEndPpq);
         processSegment(transport.loopStartPpq, transport.loopStartPpq, secondEnd, wrapOffset, numSamples, ppqPerSample,

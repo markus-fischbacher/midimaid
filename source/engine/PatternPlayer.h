@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/PlaybackPattern.h"
+#include "engine/PatternHandover.h"
 
 #include <array>
 #include <cstddef>
@@ -63,9 +64,17 @@ private:
 class PatternPlayer {
 public:
     explicit PatternPlayer(PatternView pattern = placeholderPattern());
+    ~PatternPlayer();
+    PatternPlayer(const PatternPlayer&) = delete;
+    PatternPlayer& operator=(const PatternPlayer&) = delete;
 
-    /// Replaces the pattern at once (no quantization, no note-offs): for tests and the initial pattern.
+    /// Replaces the pattern at once (no quantization, no note-offs): for tests and the initial pattern. Not while
+    /// the audio thread runs.
     void setPattern(PatternView pattern);
+
+    /// Connects the lock-free handover (SPEC 6.3). The player takes switches and edits at the start of each block
+    /// and retires replaced patterns through the handover's return queue; it never frees one itself.
+    void attach(PatternHandover* handover) { handover_ = handover; }
 
     /// Asks for a switch to `next` at the next quantization point (SPEC 6.1a, D-131). The point is the first
     /// multiple of `gridPpq` (rounded up to a bar line, v1.0 restarts on bars only) that is not before the start of
@@ -92,6 +101,8 @@ private:
         double endPpq = 0.0;
         uint32_t startedInCall = 0;
         int32_t startOffset = 0;
+        uint32_t startTick = 0; // position of the note in its pattern, to recognise it after an edit
+        uint32_t lengthTicks = 0;
     };
 
     /// Starts notes whose start lies in [scanFrom, to) and ends those that end before `to`. Sample offsets are
@@ -102,6 +113,13 @@ private:
     /// Plays [scanFrom, to), cutting at the pending switch point when it lies inside.
     void playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
                    MidiEventList& out);
+    void pollHandover(MidiEventList& out);
+    void applyEdit(OwnedPattern* edit, MidiEventList& out);
+    /// True when a replaced pattern can be handed back (or there is nothing to hand back).
+    bool canRetire() const;
+    /// Makes the pending pattern the active one and retires the old one. Requires `canRetire()`.
+    void commitPending();
+    static void dispose(OwnedPattern* pattern);
     void releaseAt(MidiEventList& out, int sampleOffset, bool guardOwnStarts);
     void startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out);
 
@@ -113,9 +131,12 @@ private:
         bool active = false;
         bool resolved = false; // the point is fixed in the block that first sees the request
         double pointPpq = 0.0;
+        OwnedPattern* owner = nullptr; // set when the pattern came through the handover
     };
 
     PatternView pattern_;
+    OwnedPattern* activeOwner_ = nullptr; // owner of `pattern_` when it came through the handover
+    PatternHandover* handover_ = nullptr;
     PendingSwitch pending_;
     std::array<std::array<ActiveNote, 128>, 16> active_{};
     size_t activeCount_ = 0;
