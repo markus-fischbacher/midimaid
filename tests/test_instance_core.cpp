@@ -153,3 +153,53 @@ TEST_CASE("generation settings are brought into their valid range", "[instance-c
         CHECK(sanitize(settings).lengthBars == bars);
     }
 }
+
+TEST_CASE("the octave shifts every pitch of the output stage and folds back at the ends", "[instance-core]") {
+    Pattern pattern = makeEmptyPattern(1, "peak_time");
+    for (const uint8_t pitch : {uint8_t{5}, uint8_t{45}, uint8_t{120}}) {
+        Note note;
+        note.id = allocateNoteId(pattern);
+        note.pitch = pitch;
+        note.startTick = static_cast<uint32_t>(pattern.voices[0].notes.size()) * 960;
+        note.lengthTicks = 480;
+        pattern.voices[0].notes.push_back(note);
+    }
+    const auto pitches = [&](int shift) {
+        OutputSettings settings;
+        settings.octaveShift = shift;
+        settings.kickClearanceTicks = 0;
+        std::vector<int> result;
+        const OutputPattern out = renderOutput(pattern, settings);
+        for (const OutputNote& note : out.voices[0].notes) {
+            result.push_back(note.pitch);
+        }
+        return result;
+    };
+    CHECK(pitches(0) == std::vector<int>{5, 45, 120});
+    CHECK(pitches(1) == std::vector<int>{17, 57, 120}); // 132 folds back to 120
+    CHECK(pitches(-1) == std::vector<int>{5, 33, 108}); // -7 folds back to 5
+    CHECK(pitches(2) == std::vector<int>{29, 69, 120}); // 144 folds back to 120
+    CHECK(pitches(-2) == std::vector<int>{5, 21, 96});
+}
+
+TEST_CASE("the octave of playback notes is limited to two up and down", "[instance-core]") {
+    const auto library = shippedStyles();
+    const StyleProfile& style = *library.find("peak_time");
+    GenerationRequest request;
+    const Pattern pattern = generateCandidate(style, request, 3);
+    const auto plain = renderVoiceForPlayback(pattern, style, 0);
+    REQUIRE_FALSE(plain.notes.empty());
+    const auto up = renderVoiceForPlayback(pattern, style, 0, 1);
+    const auto beyond = renderVoiceForPlayback(pattern, style, 0, 9);
+    const auto two = renderVoiceForPlayback(pattern, style, 0, 2);
+    REQUIRE(up.notes.size() == plain.notes.size());
+    for (size_t i = 0; i < plain.notes.size(); ++i) {
+        CHECK(up.notes[i].pitch == plain.notes[i].pitch + 12);
+        CHECK(up.notes[i].startTick == plain.notes[i].startTick); // only the pitch changes
+    }
+    CHECK(clampOctave(9) == 2);
+    CHECK(clampOctave(-9) == -2);
+    for (size_t i = 0; i < two.notes.size(); ++i) {
+        CHECK(beyond.notes[i].pitch == two.notes[i].pitch);
+    }
+}

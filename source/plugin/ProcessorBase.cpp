@@ -1,5 +1,6 @@
 #include "plugin/ProcessorBase.h"
 
+#include "core/PlaybackRender.h"
 #include "core/SlotBankJson.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/PlaceholderEditor.h"
@@ -234,6 +235,8 @@ void ProcessorBase::setInstanceSettings(const mm::core::InstanceSettings& settin
 void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& settings) {
     settings_ = settings;
     settings_.outputVoice = mm::core::clampOutputVoice(settings.outputVoice);
+    settings_.octave = mm::core::clampOctave(settings.octave);
+    publisher_.setOctave(settings_.octave);
     settings_.generation = mm::core::sanitize(settings.generation);
     outputVoice_.store(settings_.outputVoice);
     publisher_.setOutputVoice(settings_.outputVoice);
@@ -387,6 +390,53 @@ void ProcessorBase::writeEvents(juce::MidiBuffer& midi) const {
     }
 }
 
+void ProcessorBase::updateExport() {
+    const double bpm = lastKnownBpm();
+    ExportKey key;
+    key.bpmCentis = std::llround(bpm * 100.0);
+    MidiExporter::Request request;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        const int playing = handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
+        const int slotIndex = std::clamp(playing, 1, static_cast<int>(mm::core::kSlotCount)) - 1;
+        key.slot = slotIndex;
+        key.voice = settings_.outputVoice;
+        key.octave = settings_.octave;
+        key.origin = slots_.origin();
+        const mm::core::Slot* slot = slots_.slot(static_cast<size_t>(slotIndex));
+        if (slot != nullptr) {
+            key.revision = slot->revision;
+        }
+        if (slot != nullptr && slot->pattern) {
+            const mm::core::Pattern& pattern = *slot->pattern;
+            const auto voiceIndex = static_cast<size_t>(settings_.outputVoice - 1);
+            if (const auto* style = styles_.findOrFallback(pattern.styleId)) {
+                auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, settings_.octave);
+                key.empty = false;
+                request.notes = std::move(rendered.notes);
+                request.lengthTicks = rendered.lengthTicks;
+                request.bpm = bpm;
+                const juce::String voiceName =
+                    voiceIndex < pattern.voices.size() && pattern.voices[voiceIndex].role == mm::core::VoiceRole::Melody
+                        ? "Melody"
+                    : voiceIndex == 0 ? "Bass"
+                                      : "Voice" + juce::String(settings_.outputVoice);
+                request.fileName = "MidiMaid_Slot" + juce::String(slotIndex + 1) + "_" + voiceName + ".mid";
+                request.trackName = "MidiMaid " + voiceName;
+            }
+        }
+    }
+    if (exportKey_ && *exportKey_ == key) {
+        return;
+    }
+    exportKey_ = key;
+    if (key.empty) {
+        exporter_.clear();
+    } else {
+        exporter_.requestExport(std::move(request));
+    }
+}
+
 MidiExporter& ProcessorBase::midiExporter() {
     return exporter_;
 }
@@ -446,6 +496,7 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         root.setAttribute("role", juce::String(role.data(), role.size()));
         root.setAttribute("outputMode", juce::String(mode.data(), mode.size()));
         root.setAttribute("outputVoice", settings_.outputVoice);
+        root.setAttribute("octave", settings_.octave);
         root.setAttribute("slotFollow", juce::String(mm::core::toString(settings_.slotFollow).data(),
                                                      mm::core::toString(settings_.slotFollow).size()));
         root.setAttribute("genStyle", juce::String(settings_.generation.styleId));
@@ -478,6 +529,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     }
     settings.generation.lengthBars =
         static_cast<uint32_t>(std::max(0, root->getIntAttribute("genBars", static_cast<int>(defaults.lengthBars))));
+    settings.octave = mm::core::clampOctave(root->getIntAttribute("octave", 0));
     settings.generation.energyPct = root->getIntAttribute("genEnergy", defaults.energyPct);
     settings.generation.creativityPct = root->getIntAttribute("genCreativity", defaults.creativityPct);
 

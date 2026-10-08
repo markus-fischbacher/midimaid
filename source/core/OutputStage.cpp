@@ -225,6 +225,18 @@ int32_t swingOffsetTicks(float swing, float amount) {
     return static_cast<int32_t>(((swingPermille - 500) * 480 * amountPermille + 500000) / 1000000);
 }
 
+/// Stage 1: moves a pitch by whole octaves; a result outside 0 to 127 is folded back into the range.
+static uint8_t shiftedPitch(uint8_t pitch, int octaveShift) {
+    int value = static_cast<int>(pitch) + 12 * octaveShift;
+    while (value > 127) {
+        value -= 12;
+    }
+    while (value < 0) {
+        value += 12;
+    }
+    return static_cast<uint8_t>(value);
+}
+
 OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& settings) {
     OutputPattern output;
     const int64_t patternEnd = static_cast<int64_t>(pattern.lengthBars) * kTicksPerBar;
@@ -256,7 +268,7 @@ OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& setting
             OutputNote note;
             note.noteId = work.source->id;
             note.channel = track.midiChannel;
-            note.pitch = work.source->pitch;
+            note.pitch = shiftedPitch(work.source->pitch, settings.octaveShift); // stage 1
             // stage 5: accent velocity
             note.velocity = work.source->accent ? settings.accentVelocity : static_cast<uint8_t>(work.velocity);
             note.startTick = static_cast<int32_t>(work.start);

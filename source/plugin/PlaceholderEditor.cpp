@@ -136,7 +136,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addAndMakeVisible(statusLabel_);
 
     setSize(600, 360);
-    processor_.midiExporter().requestExport(processor_.lastKnownBpm());
+    processor_.updateExport();
     updateStatus();
     startTimerHz(4); // keep the exported tempo equal to the DAW tempo and the status line current
 }
@@ -192,11 +192,7 @@ void PlaceholderEditor::updateStatus() {
 
 void PlaceholderEditor::timerCallback() {
     updateStatus();
-    const double bpm = processor_.lastKnownBpm();
-    auto& exporter = processor_.midiExporter();
-    if (std::abs(exporter.exportedBpm() - bpm) > 0.01) {
-        exporter.requestExport(bpm);
-    }
+    processor_.updateExport();
 }
 
 void PlaceholderEditor::paint(juce::Graphics& g) {

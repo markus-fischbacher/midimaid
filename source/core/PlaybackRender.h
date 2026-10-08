@@ -12,12 +12,13 @@ namespace mm::core {
 
 /// What the engine plays for one voice: the output stage (SPEC 4.2a) applied with the settings of the style, reduced
 /// to the notes of voice `voiceIndex`. A slide that reaches past the pattern end is cut at it. Sorted by start tick.
-/// A voice index beyond the pattern's voices gives no notes.
+/// A voice index beyond the pattern's voices gives no notes. `octaveShift` is the instance's own octave (stage 1).
 struct PlaybackNotes {
     std::vector<PatternNote> notes;
     uint32_t lengthTicks = 0;
 };
 
-PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile& style, size_t voiceIndex);
+PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile& style, size_t voiceIndex,
+                                     int octaveShift = 0);
 
 } // namespace mm::core

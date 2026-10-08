@@ -1,7 +1,10 @@
 #pragma once
 
+#include "core/PlaybackPattern.h"
+
 #include <atomic>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <vector>
 
 namespace mm::plugin {
 
@@ -13,8 +16,19 @@ public:
     MidiExporter();
     ~MidiExporter();
 
-    /// Non-blocking: writes the file with the given DAW tempo in the background.
-    void requestExport(double bpm);
+    /// What to write: the notes one instance plays, the DAW tempo and the names.
+    struct Request {
+        std::vector<mm::core::PatternNote> notes;
+        uint32_t lengthTicks = 0;
+        double bpm = 120.0;
+        juce::String fileName; ///< MidiMaid_<slot>_<voice>.mid
+        juce::String trackName;
+    };
+
+    /// Non-blocking: writes the file in the background; the file of the request before is removed afterwards.
+    void requestExport(Request request);
+    /// Non-blocking: nothing to drag any more (the slot is empty): removes the file.
+    void clear();
 
     /// The file once the first export has finished, otherwise an empty path. Message thread.
     juce::File readyFile() const;
@@ -22,10 +36,9 @@ public:
     /// Tempo of the file currently on disk (0 until the first export finished).
     double exportedBpm() const;
 
-    static juce::String fileName();
-
 private:
     juce::File folder_;
+    mutable juce::CriticalSection fileLock_; // guards `file_`, written by the worker and read on the message thread
     juce::File file_;
     std::atomic<bool> ready_{false};
     std::atomic<double> exportedBpm_{0.0};
