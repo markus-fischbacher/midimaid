@@ -1,5 +1,6 @@
 #include "core/PatternGenerator.h"
 #include "engine/GroupChannel.h"
+#include "plugin/GroupText.h"
 #include "plugin/ProcessorBase.h"
 
 #include <algorithm>
@@ -627,4 +628,21 @@ TEST_CASE("a voice's generate request is carried out by the hub with the hub's s
     REQUIRE_FALSE(hub.processor.slotsSnapshot().isEmpty(0));
     REQUIRE_FALSE(voice.processor.slotsSnapshot().isEmpty(0));
     CHECK(voice.processor.slotsSnapshot().slot(0)->pattern->lengthBars == 2);
+}
+
+TEST_CASE("only a voice that finds no hub gets the hint about separate plug-in processes", "[group-wiring]") {
+    using mm::plugin::groupStatusText;
+    const auto hint = [](GroupStatus status) {
+        return groupStatusText(status, 0).find("separate processes") != std::string::npos;
+    };
+    CHECK(hint(GroupStatus::HubMissing));
+    CHECK(hint(GroupStatus::HubOffered));
+    CHECK_FALSE(hint(GroupStatus::VoiceConnected));
+    CHECK_FALSE(hint(GroupStatus::Hub));
+    CHECK_FALSE(hint(GroupStatus::HubRefused));
+    CHECK_FALSE(hint(GroupStatus::Solo));
+    CHECK(groupStatusText(GroupStatus::Hub, 1) == "Hub: 1 voice");
+    CHECK(groupStatusText(GroupStatus::Hub, 3) == "Hub: 3 voices");
+    CHECK(groupStatusText(GroupStatus::Solo, 0).empty());
+    CHECK(groupStatusText(GroupStatus::HubOffered, 0).find("you can take over") != std::string::npos);
 }
