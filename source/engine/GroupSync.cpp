@@ -16,6 +16,18 @@ double ceilToBar(double ppq) {
 
 } // namespace
 
+std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std::optional<double> ownEndPpq) {
+    double furthest = 0.0;
+    const bool anyPlaying = channel.furthestPlaying(furthest);
+    if (ownEndPpq) {
+        furthest = anyPlaying ? std::max(furthest, *ownEndPpq) : *ownEndPpq;
+    } else if (!anyPlaying || bpm <= 0.0) {
+        return std::nullopt;
+    }
+    const double leadPpq = channel.minLeadMs() / 1000.0 * bpm / 60.0;
+    return ceilToBar(furthest + leadPpq);
+}
+
 SlotDecision GroupSync::beginBlock(SlotMode mode, int ownSlot, const TransportInfo& transport, int numSamples,
                                    double sampleRate, bool restart) {
     ownSlot = std::clamp(ownSlot, 1, 16);
@@ -48,11 +60,7 @@ SlotDecision GroupSync::beginBlock(SlotMode mode, int ownSlot, const TransportIn
     case SlotMode::Hub: {
         channel_.reportHub(endPpq, ownSlot, playing);
         if (playing && ownSlot != lastOwnSlot_ && channel_.memberCount() > 1) {
-            double furthest = endPpq;
-            channel_.furthestPlaying(furthest);
-            furthest = std::max(furthest, endPpq);
-            const double leadPpq = channel_.minLeadMs() / 1000.0 * transport.bpm / 60.0;
-            const double stamp = ceilToBar(furthest + leadPpq);
+            const double stamp = *plannedStamp(channel_, transport.bpm, endPpq);
             channel_.publishPlan(stamp, ownSlot);
             decision.stamped = true;
             decision.stampPpq = stamp;

@@ -25,8 +25,10 @@ public:
     void setOutputVoice(int voice);
     int outputVoice() const { return outputVoice_; }
 
-    /// Publishes every slot that changed since the last call. Returns the number of slots published.
-    size_t sync(const core::SlotBank& bank, double gridPpq = 4.0);
+    /// Publishes every slot that changed since the last call. Returns the number of slots published. With `stampPpq`
+    /// the changes take effect at that PPQ position (planned by the hub, D-144); a stamp already behind falls back
+    /// to the next grid point.
+    size_t sync(const core::SlotBank& bank, double gridPpq = 4.0, std::optional<double> stampPpq = std::nullopt);
     /// Publishes one slot as an edit (no quantization; replaces the pattern that plays). False when the slot is empty.
     bool publishEdit(const core::SlotBank& bank, size_t index);
     /// Forgets which revisions were published, so the next `sync` publishes every slot that has content (and every

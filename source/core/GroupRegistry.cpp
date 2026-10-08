@@ -111,12 +111,14 @@ void GroupRegistry::setOutputVoice(MemberId id, int outputVoice) {
     }
 }
 
-bool GroupRegistry::publish(MemberId id, SlotSnapshot snapshot) {
+bool GroupRegistry::publish(MemberId id, SlotSnapshot snapshot, std::optional<double> stampPpq) {
     if (id == 0 || id != hub_) {
         return false;
     }
     hubSnapshot_ = std::move(snapshot);
+    hubStamp_ = stampPpq;
     notify();
+    hubStamp_.reset();
     return true;
 }
 
@@ -136,11 +138,13 @@ void GroupRegistry::notify() {
         GroupStatus newStatus = GroupStatus::Solo;
         size_t voices = 0;
         SlotSnapshot snapshot;
+        std::optional<double> stamp;
     };
     std::vector<Call> calls;
+    const std::optional<double> stamp = hubStamp_; // callbacks may publish again
     const size_t voices = voiceCount();
     for (auto& entry : members_) {
-        Call call{entry.id, entry.member, false, GroupStatus::Solo, 0, nullptr};
+        Call call{entry.id, entry.member, false, GroupStatus::Solo, 0, nullptr, std::nullopt};
         const GroupStatus now = statusOf(entry);
         const size_t count = entry.role == InstanceRole::Hub ? voices : 0;
         if (!entry.statusSent || entry.sentStatus != now || entry.sentVoices != count) {
@@ -154,6 +158,7 @@ void GroupRegistry::notify() {
         if (entry.role == InstanceRole::Voice && hubSnapshot_ != nullptr && entry.sentSnapshot != hubSnapshot_) {
             entry.sentSnapshot = hubSnapshot_;
             call.snapshot = hubSnapshot_;
+            call.stamp = stamp;
         }
         if (call.status || call.snapshot) {
             calls.push_back(std::move(call));
@@ -165,7 +170,7 @@ void GroupRegistry::notify() {
             continue; // removed by an earlier callback
         }
         if (call.snapshot) {
-            call.member->onSnapshot(call.snapshot);
+            call.member->onSnapshot(call.snapshot, call.stamp);
         }
         if (call.status) {
             call.member->onStatus(call.newStatus, call.voices);

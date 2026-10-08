@@ -24,8 +24,8 @@ public:
 
     /// Any thread: role and voice this instance wants; applied on the message thread (at once when already there).
     void setRole(mm::core::InstanceRole role, int outputVoice);
-    /// Any thread: the hub's new slot set.
-    void publish(mm::core::SlotSnapshot snapshot);
+    /// Any thread: the hub's new slot set, with the PPQ stamp at which it takes effect when the hub planned one.
+    void publish(mm::core::SlotSnapshot snapshot, std::optional<double> stampPpq = std::nullopt);
     /// Message thread: takes the hub role that was offered.
     void acceptOffer();
     /// Owner is going away: no callback reaches it after this returns; leaves the registry.
@@ -35,7 +35,7 @@ public:
     size_t voices() const { return voices_.load(); }
 
     // GroupMember (message thread)
-    void onSnapshot(const mm::core::SlotSnapshot& snapshot) override;
+    void onSnapshot(const mm::core::SlotSnapshot& snapshot, std::optional<double> stampPpq) override;
     void onStatus(mm::core::GroupStatus status, size_t voices) override;
     mm::core::SlotSnapshot currentSlots() override;
 
