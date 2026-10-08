@@ -10,7 +10,7 @@ target_compile_definitions(mm_mmgen_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJE
 add_executable(mm_plugin_tests test_host_capabilities.cpp)
 target_link_libraries(mm_plugin_tests PRIVATE mm_host_capabilities Catch2::Catch2WithMain mm_warnings)
 
-add_executable(mm_engine_tests test_pattern_player.cpp test_slot_publisher.cpp)
+add_executable(mm_engine_tests test_pattern_player.cpp test_slot_publisher.cpp test_group_sync.cpp)
 find_package(Threads REQUIRED)
 target_link_libraries(mm_engine_tests PRIVATE mm_engine Threads::Threads Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_engine_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")

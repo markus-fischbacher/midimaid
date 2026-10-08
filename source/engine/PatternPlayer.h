@@ -83,6 +83,13 @@ public:
     int selectedSlot() const { return selected_ + 1; }
     /// Grid of slot changes in PPQ (default one bar; rounded up to a bar line).
     void setSlotGrid(double gridPpq) { slotGridPpq_ = gridPpq; }
+    /// Same, with the switch point planned by the hub (SPEC 6.1a, D-131): a point not behind the block start that
+    /// first sees the change is taken as it is, otherwise the next bar line. Only matters when the slot differs from
+    /// the playing one.
+    void setSlotAt(int slot, double stampPpq);
+    /// True when the next block (`transport`, `numSamples`, `sampleRate`) is a start or a jump, so that a waiting
+    /// change applies at once. The same test `process` uses.
+    bool startsOrJumps(const TransportInfo& transport, int numSamples, double sampleRate) const;
 
     /// Mute of the voice this player plays (SPEC 3.13, `mute_<voice>`), read at the block start: sounding notes end at
     /// once (note-off at offset 0), while muted no note starts. The position keeps running and changes still happen,
@@ -143,6 +150,7 @@ private:
     void retire(OwnedPattern* pattern);
     static void dispose(OwnedPattern* pattern);
     void releaseAt(MidiEventList& out, int sampleOffset, bool guardOwnStarts);
+    double positionTolerance(double ppqPerSample) const;
     void startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out);
     void reportActive() const;
 
