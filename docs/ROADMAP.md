@@ -100,6 +100,7 @@ Ersatzweg beschlossen.
 - [ ] **Hörtest-Session** mit dem Entwickler nach dem Protokoll in SPEC §12: `mmgen`-Serien in Live mit den
       Referenz-Instrumenten abhören, Gewichte, Bereiche, Bewertungsgewichte und Mindestbewertung in
       STYLES.md anpassen
+      (vorbereitet: Anleitung `docs/HOERTEST.md`, zweistufig nach D-136, Screening-Set mit 189 Mustern)
 - [ ] **Blindvergleich** gegen die Live-12-Generatoren (Seed, Shape) bei gleicher Tonart
 
 **Abnahme 1a:** Offline entstehen stiltypische, abgestimmte Patterns. Gleicher Seed ergibt auf allen
