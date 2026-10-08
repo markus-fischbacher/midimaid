@@ -786,6 +786,15 @@ void pumpMessages(int milliseconds) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(milliseconds);
 }
 
+/// Pumps the message loop until `condition` holds (the editor's timer and the parameter attachments are asynchronous,
+/// and a sanitizer build is slow), at most `timeoutMs`.
+bool waitFor(const std::function<bool()>& condition, int timeoutMs = 5000) {
+    for (int waited = 0; waited < timeoutMs && !condition(); waited += 20) {
+        pumpMessages(20);
+    }
+    return condition();
+}
+
 /// A component below `parent` (at any depth) by component id.
 juce::Component* findById(juce::Component& parent, const juce::String& id) {
     for (auto* component : parent.getChildren()) {
@@ -819,15 +828,14 @@ TEST_CASE("the editor of a voice is the compact voice UI, other roles get the hu
     CHECK(child<juce::TextButton>(*editor, "openHub")->isVisible());
 
     voice.setRole(InstanceRole::Solo);
-    pumpMessages(500); // the editor's timer notices the new role
+    REQUIRE(waitFor([&] { return editor->getHeight() == 640; })); // the editor's timer notices the new role
     CHECK(editor->getWidth() == 1000);
     CHECK(editor->getHeight() == 640);
     CHECK_FALSE(child<juce::ToggleButton>(*editor, "mute")->isVisible());
     CHECK_FALSE(child<juce::Component>(*editor, "roll")->isVisible());
 
     voice.setRole(InstanceRole::Voice);
-    pumpMessages(500);
-    CHECK(editor->getHeight() == 320);
+    REQUIRE(waitFor([&] { return editor->getHeight() == 320; }));
     CHECK(child<juce::ToggleButton>(*editor, "mute")->isVisible());
 
     Instance solo("Solo");
@@ -854,11 +862,13 @@ TEST_CASE("the mute button is the host parameter of the voice, both ways", "[gro
     CHECK(voice.processor.mutedByOwnSwitch());
 
     parameter->setValueNotifyingHost(0.0f); // automation moves the switch
-    pumpMessages(100);
-    CHECK_FALSE(mute->getToggleState());
+    CHECK(waitFor([&] { return !mute->getToggleState(); }));
 
     voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 1); // another voice: the button follows that parameter
-    pumpMessages(500);
+    voice.setMute(1, true);
+    REQUIRE(waitFor([&] { return mute->getToggleState(); })); // bound to mute_1 now
+    voice.setMute(1, false);
+    REQUIRE(waitFor([&] { return !mute->getToggleState(); }));
     mute->setToggleState(true, juce::sendNotificationSync);
     CHECK(voice.processor.parameters().getRawParameterValue("mute_1")->load() == 1.0f);
     CHECK(parameter->getValue() == 0.0f);
@@ -880,8 +890,7 @@ TEST_CASE("the octave box sets the octave of the instance and shows it", "[group
     auto settings = voice.processor.instanceSettings();
     settings.octave = 1; // set from outside: the box follows
     voice.processor.setInstanceSettings(settings);
-    pumpMessages(500);
-    CHECK(box->getSelectedId() == 4);
+    CHECK(waitFor([&] { return box->getSelectedId() == 4; }));
 }
 
 TEST_CASE("the Open hub button works only with a hub", "[group-wiring][editor]") {
@@ -894,11 +903,9 @@ TEST_CASE("the Open hub button works only with a hub", "[group-wiring][editor]")
     CHECK_FALSE(button->isEnabled());
     Instance hub("Hub");
     hub.setRole(InstanceRole::Hub);
-    pumpMessages(500);
-    CHECK(button->isEnabled());
+    REQUIRE(waitFor([&] { return button->isEnabled(); }));
     button->triggerClick(); // asynchronous
-    pumpMessages(200);
-    CHECK(hub.processor.frontRequests() == 1);
+    CHECK(waitFor([&] { return hub.processor.frontRequests() == 1; }));
 }
 
 namespace {
@@ -976,8 +983,7 @@ TEST_CASE("the hub UI fields show the settings and change them", "[group-wiring]
     auto* random = child<juce::TextButton>(*editor, "random");
     REQUIRE(random != nullptr);
     random->triggerClick();
-    pumpMessages(100);
-    CHECK_FALSE(solo.processor.instanceSettings().generation.seed.has_value());
+    CHECK(waitFor([&] { return !solo.processor.instanceSettings().generation.seed.has_value(); }));
     CHECK(seed->getText().isEmpty());
 }
 
@@ -992,7 +998,7 @@ TEST_CASE("settings changed from outside show up in the hub UI", "[group-wiring]
     settings.generation.seed = 123;
     settings.generation.energyPct = 90;
     solo.processor.setInstanceSettings(settings);
-    pumpMessages(500);
+    REQUIRE(waitFor([&] { return child<juce::Slider>(*editor, "energy")->getValue() == 90.0; }));
     CHECK(child<juce::ComboBox>(*editor, "key")->getText() == "Key: G");
     CHECK(child<juce::ComboBox>(*editor, "scale")->getText() == "Scale: Dorian");
     CHECK(child<juce::ComboBox>(*editor, "bars")->getSelectedId() == 8);
@@ -1005,24 +1011,21 @@ TEST_CASE("the slot strip selects the slot and shows which slots are filled", "[
     Instance solo("Solo");
     solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(2, marked(41)); });
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
-    pumpMessages(300);
     auto* first = child<juce::TextButton>(*editor, "slot1");
     auto* third = child<juce::TextButton>(*editor, "slot3");
     auto* last = child<juce::TextButton>(*editor, "slot16");
     REQUIRE(first != nullptr);
     REQUIRE(third != nullptr);
     REQUIRE(last != nullptr);
-    CHECK(first->getToggleState()); // slot 1 is the selected one
+    CHECK(waitFor([&] { return first->getToggleState(); })); // slot 1 is the selected one
     CHECK_FALSE(third->getToggleState());
     const auto colour = [](juce::TextButton* button) { return button->findColour(juce::TextButton::buttonColourId); };
     CHECK(colour(third) != colour(first)); // filled and empty look different
     CHECK(colour(first) == colour(last));
 
     third->triggerClick();
-    pumpMessages(300);
-    CHECK(solo.processor.activeSlot() == 3);
-    CHECK(third->getToggleState());
-    CHECK_FALSE(first->getToggleState());
+    CHECK(waitFor([&] { return solo.processor.activeSlot() == 3; }));
+    CHECK(waitFor([&] { return third->getToggleState() && !first->getToggleState(); }));
     for (int slot = 1; slot <= 16; ++slot) {
         CHECK(child<juce::TextButton>(*editor, "slot" + juce::String(slot)) != nullptr);
     }
@@ -1032,7 +1035,6 @@ TEST_CASE("the hub UI has a row per voice of the playing slot", "[group-wiring][
     Quiet quiet;
     Instance solo("Solo");
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
-    pumpMessages(300);
     // An empty slot: the two default voices, without notes.
     REQUIRE(find(*editor, "row_1") != nullptr);
     REQUIRE(find(*editor, "row_2") != nullptr);
@@ -1040,7 +1042,8 @@ TEST_CASE("the hub UI has a row per voice of the playing slot", "[group-wiring][
     CHECK(dynamic_cast<mm::plugin::RollView*>(find(*editor, "roll_1"))->layout().notes.empty());
 
     solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
-    pumpMessages(500);
+    REQUIRE(
+        waitFor([&] { return !dynamic_cast<mm::plugin::RollView*>(find(*editor, "roll_2"))->layout().notes.empty(); }));
     auto* bass = dynamic_cast<mm::plugin::RollView*>(find(*editor, "roll_1"));
     auto* melody = dynamic_cast<mm::plugin::RollView*>(find(*editor, "roll_2"));
     REQUIRE(bass != nullptr);
@@ -1062,15 +1065,13 @@ TEST_CASE("the hub UI has a row per voice of the playing slot", "[group-wiring][
     solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(1, three)); });
     solo.setSlotParameter(2);
     runTo({&solo}, 4.1); // a slot change takes effect at the next bar line
-    pumpMessages(500);
-    REQUIRE(find(*editor, "row_3") != nullptr);
+    REQUIRE(waitFor([&] { return find(*editor, "row_3") != nullptr; }));
     CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_3"))->getText() == "Voice 3");
 
     // Back to a slot with two voices: two rows again.
     solo.setSlotParameter(1);
     runTo({&solo}, 8.1);
-    pumpMessages(500);
-    CHECK(find(*editor, "row_3") == nullptr);
+    CHECK(waitFor([&] { return find(*editor, "row_3") == nullptr; }));
 }
 
 TEST_CASE("each voice row has its own Mute and its own grip", "[group-wiring][editor]") {
@@ -1078,26 +1079,21 @@ TEST_CASE("each voice row has its own Mute and its own grip", "[group-wiring][ed
     Instance solo("Solo");
     solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
-    pumpMessages(500);
     auto* mute2 = child<juce::ToggleButton>(*editor, "mute_2");
     REQUIRE(mute2 != nullptr);
     mute2->setToggleState(true, juce::sendNotificationSync);
     CHECK(solo.processor.parameters().getRawParameterValue("mute_2")->load() == 1.0f);
     CHECK(solo.processor.parameters().getRawParameterValue("mute_1")->load() == 0.0f);
     solo.setMute(1, true); // automation of the other voice moves its button only
-    pumpMessages(100);
-    CHECK(child<juce::ToggleButton>(*editor, "mute_1")->getToggleState());
+    CHECK(waitFor([&] { return child<juce::ToggleButton>(*editor, "mute_1")->getToggleState(); }));
     solo.setMute(2, false);
-    pumpMessages(100);
-    CHECK_FALSE(mute2->getToggleState());
+    CHECK(waitFor([&] { return !mute2->getToggleState(); }));
 
     auto* grip1 = dynamic_cast<mm::plugin::DragHandle*>(find(*editor, "drag_1"));
     auto* grip2 = dynamic_cast<mm::plugin::DragHandle*>(find(*editor, "drag_2"));
     REQUIRE(grip1 != nullptr);
     REQUIRE(grip2 != nullptr);
-    for (int i = 0; i < 400 && (grip1->file() == juce::File() || grip2->file() == juce::File()); ++i) {
-        pumpMessages(10);
-    }
+    waitFor([&] { return grip1->file() != juce::File() && grip2->file() != juce::File(); });
     REQUIRE(grip1->file() != juce::File());
     REQUIRE(grip2->file() != juce::File());
     CHECK(grip1->file() == solo.processor.midiExporter().readyFile(1));
@@ -1109,7 +1105,6 @@ TEST_CASE("the info line names what the playing slot holds", "[group-wiring][edi
     Quiet quiet;
     Instance solo("Solo");
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
-    pumpMessages(300);
     auto* info = dynamic_cast<juce::Label*>(find(*editor, "info"));
     REQUIRE(info != nullptr);
     CHECK(info->getText().contains("empty"));
@@ -1119,7 +1114,7 @@ TEST_CASE("the info line names what the playing slot holds", "[group-wiring][edi
     pattern.info.seed = 777;
     pattern.info.winnerSeed = 888;
     solo.processor.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(0, pattern); });
-    pumpMessages(500);
+    REQUIRE(waitFor([&] { return info->getText().contains("winner 888"); }));
     CHECK(info->getText().contains("Slot 1"));
     CHECK(info->getText().contains("D dorian"));
     CHECK(info->getText().contains("seed 777"));
@@ -1138,9 +1133,7 @@ TEST_CASE("Generate in the hub UI uses the key, scale, bars and seed of its fiel
     seed->onReturnKey();
     const auto scales = mm::core::allScales();
     solo.processor.generate();
-    for (int i = 0; i < 400 && solo.processor.slotsSnapshot().isEmpty(0); ++i) {
-        pumpMessages(10);
-    }
+    waitFor([&] { return !solo.processor.slotsSnapshot().isEmpty(0); });
     const auto bank = solo.processor.slotsSnapshot();
     REQUIRE_FALSE(bank.isEmpty(0));
     const auto& pattern = *bank.slot(0)->pattern;
@@ -1148,6 +1141,5 @@ TEST_CASE("Generate in the hub UI uses the key, scale, bars and seed of its fiel
     CHECK(pattern.context.scaleId == std::string(scales[2].id));
     CHECK(pattern.lengthBars == 2);
     CHECK(pattern.info.seed == 77);
-    pumpMessages(500);
-    CHECK(dynamic_cast<juce::Label*>(find(*editor, "info"))->getText().contains("seed 77"));
+    CHECK(waitFor([&] { return dynamic_cast<juce::Label*>(find(*editor, "info"))->getText().contains("seed 77"); }));
 }
