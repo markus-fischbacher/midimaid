@@ -39,6 +39,7 @@ public:
         statuses.push_back(s);
         voices = v;
     }
+    void onAction(GroupAction action) override { actions.push_back(action); }
     SlotSnapshot currentSlots() override { return std::make_shared<const SlotBank>(bank); }
 
     GroupStatus status() const { return statuses.empty() ? GroupStatus::Solo : statuses.back(); }
@@ -54,6 +55,7 @@ public:
     std::vector<SlotSnapshot> snapshots;
     std::vector<std::optional<double>> stamps;
     std::vector<GroupStatus> statuses;
+    std::vector<GroupAction> actions;
     size_t voices = 0;
     std::function<void()> onSnapshotHook;
 };
@@ -284,4 +286,33 @@ TEST_CASE("the hub's stamp travels with the change to every voice, and only with
     registry.add(late, InstanceRole::Voice);
     REQUIRE(late->stamps.size() == 1);
     CHECK_FALSE(late->stamps.back().has_value());
+}
+
+TEST_CASE("a voice's action goes to the hub, nobody else", "[group]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(60);
+    auto voiceA = std::make_shared<FakeMember>(40);
+    auto voiceB = std::make_shared<FakeMember>(41);
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    const auto voiceId = registry.add(voiceA, InstanceRole::Voice);
+    registry.add(voiceB, InstanceRole::Voice);
+
+    CHECK(registry.forward(voiceId, GroupAction::Generate));
+    REQUIRE(hub->actions.size() == 1);
+    CHECK(hub->actions[0] == GroupAction::Generate);
+    CHECK(voiceA->actions.empty());
+    CHECK(voiceB->actions.empty());
+    CHECK_FALSE(registry.forward(hubId, GroupAction::Generate)); // the hub asks nobody
+    CHECK_FALSE(registry.forward(9999, GroupAction::Generate));
+    CHECK(hub->actions.size() == 1);
+}
+
+TEST_CASE("an action without a hub is not forwarded", "[group]") {
+    GroupRegistry registry;
+    auto voice = std::make_shared<FakeMember>(40);
+    auto solo = std::make_shared<FakeMember>();
+    const auto voiceId = registry.add(voice, InstanceRole::Voice);
+    const auto soloId = registry.add(solo, InstanceRole::Solo);
+    CHECK_FALSE(registry.forward(voiceId, GroupAction::Generate));
+    CHECK_FALSE(registry.forward(soloId, GroupAction::Generate));
 }

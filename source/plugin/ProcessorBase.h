@@ -21,7 +21,7 @@
 namespace mm::plugin {
 
 /// What the last "Generate" did, for the editor (message thread).
-enum class GenerationStatus { Idle, Generating, Done, NoResult, UseHub };
+enum class GenerationStatus { Idle, Generating, Done, NoResult, UseHub, Forwarded };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
 /// audio and a hard-coded one-bar pattern played in sync with the host transport.
@@ -153,7 +153,9 @@ private:
 
     mm::engine::GroupSync groupSync_{mm::engine::processGroupChannel(), mm::engine::GroupChannel::kNone};
     std::atomic<int> slotMode_{static_cast<int>(mm::engine::SlotMode::Own)}; // read in the audio thread
-    int channelMember_ = mm::engine::GroupChannel::kNone;                    // message thread
+    std::atomic<bool> silent_{false};    // a hub with output mode "none" plays nothing (audio thread reads)
+    std::atomic<bool> voiceRole_{false}; // a voice also obeys the hub's mute switches (audio thread reads)
+    int channelMember_ = mm::engine::GroupChannel::kNone; // message thread
     std::shared_ptr<GroupLink> groupLink_;
     GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance
 

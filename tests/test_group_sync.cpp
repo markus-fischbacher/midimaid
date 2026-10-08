@@ -605,3 +605,28 @@ TEST_CASE("the planned stamp is the first bar line after the furthest playing bl
     channel.setMinLeadMs(1000.0);
     CHECK(plannedStamp(channel, 120.0) == 12.0); // 7.6 + 2.0 = 9.6
 }
+
+TEST_CASE("the hub's mute switches reach a voice and vanish with the hub", "[group-channel]") {
+    GroupChannel channel;
+    const int hub = channel.acquire();
+    const int voice = channel.acquire();
+    GroupSync hubSync(channel, hub);
+    GroupSync voiceSync(channel, voice);
+    CHECK_FALSE(voiceSync.mutedByHub(2)); // no hub yet
+    channel.setHub(hub);
+    hubSync.reportMutes(0b10);
+    CHECK(voiceSync.mutedByHub(2));
+    CHECK_FALSE(voiceSync.mutedByHub(1));
+    CHECK_FALSE(voiceSync.mutedByHub(0)); // out of range
+    CHECK_FALSE(voiceSync.mutedByHub(33));
+    CHECK_FALSE(hubSync.mutedByHub(2)); // the hub uses its own parameter
+
+    channel.setHub(voice); // another hub: the old switches mean nothing
+    CHECK_FALSE(hubSync.mutedByHub(2));
+    channel.setHub(hub);
+    CHECK_FALSE(voiceSync.mutedByHub(2));
+    hubSync.reportMutes(0b10);
+    channel.release(hub); // the hub leaves
+    CHECK_FALSE(voiceSync.mutedByHub(2));
+    CHECK(channel.hubMute() == 0);
+}

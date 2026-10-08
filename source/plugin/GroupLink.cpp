@@ -62,6 +62,14 @@ void GroupLink::publish(mm::core::SlotSnapshot snapshot, std::optional<double> s
     });
 }
 
+void GroupLink::forward(mm::core::GroupAction action) {
+    onMessageThread([self = shared_from_this(), action] {
+        if (self->id_ != 0) {
+            processGroup().forward(self->id_, action);
+        }
+    });
+}
+
 void GroupLink::acceptOffer() {
     onMessageThread([self = shared_from_this()] {
         if (self->id_ != 0) {
@@ -98,6 +106,13 @@ void GroupLink::onStatus(mm::core::GroupStatus status, size_t voices) {
     const juce::ScopedLock lock(lock_);
     if (owner_ != nullptr) {
         owner_->onGroupStatusChanged(status);
+    }
+}
+
+void GroupLink::onAction(mm::core::GroupAction action) {
+    const juce::ScopedLock lock(lock_);
+    if (owner_ != nullptr && action == mm::core::GroupAction::Generate) {
+        owner_->generate();
     }
 }
 

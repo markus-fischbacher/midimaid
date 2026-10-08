@@ -60,12 +60,15 @@ void GroupChannel::release(int member) {
     if (used_[static_cast<size_t>(member)].compare_exchange_strong(expected, false, std::memory_order_acq_rel)) {
         count_.fetch_sub(1, std::memory_order_acq_rel);
         int hub = member;
-        hub_.compare_exchange_strong(hub, kNone, std::memory_order_acq_rel); // the hub left
+        if (hub_.compare_exchange_strong(hub, kNone, std::memory_order_acq_rel)) { // the hub left
+            hubMute_.store(0, std::memory_order_release);
+        }
     }
 }
 
 void GroupChannel::setHub(int member) {
     hubState_.store(kNoHubState, std::memory_order_release);
+    hubMute_.store(0, std::memory_order_release);
     hub_.store(member, std::memory_order_release);
 }
 

@@ -51,6 +51,11 @@ public:
     SlotDecision beginBlock(SlotMode mode, int ownSlot, const TransportInfo& transport, int numSamples,
                             double sampleRate, bool restart);
 
+    /// Hub: publishes the mute switches (bit n-1 = voice n) for the voices of the group.
+    void reportMutes(uint32_t mask) { channel_.reportHubMute(mask); }
+    /// Voice: true when the hub has muted `voice` (1 to 8). False without a hub or when this member is the hub.
+    bool mutedByHub(int voice) const;
+
     /// Planned switches that reached this voice too late for their point (shown or logged outside the audio thread).
     uint32_t lateSwitches() const { return lateSwitches_.load(std::memory_order_relaxed); }
 

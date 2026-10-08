@@ -56,6 +56,11 @@ public:
     void reportHub(double endPpq, int slot, bool playing);
     HubState hubState() const;
 
+    /// The hub's mute switches, bit n-1 for voice n (SPEC 6.5: mute works twice). A voice mutes itself when its bit
+    /// is set; without a hub (or after a change of hub) no bit is set.
+    void reportHubMute(uint32_t mask) { hubMute_.store(mask, std::memory_order_release); }
+    uint32_t hubMute() const { return hubMute_.load(std::memory_order_acquire); }
+
     /// A slot change planned by the hub for `stampPpq`.
     struct Plan {
         uint32_t sequence = 0;
@@ -75,11 +80,13 @@ private:
     std::atomic<int64_t> hubState_{kNoHubState}; // (ticks << 6) | (slot - 1) << 1 | playing
     std::atomic<uint64_t> plan_{0};              // (ticks << 21) | (slot - 1) << 16 | sequence
     std::atomic<double> minLeadMs_{150.0};
+    std::atomic<uint32_t> hubMute_{0};
 };
 
 static_assert(std::atomic<int64_t>::is_always_lock_free, "the channel must stay lock-free");
 static_assert(std::atomic<uint64_t>::is_always_lock_free, "the channel must stay lock-free");
 static_assert(std::atomic<int>::is_always_lock_free, "the channel must stay lock-free");
+static_assert(std::atomic<uint32_t>::is_always_lock_free, "the channel must stay lock-free");
 static_assert(std::atomic<bool>::is_always_lock_free, "the channel must stay lock-free");
 static_assert(std::atomic<double>::is_always_lock_free, "the channel must stay lock-free");
 
