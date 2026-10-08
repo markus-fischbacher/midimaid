@@ -4,27 +4,32 @@ namespace mm::engine {
 
 PatternHandover::~PatternHandover() {
     // The audio thread no longer runs (host contract): free everything that is still in flight.
-    std::unique_ptr<OwnedPattern>(switch_.exchange(nullptr));
-    std::unique_ptr<OwnedPattern>(edit_.exchange(nullptr));
+    for (auto& mailbox : results_) {
+        std::unique_ptr<OwnedPattern>(mailbox.exchange(nullptr));
+    }
+    for (auto& mailbox : edits_) {
+        std::unique_ptr<OwnedPattern>(mailbox.exchange(nullptr));
+    }
     collectReturned();
 }
 
-void PatternHandover::publishSwitch(std::unique_ptr<OwnedPattern> pattern, double gridPpq) {
+void PatternHandover::publishResult(size_t slot, std::unique_ptr<OwnedPattern> pattern, double gridPpq) {
     pattern->gridPpq = gridPpq;
     pattern->hasStamp = false;
-    // A switch the audio thread has not taken yet is replaced; it was never seen there and is freed here.
-    std::unique_ptr<OwnedPattern> replaced(switch_.exchange(pattern.release(), std::memory_order_acq_rel));
+    // A result the audio thread has not taken yet is replaced; it was never seen there and is freed here.
+    std::unique_ptr<OwnedPattern> replaced(results_[slot].exchange(pattern.release(), std::memory_order_acq_rel));
 }
 
-void PatternHandover::publishSwitchAt(std::unique_ptr<OwnedPattern> pattern, double stampPpq, double gridPpq) {
+void PatternHandover::publishResultAt(size_t slot, std::unique_ptr<OwnedPattern> pattern, double stampPpq,
+                                      double gridPpq) {
     pattern->gridPpq = gridPpq;
     pattern->stampPpq = stampPpq;
     pattern->hasStamp = true;
-    std::unique_ptr<OwnedPattern> replaced(switch_.exchange(pattern.release(), std::memory_order_acq_rel));
+    std::unique_ptr<OwnedPattern> replaced(results_[slot].exchange(pattern.release(), std::memory_order_acq_rel));
 }
 
-void PatternHandover::publishEdit(std::unique_ptr<OwnedPattern> pattern) {
-    std::unique_ptr<OwnedPattern> replaced(edit_.exchange(pattern.release(), std::memory_order_acq_rel));
+void PatternHandover::publishEdit(size_t slot, std::unique_ptr<OwnedPattern> pattern) {
+    std::unique_ptr<OwnedPattern> replaced(edits_[slot].exchange(pattern.release(), std::memory_order_acq_rel));
 }
 
 size_t PatternHandover::collectReturned() {

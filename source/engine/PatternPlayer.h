@@ -68,23 +68,32 @@ public:
     PatternPlayer(const PatternPlayer&) = delete;
     PatternPlayer& operator=(const PatternPlayer&) = delete;
 
-    /// Replaces the pattern at once (no quantization, no note-offs): for tests and the initial pattern. Not while
-    /// the audio thread runs.
+    /// Puts `pattern` into the selected slot and plays it at once (no quantization, no note-offs): for tests and the
+    /// initial pattern. Not while the audio thread runs.
     void setPattern(PatternView pattern);
 
-    /// Connects the lock-free handover (SPEC 6.3). The player takes switches and edits at the start of each block
+    /// Connects the lock-free handover (SPEC 6.3). The player takes results and edits at the start of each block
     /// and retires replaced patterns through the handover's return queue; it never frees one itself.
     void attach(PatternHandover* handover) { handover_ = handover; }
 
-    /// Asks for a switch to `next` at the next quantization point (SPEC 6.1a, D-131). The point is the first
-    /// multiple of `gridPpq` (rounded up to a bar line, v1.0 restarts on bars only) that is not before the start of
-    /// the block that first sees the request; it is never in the past. Start and jumps apply the switch at once, a
-    /// stop keeps it for the next start. A newer request replaces an older one.
+    /// The slot parameter, 1 to 16 (values outside are limited). Read at the block start: a change plays at the
+    /// next grid point (SPEC 6.1a), after a start or jump at once (SPEC 3.13). Call from the audio thread before
+    /// `process`. Slot 1 holds the initial pattern, the others are empty (silent).
+    void setSlot(int slot);
+    int selectedSlot() const { return selected_ + 1; }
+    /// Grid of slot changes in PPQ (default one bar; rounded up to a bar line).
+    void setSlotGrid(double gridPpq) { slotGridPpq_ = gridPpq; }
+
+    /// Puts `next` into the selected slot like a result from the handover (no owner): it plays at the next grid
+    /// point (SPEC 6.1a, D-131). The point is the first multiple of `gridPpq` (rounded up to a bar line, v1.0
+    /// restarts on bars only) not before the start of the block that first sees the change; it is never in the
+    /// past. Start and jumps apply it at once, a stop keeps it for the next start.
     void requestSwitch(PatternView next, double gridPpq);
     /// Same, with a point planned by the hub (PPQ stamp). A stamp already behind the block start falls back to the
     /// next grid point.
     void requestSwitchAt(PatternView next, double stampPpq, double gridPpq);
-    bool switchPending() const { return pending_.active; }
+    /// True while the playing pattern differs from the selected slot's pattern (a change is waiting for its point).
+    bool switchPending() const { return playingSlot_ != selected_; }
 
     /// Call from prepareToPlay. Keeps the active-note table: notes still sounding get their note-off in
     /// the first block afterwards (SPEC 6.2).
@@ -114,30 +123,45 @@ private:
     void playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
                    MidiEventList& out);
     void pollHandover(MidiEventList& out);
-    void applyEdit(OwnedPattern* edit, MidiEventList& out);
-    /// True when a replaced pattern can be handed back (or there is nothing to hand back).
+    /// Stores a result in `slot` (the pattern playing from that slot becomes "detached" and keeps playing).
+    void storeResult(size_t slot, OwnedPattern* result);
+    /// Replaces the pattern of `slot`; when it is the playing one, note changes apply at once.
+    void storeEdit(size_t slot, OwnedPattern* edit, MidiEventList& out);
+    bool canStoreResult(size_t slot) const;
+    bool canStoreEdit(size_t slot) const;
+    /// True when the pattern that stops playing at a commit can be handed back (or there is none to hand back).
     bool canRetire() const;
-    /// Makes the pending pattern the active one and retires the old one. Requires `canRetire()`.
-    void commitPending();
+    /// Plays the selected slot's pattern now. Requires `canRetire()`.
+    void commitSelected();
+    /// Hands `pattern` back for freeing (the handover) or, without one, frees it (message-thread use in tests).
+    void retire(OwnedPattern* pattern);
     static void dispose(OwnedPattern* pattern);
     void releaseAt(MidiEventList& out, int sampleOffset, bool guardOwnStarts);
     void startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out);
+    void reportActive() const;
 
-    struct PendingSwitch {
-        PatternView pattern;
-        double gridPpq = 4.0;
-        double stampPpq = 0.0;
-        bool hasStamp = false;
-        bool active = false;
-        bool resolved = false; // the point is fixed in the block that first sees the request
-        double pointPpq = 0.0;
+    struct SlotEntry {
+        PatternView view;
         OwnedPattern* owner = nullptr; // set when the pattern came through the handover
     };
 
-    PatternView pattern_;
-    OwnedPattern* activeOwner_ = nullptr; // owner of `pattern_` when it came through the handover
+    /// Timing of the waiting change. The point is fixed in the block that first sees it, never in the past.
+    struct SwitchTiming {
+        double gridPpq = 4.0;
+        double stampPpq = 0.0;
+        bool hasStamp = false;
+        bool resolved = false;
+        double pointPpq = 0.0;
+    };
+
+    PatternView pattern_; // what is playing
+    std::array<SlotEntry, kSlotCount> slots_{};
+    int selected_ = 0;                      // slot parameter, 0-based
+    int playingSlot_ = 0;                   // slot that `pattern_` came from; -1 when its entry was replaced meanwhile
+    OwnedPattern* detachedOwner_ = nullptr; // owner of the playing pattern after its entry was replaced
+    double slotGridPpq_ = 4.0;
     PatternHandover* handover_ = nullptr;
-    PendingSwitch pending_;
+    SwitchTiming timing_;
     std::array<std::array<ActiveNote, 128>, 16> active_{};
     size_t activeCount_ = 0;
     bool playing_ = false;
