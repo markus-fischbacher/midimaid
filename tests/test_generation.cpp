@@ -1,3 +1,4 @@
+#include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
 #include "plugin/GenerationService.h"
 #include "plugin/ProcessorBase.h"
@@ -7,6 +8,7 @@
 #include <cmath>
 #include <functional>
 #include <optional>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -332,4 +334,238 @@ TEST_CASE("a finished job whose delivery is still queued does not call back afte
     }
     pumpFor(300);
     CHECK(calls == 0);
+}
+
+// ---- hub and voices (SPEC 6.5, D-141) ----
+
+namespace {
+
+using mm::core::GroupStatus;
+using mm::core::InstanceRole;
+
+void setRole(mm::plugin::ProcessorBase& processor, InstanceRole role, int voice = 1) {
+    auto settings = processor.instanceSettings();
+    settings.role = role;
+    settings.outputVoice = voice;
+    processor.setInstanceSettings(settings);
+}
+
+mm::core::Pattern groupPattern(const mm::plugin::ProcessorBase& processor, const std::string& style, uint64_t seed) {
+    mm::core::GenerationRequest request;
+    request.seed = seed;
+    return mm::core::generateCandidate(*processor.styles().find(style), request, seed);
+}
+
+int firstNotePitch(const std::vector<Played>& notes) {
+    return notes.empty() ? -1 : notes.front().pitch;
+}
+
+} // namespace
+
+TEST_CASE("instances join the registry and leave it again", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    auto& registry = mm::plugin::processGroup();
+    REQUIRE(registry.memberCount() == 0);
+    {
+        mm::plugin::InstrumentProcessor a("A");
+        mm::plugin::MidiFxProcessor b("B");
+        CHECK(registry.memberCount() == 2);
+        CHECK(a.groupStatus() == GroupStatus::Solo);
+    }
+    CHECK(registry.memberCount() == 0);
+}
+
+TEST_CASE("a voice plays its voice of the slots that the hub holds", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor hub("Hub");
+    mm::plugin::InstrumentProcessor voice("Voice");
+    setRole(hub, InstanceRole::Hub, 1);
+    setRole(voice, InstanceRole::Voice, 2);
+    CHECK(hub.groupStatus() == GroupStatus::Hub);
+    CHECK(hub.groupVoices() == 1);
+    CHECK(voice.groupStatus() == GroupStatus::VoiceConnected);
+
+    const auto pattern = groupPattern(hub, "melodic_techno", 9);
+    hub.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, pattern)); });
+
+    const auto hubBank = hub.slotsSnapshot();
+    const auto voiceBank = voice.slotsSnapshot();
+    REQUIRE(voiceBank.slot(0)->pattern.has_value());
+    CHECK(*voiceBank.slot(0)->pattern == *hubBank.slot(0)->pattern);
+
+    const auto& style = *hub.styles().find("melodic_techno");
+    const auto bass = mm::core::renderVoiceForPlayback(*hubBank.slot(0)->pattern, style, 0);
+    const auto melody = mm::core::renderVoiceForPlayback(*hubBank.slot(0)->pattern, style, 1);
+    REQUIRE_FALSE(bass.notes.empty());
+    REQUIRE_FALSE(melody.notes.empty());
+    CHECK(firstNotePitch(playBlocks(hub, 400)) == bass.notes.front().pitch);
+    CHECK(firstNotePitch(playBlocks(voice, 400)) == melody.notes.front().pitch);
+}
+
+TEST_CASE("a change of the hub reaches the voice", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor hub("Hub");
+    mm::plugin::InstrumentProcessor voice("Voice");
+    setRole(hub, InstanceRole::Hub);
+    setRole(voice, InstanceRole::Voice, 2);
+    hub.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(0, groupPattern(hub, "peak_time", 1)); });
+    hub.editSlots([&](mm::core::SlotBank& bank) {
+        bank.setResult(4, groupPattern(hub, "hard_industrial", 2));
+        bank.setName(4, "Drop");
+    });
+    const auto bank = voice.slotsSnapshot();
+    CHECK_FALSE(bank.isEmpty(0));
+    REQUIRE_FALSE(bank.isEmpty(4));
+    CHECK(bank.slot(4)->name == "Drop");
+    CHECK(bank.slot(4)->pattern->styleId == "hard_industrial");
+}
+
+TEST_CASE("the voice generates nothing itself", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor voice("Voice");
+    setRole(voice, InstanceRole::Voice, 2);
+    voice.generate();
+    CHECK(voice.generationStatus() == mm::plugin::GenerationStatus::UseHub);
+    pumpFor(300);
+    CHECK(voice.slotsSnapshot().isEmpty(0));
+}
+
+TEST_CASE("a second hub is refused and stays solo", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor first("First");
+    mm::plugin::InstrumentProcessor second("Second");
+    setRole(first, InstanceRole::Hub);
+    setRole(second, InstanceRole::Hub);
+    CHECK(first.groupStatus() == GroupStatus::Hub);
+    CHECK(second.groupStatus() == GroupStatus::HubRefused);
+}
+
+TEST_CASE("when the hub is deleted the voice keeps playing and can take over", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor voice("Voice");
+    mm::plugin::InstrumentProcessor other("Other");
+    int pitchBefore = -1;
+    {
+        mm::plugin::InstrumentProcessor hub("Hub");
+        setRole(hub, InstanceRole::Hub);
+        setRole(voice, InstanceRole::Voice, 1);
+        setRole(other, InstanceRole::Voice, 1);
+        hub.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(0, groupPattern(hub, "peak_time", 4)); });
+        pitchBefore = firstNotePitch(playBlocks(voice, 400));
+        REQUIRE(pitchBefore > 0);
+    }
+    CHECK(voice.groupStatus() == GroupStatus::HubOffered); // the oldest voice
+    CHECK(other.groupStatus() == GroupStatus::HubMissing);
+    CHECK_FALSE(voice.slotsSnapshot().isEmpty(0)); // it still has everything
+    CHECK(firstNotePitch(playBlocks(voice, 400)) == pitchBefore);
+
+    other.acceptHubOffer(); // not offered to this one: nothing happens
+    CHECK(other.groupStatus() == GroupStatus::HubMissing);
+    voice.acceptHubOffer();
+    CHECK(voice.groupStatus() == GroupStatus::Hub);
+    CHECK(voice.groupVoices() == 1);
+    CHECK(other.groupStatus() == GroupStatus::VoiceConnected);
+    CHECK_FALSE(other.slotsSnapshot().isEmpty(0)); // adopted from the new hub
+}
+
+TEST_CASE("a voice that is loaded before its hub takes the hub's slots when it appears", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::MemoryBlock savedVoice;
+    {
+        mm::plugin::InstrumentProcessor hub("Hub");
+        mm::plugin::InstrumentProcessor voice("Voice");
+        setRole(hub, InstanceRole::Hub);
+        setRole(voice, InstanceRole::Voice, 2);
+        hub.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(0, groupPattern(hub, "peak_time", 1)); });
+        voice.getStateInformation(savedVoice);
+    }
+    mm::plugin::InstrumentProcessor voice("Voice");
+    voice.setStateInformation(savedVoice.getData(), static_cast<int>(savedVoice.getSize()));
+    CHECK(voice.instanceSettings().role == InstanceRole::Voice);
+    CHECK(voice.instanceSettings().outputVoice == 2);
+    CHECK_FALSE(voice.slotsSnapshot().isEmpty(0)); // the voice keeps what it saved
+    CHECK(voice.groupStatus() == GroupStatus::HubOffered);
+
+    mm::plugin::InstrumentProcessor hub("Hub");
+    hub.editSlots([&](mm::core::SlotBank& b) { b.setResult(3, groupPattern(hub, "hard_industrial", 8)); });
+    setRole(hub, InstanceRole::Hub);
+    CHECK(voice.groupStatus() == GroupStatus::VoiceConnected);
+    const auto adopted = voice.slotsSnapshot();
+    CHECK(adopted.isEmpty(0)); // the hub's state, not the old one
+    CHECK_FALSE(adopted.isEmpty(3));
+}
+
+TEST_CASE("a hub that loads its state hands the slots to the voices", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::MemoryBlock savedHub;
+    {
+        mm::plugin::InstrumentProcessor source("Source");
+        setRole(source, InstanceRole::Hub);
+        source.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(1, groupPattern(source, "peak_time", 3)); });
+        source.getStateInformation(savedHub);
+    }
+    mm::plugin::InstrumentProcessor voice("Voice");
+    setRole(voice, InstanceRole::Voice, 2);
+    CHECK(voice.slotsSnapshot().isEmpty(1));
+    mm::plugin::InstrumentProcessor hub("Hub");
+    hub.setStateInformation(savedHub.getData(), static_cast<int>(savedHub.getSize()));
+    CHECK(hub.groupStatus() == GroupStatus::Hub);
+    CHECK_FALSE(voice.slotsSnapshot().isEmpty(1));
+}
+
+TEST_CASE("the voice does not publish to the group and a hub change does not restart an unchanged voice",
+          "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor hub("Hub");
+    mm::plugin::InstrumentProcessor voice("Voice");
+    setRole(hub, InstanceRole::Hub);
+    setRole(voice, InstanceRole::Voice, 2);
+    hub.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(0, groupPattern(hub, "peak_time", 1)); });
+    const auto version = voice.slotsSnapshot().slot(0)->pattern->version;
+    // Changing a setting of the hub hands the same slots on again: the voice has nothing new to play.
+    auto settings = hub.instanceSettings();
+    settings.generation.energyPct = 70;
+    hub.setInstanceSettings(settings);
+    CHECK(voice.slotsSnapshot().slot(0)->pattern->version == version);
+    CHECK(voice.slotsSnapshot().origin() == hub.slotsSnapshot().origin());
+}
+
+TEST_CASE("an instance made and destroyed on another thread joins and leaves on the message thread", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    auto& registry = mm::plugin::processGroup();
+    REQUIRE(registry.memberCount() == 0);
+    std::unique_ptr<mm::plugin::InstrumentProcessor> processor;
+    std::thread maker([&] { processor = std::make_unique<mm::plugin::InstrumentProcessor>("Off-thread"); });
+    maker.join();
+    CHECK(registry.memberCount() == 0); // not yet: the join is queued for the message thread
+    REQUIRE(pumpUntil([&] { return registry.memberCount() == 1; }));
+
+    std::thread killer([&] { processor.reset(); });
+    killer.join();
+    REQUIRE(pumpUntil([&] { return registry.memberCount() == 0; }));
+}
+
+TEST_CASE("an instance destroyed before its queued join ran leaves no trace in the registry", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    auto& registry = mm::plugin::processGroup();
+    REQUIRE(registry.memberCount() == 0);
+    std::thread worker([] { mm::plugin::InstrumentProcessor processor("Short-lived"); });
+    worker.join();
+    pumpFor(300);
+    CHECK(registry.memberCount() == 0);
+}
+
+TEST_CASE("the editor shows the group and can be used while the hub goes away", "[group-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor voice("Voice");
+    setRole(voice, InstanceRole::Voice, 2);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.createEditor());
+    REQUIRE(editor != nullptr);
+    {
+        mm::plugin::InstrumentProcessor hub("Hub");
+        setRole(hub, InstanceRole::Hub);
+        pumpFor(300);
+    }
+    pumpFor(300);
+    CHECK(voice.groupStatus() == GroupStatus::HubOffered);
 }

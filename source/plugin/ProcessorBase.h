@@ -8,6 +8,7 @@
 #include "engine/PatternPlayer.h"
 #include "engine/SlotPublisher.h"
 #include "plugin/GenerationService.h"
+#include "plugin/GroupLink.h"
 #include "plugin/MidiExporter.h"
 
 #include <array>
@@ -18,7 +19,7 @@
 namespace mm::plugin {
 
 /// What the last "Generate" did, for the editor (message thread).
-enum class GenerationStatus { Idle, Generating, Done, NoResult };
+enum class GenerationStatus { Idle, Generating, Done, NoResult, UseHub };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
 /// audio and a hard-coded one-bar pattern played in sync with the host transport.
@@ -80,6 +81,13 @@ public:
     /// host is real-time again. A new request replaces a running one.
     void generate();
     GenerationStatus generationStatus() const { return generationStatus_; }
+    /// Group (SPEC 6.5, D-141): where this instance stands, how many voices a hub has, and the offer to take over a
+    /// lost hub. Safe to read from any thread; `acceptHubOffer` is for the message thread.
+    mm::core::GroupStatus groupStatus() const;
+    size_t groupVoices() const;
+    void acceptHubOffer();
+    /// Called by the group link on the message thread: a voice takes over the hub's slot set. Other roles ignore it.
+    void adoptHubSlots(const mm::core::SlotSnapshot& snapshot);
     /// Slots that were left empty by the last state load because their data was bad (path and reason).
     std::vector<std::string> slotLoadProblems() const;
     /// Version of the pattern that is playing (0 for the built-in placeholder). Safe to read from any thread.
@@ -135,6 +143,7 @@ private:
     std::atomic<double> lastBpm_{120.0};
     MidiExporter exporter_;
 
+    std::shared_ptr<GroupLink> groupLink_;
     GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProcessorBase)

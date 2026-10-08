@@ -6,9 +6,9 @@
 
 namespace mm::plugin {
 
-/// Minimal editor until the hub UI exists: the plugin name, a style pick list with a Generate button and a status
-/// line (D-140), and a drag handle that drags the exported .mid file into the host. The texts are fixed English for
-/// now; they move to the translation table with the i18n infrastructure (phase 2).
+/// Minimal editor until the hub UI exists: the plugin name, role and voice pick lists, a style pick list with a
+/// Generate button and a status line (D-140, D-141), and a drag handle that drags the exported .mid file into the host.
+/// The texts are fixed English for now; they move to the translation table with the i18n infrastructure (phase 2).
 class PlaceholderEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
     explicit PlaceholderEditor(ProcessorBase& processor);
@@ -25,9 +25,13 @@ private:
     void updateStatus();
 
     ProcessorBase& processor_;
+    juce::ComboBox roleBox_;
+    juce::ComboBox voiceBox_;
     juce::ComboBox styleBox_;
+    juce::TextButton takeOverButton_{"Become hub"};
     juce::TextButton generateButton_{"Generate"};
     juce::Label statusLabel_;
+    juce::String groupText_;
     std::unique_ptr<DragHandle> dragHandle_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlaceholderEditor)
