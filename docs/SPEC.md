@@ -965,10 +965,11 @@ Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel 
 - **Bearbeitungen** in der Piano-Roll sind keine quantisierten Wechsel: Sie werden zum nächsten Block
   übernommen, ohne Neustart der Position. Klingende Noten, die im neuen Stand fehlen oder sich geändert
   haben, erhalten sofort ihr Note-Off.
-- **MIDI-Ausgabe:** Der Ausgabepuffer (`juce::MidiBuffer`) wird in `prepareToPlay` für die maximale
-  Ereigniszahl pro Block reserviert, weil er sonst im Audio-Thread wächst. Die Obergrenze ergibt sich aus
-  Blockgröße, maximaler Notendichte und den Note-Offs der Aktiv-Tabelle; wird sie dennoch erreicht, haben
-  Note-Offs Vorrang und neue Note-Ons entfallen.
+- **MIDI-Ausgabe (D-134):** Der Ausgabepuffer (`juce::MidiBuffer`) gehört dem Host-Wrapper und lässt sich in
+  `prepareToPlay` nicht reservieren. `processBlock` reserviert deshalb am Blockanfang einmal die Obergrenze
+  (Kapazität der Engine-Ereignisliste, 1024 Ereignisse); das allokiert höchstens einmal pro Host-Puffer in den
+  ersten Blöcken. Die Engine selbst (Ereignisliste, Aktiv-Tabelle, Übergabe) allokiert nie; ein Test zählt das.
+  Wird die Obergrenze erreicht, haben Note-Offs Vorrang und neue Note-Ons entfallen.
 - **Lebenszyklus:** Der Destruktor bricht Hintergrundjobs ab, wartet auf sie (§7.1) und gibt aktive und
   ausstehende Patterns sowie die Rückgabe-Queue auf dem Message-Thread frei; der Audio-Thread läuft dann
   laut Host-Vertrag nicht mehr.

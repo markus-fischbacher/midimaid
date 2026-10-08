@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <memory>
+#include <set>
 #include <vector>
 
 namespace {
@@ -180,4 +182,153 @@ TEST_CASE("last known tempo follows the host", "[plugin][export]") {
     juce::MidiBuffer midi;
     processor.processBlock(audio, midi);
     CHECK(processor.lastKnownBpm() == 140.0);
+}
+
+namespace {
+
+/// A processor driven like a host would: 512-sample blocks at 120 BPM, one persistent MIDI buffer.
+class Rig {
+public:
+    explicit Rig(mm::plugin::ProcessorBase& processor) : processor_(processor), audio_(2, kBlock) {
+        processor.setRateAndBufferSizeDetails(kSampleRate, kBlock);
+        processor.setPlayHead(&head_);
+        processor.prepareToPlay(kSampleRate, kBlock);
+    }
+
+    struct Note {
+        long long sample;
+        bool on;
+        int pitch;
+    };
+
+    std::vector<Note> run(int blocks) {
+        std::vector<Note> notes;
+        for (int i = 0; i < blocks; ++i) {
+            head_.info.setIsPlaying(true);
+            head_.info.setBpm(120.0);
+            head_.info.setPpqPosition(static_cast<double>(clock_) / kSampleRate * 2.0);
+            audio_.clear();
+            midi_.clear();
+            processor_.processBlock(audio_, midi_);
+            for (const auto metadata : midi_) {
+                const auto message = metadata.getMessage();
+                notes.push_back({clock_ + metadata.samplePosition, message.isNoteOn(), message.getNoteNumber()});
+            }
+            clock_ += kBlock;
+        }
+        return notes;
+    }
+
+    static constexpr double kSampleRate = 48000.0;
+    static constexpr int kBlock = 512;
+
+private:
+    mm::plugin::ProcessorBase& processor_;
+    FakePlayHead head_;
+    juce::AudioBuffer<float> audio_;
+    juce::MidiBuffer midi_;
+    long long clock_ = 0;
+};
+
+std::unique_ptr<mm::engine::OwnedPattern> ownedPattern(std::vector<mm::core::PatternNote> notes, uint64_t version,
+                                                       std::shared_ptr<const void> token = {}) {
+    auto pattern = std::make_unique<mm::engine::OwnedPattern>();
+    pattern->notes = std::move(notes);
+    pattern->lengthTicks = 4 * mm::core::kTicksPerQuarter;
+    pattern->version = version;
+    pattern->lifetimeToken = std::move(token);
+    return pattern;
+}
+
+} // namespace
+
+TEST_CASE("a switch queued on the processor takes effect at the next bar line", "[plugin][handover]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    CHECK(processor.activePatternVersion() == 0);
+    rig.run(10);
+    processor.switchPattern(ownedPattern({{0, 240, 1, 50, 100}}, 5));
+    const auto notes = rig.run(200); // to about 4.3 PPQ
+    std::vector<Rig::Note> fifties;
+    for (const auto& n : notes) {
+        if (n.pitch == 50 && n.on) {
+            fifties.push_back(n);
+        }
+    }
+    REQUIRE(fifties.size() == 1);
+    CHECK(std::abs(fifties.front().sample - 96000) <= 1); // PPQ 4.0
+    CHECK(processor.activePatternVersion() == 5);
+    for (const auto& n : notes) {
+        CHECK((n.pitch == 50 || n.sample < 96000)); // the placeholder stops at the bar line
+    }
+}
+
+TEST_CASE("an edit queued on the processor keeps the position", "[plugin][handover]") {
+    mm::plugin::MidiFxProcessor processor("Test");
+    Rig rig(processor);
+    rig.run(10);
+    processor.editPattern(ownedPattern({{1920, 240, 1, 50, 100}}, 6)); // position 2.0
+    const auto notes = rig.run(120);                                   // to about 2.6 PPQ
+    std::vector<Rig::Note> fifties;
+    for (const auto& n : notes) {
+        CHECK((n.pitch == 50 || n.sample < 5120 + 512)); // no placeholder note after the edit
+        if (n.pitch == 50 && n.on) {
+            fifties.push_back(n);
+        }
+    }
+    REQUIRE(fifties.size() == 1);
+    CHECK(std::abs(fifties.front().sample - 48000) <= 1); // PPQ 2.0: no restart
+    CHECK(processor.activePatternVersion() == 6);
+}
+
+TEST_CASE("destroying a processor frees active and pending patterns", "[plugin][handover]") {
+    auto active = std::make_shared<int>(0);
+    auto pending = std::make_shared<int>(0);
+    auto replaced = std::make_shared<int>(0);
+    {
+        mm::plugin::InstrumentProcessor processor("Test");
+        Rig rig(processor);
+        processor.editPattern(ownedPattern({{0, 240, 1, 50, 100}}, 1, replaced));
+        rig.run(2);
+        processor.editPattern(ownedPattern({{0, 240, 1, 51, 100}}, 2, active)); // retires the first one
+        rig.run(2);
+        processor.switchPattern(ownedPattern({{0, 240, 1, 52, 100}}, 3, pending)); // never taken
+        CHECK(active.use_count() == 2);
+        CHECK(pending.use_count() == 2);
+    }
+    CHECK(active.use_count() == 1);
+    CHECK(pending.use_count() == 1);
+    CHECK(replaced.use_count() == 1);
+}
+
+TEST_CASE("the host MIDI buffer keeps its storage across blocks", "[plugin][handover]") {
+    // The buffer belongs to the host (O-23, D-134): the processor reserves the bound once. JUCE allocates the storage
+    // with malloc, which cannot be counted portably, so this only guards that the storage does not move between
+    // blocks (the address of the first event).
+    mm::plugin::InstrumentProcessor processor("Test");
+    FakePlayHead head;
+    processor.setRateAndBufferSizeDetails(48000.0, 512);
+    processor.setPlayHead(&head);
+    processor.prepareToPlay(48000.0, 512);
+    juce::AudioBuffer<float> audio(2, 512);
+    juce::MidiBuffer midi;
+    const juce::uint8* storage = nullptr;
+    int blocksWithEvents = 0;
+    for (int block = 0; block < 400; ++block) {
+        head.info.setIsPlaying(true);
+        head.info.setBpm(120.0);
+        head.info.setPpqPosition(static_cast<double>(block) * 512.0 / 48000.0 * 2.0);
+        audio.clear();
+        midi.clear();
+        processor.processBlock(audio, midi);
+        for (const auto metadata : midi) {
+            if (storage == nullptr) {
+                storage = metadata.data;
+            }
+            CHECK(metadata.data - storage < 12288); // inside the one reserved block
+            ++blocksWithEvents;
+            break;
+        }
+    }
+    CHECK(blocksWithEvents >= 6);
 }

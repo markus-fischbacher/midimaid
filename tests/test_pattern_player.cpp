@@ -6,12 +6,36 @@
 #include <cmath>
 #include <cstdlib>
 #include <memory>
+#include <new>
 #include <set>
 #include <thread>
 #include <utility>
 #include <vector>
 
 using namespace mm::engine;
+
+// Counts the allocations made through operator new on the thread that asked for it (the engine uses the standard
+// library only and must not allocate while processing, SPEC 6.3).
+namespace {
+thread_local bool tCounting = false;
+std::atomic<long> gAllocations{0};
+} // namespace
+
+void* operator new(std::size_t size) {
+    if (tCounting) {
+        ++gAllocations;
+    }
+    if (void* p = std::malloc(size > 0 ? size : 1)) {
+        return p;
+    }
+    throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept {
+    std::free(p);
+}
+void operator delete(void* p, std::size_t) noexcept {
+    std::free(p);
+}
 
 namespace {
 
@@ -920,4 +944,82 @@ TEST_CASE("two threads hand patterns over without losing or leaking any", "[engi
         CHECK_FALSE(failed.load());
     }
     CHECK(token.use_count() == 1); // everything was freed exactly once
+}
+
+TEST_CASE("the audio side never allocates, also while taking, applying and retiring patterns", "[engine][handover]") {
+    PatternHandover handover;
+    PatternPlayer player;
+    player.attach(&handover);
+    MidiEventList out;
+    double ppq = 0.0;
+    auto process = [&] {
+        TransportInfo info;
+        info.hasPosition = true;
+        info.isPlaying = true;
+        info.ppq = ppq;
+        info.bpm = 120.0;
+        player.process(info, 512, kSampleRate, out);
+        ppq += 512 * 120.0 / 60.0 / kSampleRate;
+    };
+    long allocations = 0;
+    for (int round = 0; round < 12; ++round) {
+        if (round % 2 == 0) {
+            handover.publishSwitch(owned(round % 4 == 0 ? nextNotes() : longNotes(), round + 1), 4.0);
+        } else {
+            handover.publishEdit(owned(longNotes(), round + 1));
+        }
+        gAllocations = 0;
+        tCounting = true;
+        for (int i = 0; i < 200; ++i) {
+            process();
+        }
+        tCounting = false;
+        allocations += gAllocations;
+        handover.collectReturned();
+    }
+    CHECK(allocations == 0);
+    CHECK(handover.activeVersion() >= 11);
+}
+
+TEST_CASE("a start in the middle of a bar skips the notes before it (Z2)", "[engine]") {
+    Simulation sim;
+    sim.blockAt(5.0, 512 * 40); // position 1.0 of the pattern
+    const auto ons = sim.noteOnSamples();
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front() == 12000); // the note at 5.5; the one at 4.5 is skipped
+}
+
+TEST_CASE("the loop wrap cuts a note that sounds at the loop end (Z6)", "[engine]") {
+    Simulation sim;
+    sim.setLoop(0.0, 3.75);
+    sim.blockAt(3.0, 16800); // the note at 3.5 starts in this block
+    REQUIRE(sim.soundingCount() == 1);
+    const long long start = sim.clock();
+    sim.blockAt(3.7, 2048); // wraps at 3.75, 1200 samples into the block
+    CHECK(sim.soundingCount() == 0);
+    long long off = -1;
+    for (const auto& e : sim.events()) {
+        if (!e.noteOn && e.sample >= start) {
+            off = e.sample;
+        }
+    }
+    CHECK(off == start + 1200);
+}
+
+TEST_CASE("data returning after a gap start the pattern anew (Z8)", "[engine]") {
+    Simulation sim;
+    sim.blockAt(0.0, 14400);
+    REQUIRE(sim.soundingCount() == 1);
+    sim.block(256, true, 120.0, false); // no position: note-off
+    CHECK(sim.soundingCount() == 0);
+    const long long before = sim.clock();
+    sim.blockAt(8.0, 512 * 40);
+    long long firstOn = -1;
+    for (const auto& e : sim.events()) {
+        if (e.noteOn && e.sample >= before) {
+            firstOn = e.sample;
+            break;
+        }
+    }
+    CHECK(firstOn == before + 12000); // position 0 at 8.0: the first note is at 8.5
 }
