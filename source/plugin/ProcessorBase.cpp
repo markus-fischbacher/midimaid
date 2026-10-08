@@ -471,6 +471,35 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
 }
 
+std::array<bool, mm::core::kSlotCount> ProcessorBase::slotUsage() const {
+    std::array<bool, mm::core::kSlotCount> used{};
+    const juce::ScopedLock lock(slotsLock_);
+    for (size_t i = 0; i < used.size(); ++i) {
+        used[i] = !slots_.isEmpty(i);
+    }
+    return used;
+}
+
+ProcessorBase::SlotInfo ProcessorBase::playingSlotInfo() const {
+    SlotInfo info;
+    const juce::ScopedLock lock(slotsLock_);
+    VoiceView view;
+    const auto* slot = playingSlotLocked(view);
+    info.slot = view.slot;
+    if (slot == nullptr || !slot->pattern) {
+        return info;
+    }
+    const auto& pattern = *slot->pattern;
+    info.filled = true;
+    info.styleId = pattern.styleId;
+    info.root = pattern.context.root;
+    info.scaleId = pattern.context.scaleId;
+    info.lengthBars = pattern.lengthBars;
+    info.seed = pattern.info.seed;
+    info.winnerSeed = pattern.info.winnerSeed;
+    return info;
+}
+
 bool ProcessorBase::mutedByOwnSwitch() const {
     const int voice = outputVoice_.load(std::memory_order_relaxed);
     return muteValues_[static_cast<size_t>(voice - 1)]->load() >= 0.5f;

@@ -1,5 +1,6 @@
 #include "core/PatternGenerator.h"
 #include "engine/GroupChannel.h"
+#include "plugin/EditorParts.h"
 #include "plugin/GroupText.h"
 #include "plugin/ProcessorBase.h"
 
@@ -785,14 +786,26 @@ void pumpMessages(int milliseconds) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(milliseconds);
 }
 
-template <typename T> T* child(juce::Component& parent, const char* id) {
-    return dynamic_cast<T*>(parent.findChildWithID(id));
+/// A component below `parent` (at any depth) by component id.
+juce::Component* findById(juce::Component& parent, const juce::String& id) {
+    for (auto* component : parent.getChildren()) {
+        if (component->getComponentID() == id) {
+            return component;
+        }
+        if (auto* deeper = findById(*component, id)) {
+            return deeper;
+        }
+    }
+    return nullptr;
+}
+
+template <typename T> T* child(juce::Component& parent, const juce::String& id) {
+    return dynamic_cast<T*>(findById(parent, id));
 }
 
 } // namespace
 
-TEST_CASE("the editor of a voice is the compact voice UI, other roles keep the placeholder layout",
-          "[group-wiring][editor]") {
+TEST_CASE("the editor of a voice is the compact voice UI, other roles get the hub UI", "[group-wiring][editor]") {
     Quiet quiet;
     Instance voice("Voice");
     voice.setRole(InstanceRole::Voice);
@@ -807,7 +820,8 @@ TEST_CASE("the editor of a voice is the compact voice UI, other roles keep the p
 
     voice.setRole(InstanceRole::Solo);
     pumpMessages(500); // the editor's timer notices the new role
-    CHECK(editor->getHeight() == 360);
+    CHECK(editor->getWidth() == 1000);
+    CHECK(editor->getHeight() == 640);
     CHECK_FALSE(child<juce::ToggleButton>(*editor, "mute")->isVisible());
     CHECK_FALSE(child<juce::Component>(*editor, "roll")->isVisible());
 
@@ -818,7 +832,8 @@ TEST_CASE("the editor of a voice is the compact voice UI, other roles keep the p
 
     Instance solo("Solo");
     std::unique_ptr<juce::AudioProcessorEditor> soloEditor(solo.processor.createEditor());
-    CHECK(soloEditor->getHeight() == 360);
+    CHECK(soloEditor->getWidth() == 1000);
+    CHECK(soloEditor->getHeight() == 640);
     CHECK_FALSE(child<juce::Component>(*soloEditor, "roll")->isVisible());
 }
 
@@ -884,4 +899,255 @@ TEST_CASE("the Open hub button works only with a hub", "[group-wiring][editor]")
     button->triggerClick(); // asynchronous
     pumpMessages(200);
     CHECK(hub.processor.frontRequests() == 1);
+}
+
+namespace {
+
+/// A child of the editor or of one of its rows, by component id.
+juce::Component* find(juce::Component& editor, const juce::String& id) {
+    return findById(editor, id);
+}
+
+} // namespace
+
+TEST_CASE("the hub UI fields show the settings and change them", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    auto* key = child<juce::ComboBox>(*editor, "key");
+    auto* scale = child<juce::ComboBox>(*editor, "scale");
+    auto* bars = child<juce::ComboBox>(*editor, "bars");
+    auto* seed = child<juce::TextEditor>(*editor, "seed");
+    auto* energy = child<juce::Slider>(*editor, "energy");
+    auto* creativity = child<juce::Slider>(*editor, "creativity");
+    auto* style = child<juce::ComboBox>(*editor, "style");
+    REQUIRE(key != nullptr);
+    REQUIRE(scale != nullptr);
+    REQUIRE(bars != nullptr);
+    REQUIRE(seed != nullptr);
+    REQUIRE(energy != nullptr);
+    REQUIRE(creativity != nullptr);
+    REQUIRE(style != nullptr);
+    CHECK(key->isVisible());
+
+    // A new instance: A minor, 4 bars, a random seed.
+    CHECK(key->getText() == "Key: A");
+    CHECK(scale->getText() == "Scale: Natural minor");
+    CHECK(bars->getSelectedId() == 4);
+    CHECK(seed->getText().isEmpty());
+    CHECK(energy->getValue() == 50.0);
+    CHECK(creativity->getValue() == 40.0);
+
+    key->setSelectedId(4, juce::sendNotificationSync); // D
+    CHECK(solo.processor.instanceSettings().generation.root == 2);
+    key->setSelectedId(1, juce::sendNotificationSync); // auto
+    CHECK_FALSE(solo.processor.instanceSettings().generation.root.has_value());
+
+    scale->setSelectedId(3, juce::sendNotificationSync);
+    const auto scales = mm::core::allScales();
+    CHECK(solo.processor.instanceSettings().generation.scaleId == std::string(scales[1].id));
+    scale->setSelectedId(1, juce::sendNotificationSync);
+    CHECK_FALSE(solo.processor.instanceSettings().generation.scaleId.has_value());
+
+    bars->setSelectedId(16, juce::sendNotificationSync);
+    CHECK(solo.processor.instanceSettings().generation.lengthBars == 16);
+
+    energy->setValue(80.0, juce::sendNotificationSync);
+    creativity->setValue(10.0, juce::sendNotificationSync);
+    CHECK(solo.processor.instanceSettings().generation.energyPct == 80);
+    CHECK(solo.processor.instanceSettings().generation.creativityPct == 10);
+
+    style->setSelectedId(2, juce::sendNotificationSync);
+    CHECK(solo.processor.instanceSettings().generation.styleId == solo.processor.styles().profiles()[1].id);
+
+    seed->setText("4711", juce::dontSendNotification);
+    seed->onReturnKey();
+    CHECK(solo.processor.instanceSettings().generation.seed == 4711);
+    seed->setText("", juce::dontSendNotification);
+    seed->onReturnKey();
+    CHECK_FALSE(solo.processor.instanceSettings().generation.seed.has_value());
+    seed->setText("99999999999999999999999", juce::dontSendNotification); // the box limits the length, not the value
+    seed->onReturnKey();
+    CHECK_FALSE(solo.processor.instanceSettings().generation.seed.has_value());
+    CHECK(seed->getText().isEmpty()); // back to "random"
+
+    seed->setText("5", juce::dontSendNotification);
+    seed->onReturnKey();
+    auto* random = child<juce::TextButton>(*editor, "random");
+    REQUIRE(random != nullptr);
+    random->triggerClick();
+    pumpMessages(100);
+    CHECK_FALSE(solo.processor.instanceSettings().generation.seed.has_value());
+    CHECK(seed->getText().isEmpty());
+}
+
+TEST_CASE("settings changed from outside show up in the hub UI", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    auto settings = solo.processor.instanceSettings();
+    settings.generation.root = 7;
+    settings.generation.scaleId = "dorian";
+    settings.generation.lengthBars = 8;
+    settings.generation.seed = 123;
+    settings.generation.energyPct = 90;
+    solo.processor.setInstanceSettings(settings);
+    pumpMessages(500);
+    CHECK(child<juce::ComboBox>(*editor, "key")->getText() == "Key: G");
+    CHECK(child<juce::ComboBox>(*editor, "scale")->getText() == "Scale: Dorian");
+    CHECK(child<juce::ComboBox>(*editor, "bars")->getSelectedId() == 8);
+    CHECK(child<juce::TextEditor>(*editor, "seed")->getText() == "123");
+    CHECK(child<juce::Slider>(*editor, "energy")->getValue() == 90.0);
+}
+
+TEST_CASE("the slot strip selects the slot and shows which slots are filled", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(2, marked(41)); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    pumpMessages(300);
+    auto* first = child<juce::TextButton>(*editor, "slot1");
+    auto* third = child<juce::TextButton>(*editor, "slot3");
+    auto* last = child<juce::TextButton>(*editor, "slot16");
+    REQUIRE(first != nullptr);
+    REQUIRE(third != nullptr);
+    REQUIRE(last != nullptr);
+    CHECK(first->getToggleState()); // slot 1 is the selected one
+    CHECK_FALSE(third->getToggleState());
+    const auto colour = [](juce::TextButton* button) { return button->findColour(juce::TextButton::buttonColourId); };
+    CHECK(colour(third) != colour(first)); // filled and empty look different
+    CHECK(colour(first) == colour(last));
+
+    third->triggerClick();
+    pumpMessages(300);
+    CHECK(solo.processor.activeSlot() == 3);
+    CHECK(third->getToggleState());
+    CHECK_FALSE(first->getToggleState());
+    for (int slot = 1; slot <= 16; ++slot) {
+        CHECK(child<juce::TextButton>(*editor, "slot" + juce::String(slot)) != nullptr);
+    }
+}
+
+TEST_CASE("the hub UI has a row per voice of the playing slot", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    pumpMessages(300);
+    // An empty slot: the two default voices, without notes.
+    REQUIRE(find(*editor, "row_1") != nullptr);
+    REQUIRE(find(*editor, "row_2") != nullptr);
+    CHECK(find(*editor, "row_3") == nullptr);
+    CHECK(dynamic_cast<mm::plugin::RollView*>(find(*editor, "roll_1"))->layout().notes.empty());
+
+    solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
+    pumpMessages(500);
+    auto* bass = dynamic_cast<mm::plugin::RollView*>(find(*editor, "roll_1"));
+    auto* melody = dynamic_cast<mm::plugin::RollView*>(find(*editor, "roll_2"));
+    REQUIRE(bass != nullptr);
+    REQUIRE(melody != nullptr);
+    CHECK_FALSE(bass->layout().notes.empty());
+    CHECK_FALSE(melody->layout().notes.empty());
+    CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_1"))->getText() == "Bass");
+    CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_2"))->getText() == "Melody");
+    CHECK(find(*editor, "row_1")->getBounds().getBottom() <= editor->getHeight());
+    CHECK(find(*editor, "row_2")->getBounds().getBottom() <= editor->getHeight());
+
+    // A pattern with three voices gets three rows.
+    mm::core::Pattern three = markedTwoVoices(41, 71);
+    three.voices.push_back(three.voices[1]);
+    three.voices[2].midiChannel = 3; // channels are unique
+    for (auto& note : three.voices[2].notes) {
+        note.id = mm::core::allocateNoteId(three);
+    }
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(1, three)); });
+    solo.setSlotParameter(2);
+    runTo({&solo}, 4.1); // a slot change takes effect at the next bar line
+    pumpMessages(500);
+    REQUIRE(find(*editor, "row_3") != nullptr);
+    CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_3"))->getText() == "Voice 3");
+
+    // Back to a slot with two voices: two rows again.
+    solo.setSlotParameter(1);
+    runTo({&solo}, 8.1);
+    pumpMessages(500);
+    CHECK(find(*editor, "row_3") == nullptr);
+}
+
+TEST_CASE("each voice row has its own Mute and its own grip", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    pumpMessages(500);
+    auto* mute2 = child<juce::ToggleButton>(*editor, "mute_2");
+    REQUIRE(mute2 != nullptr);
+    mute2->setToggleState(true, juce::sendNotificationSync);
+    CHECK(solo.processor.parameters().getRawParameterValue("mute_2")->load() == 1.0f);
+    CHECK(solo.processor.parameters().getRawParameterValue("mute_1")->load() == 0.0f);
+    solo.setMute(1, true); // automation of the other voice moves its button only
+    pumpMessages(100);
+    CHECK(child<juce::ToggleButton>(*editor, "mute_1")->getToggleState());
+    solo.setMute(2, false);
+    pumpMessages(100);
+    CHECK_FALSE(mute2->getToggleState());
+
+    auto* grip1 = dynamic_cast<mm::plugin::DragHandle*>(find(*editor, "drag_1"));
+    auto* grip2 = dynamic_cast<mm::plugin::DragHandle*>(find(*editor, "drag_2"));
+    REQUIRE(grip1 != nullptr);
+    REQUIRE(grip2 != nullptr);
+    for (int i = 0; i < 400 && (grip1->file() == juce::File() || grip2->file() == juce::File()); ++i) {
+        pumpMessages(10);
+    }
+    REQUIRE(grip1->file() != juce::File());
+    REQUIRE(grip2->file() != juce::File());
+    CHECK(grip1->file() == solo.processor.midiExporter().readyFile(1));
+    CHECK(grip2->file() == solo.processor.midiExporter().readyFile(2));
+    CHECK(grip1->file() != grip2->file());
+}
+
+TEST_CASE("the info line names what the playing slot holds", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    pumpMessages(300);
+    auto* info = dynamic_cast<juce::Label*>(find(*editor, "info"));
+    REQUIRE(info != nullptr);
+    CHECK(info->getText().contains("empty"));
+    mm::core::Pattern pattern = marked(41);
+    pattern.context.root = 2;
+    pattern.context.scaleId = "dorian";
+    pattern.info.seed = 777;
+    pattern.info.winnerSeed = 888;
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(0, pattern); });
+    pumpMessages(500);
+    CHECK(info->getText().contains("Slot 1"));
+    CHECK(info->getText().contains("D dorian"));
+    CHECK(info->getText().contains("seed 777"));
+    CHECK(info->getText().contains("winner 888"));
+}
+
+TEST_CASE("Generate in the hub UI uses the key, scale, bars and seed of its fields", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    child<juce::ComboBox>(*editor, "key")->setSelectedId(4, juce::sendNotificationSync); // D
+    child<juce::ComboBox>(*editor, "scale")->setSelectedId(4, juce::sendNotificationSync);
+    child<juce::ComboBox>(*editor, "bars")->setSelectedId(2, juce::sendNotificationSync);
+    auto* seed = child<juce::TextEditor>(*editor, "seed");
+    seed->setText("77", juce::dontSendNotification);
+    seed->onReturnKey();
+    const auto scales = mm::core::allScales();
+    solo.processor.generate();
+    for (int i = 0; i < 400 && solo.processor.slotsSnapshot().isEmpty(0); ++i) {
+        pumpMessages(10);
+    }
+    const auto bank = solo.processor.slotsSnapshot();
+    REQUIRE_FALSE(bank.isEmpty(0));
+    const auto& pattern = *bank.slot(0)->pattern;
+    CHECK(pattern.context.root == 2);
+    CHECK(pattern.context.scaleId == std::string(scales[2].id));
+    CHECK(pattern.lengthBars == 2);
+    CHECK(pattern.info.seed == 77);
+    pumpMessages(500);
+    CHECK(dynamic_cast<juce::Label*>(find(*editor, "info"))->getText().contains("seed 77"));
 }
