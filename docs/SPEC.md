@@ -918,6 +918,9 @@ des Songs (PPQ 0 = Taktanfang); Sample-Offsets werden aus PPQ und Tempo des Bloc
   weiter und übernimmt den des Hubs am ersten Rasterpunkt, nachdem er gemeldet wurde. Der Anwender legt Slot-Wechsel
   in „folgt Hub“ deshalb auf Taktgrenzen und friert Voices im Modus „eigen“ ein.
 - Fehlt der Hub, bleibt der Schalter wirkungslos: Die Voice spielt ihren Slot weiter (§6.5, Persistenz).
+- **Umsetzung (D-142):** Die „gemeldete Position“ einer Instanz ist ihr zuletzt verarbeitetes Blockende. Der Mindestvorlauf
+  ist bis zu den globalen Einstellungen (§9.2) ein Wert im Kanal (150 ms). Der Hub plant nur bei spielendem Transport; steht
+  er still, übernehmen die Voices seinen Slot beim nächsten Start (Z19).
 
 **Testbare Beispiele.** Alle bei 120 BPM, 44,1 kHz (1 PPQ = 22 050 Samples), Platzhalter-Pattern (Länge 4 PPQ,
 Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel wird ein Engine-Test (Phase 1b).
