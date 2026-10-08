@@ -52,5 +52,4 @@ Mute wirkt doppelt: Schaltet der Hub `Mute n`, schweigt Voice n; schaltet eine V
 - **Logic:** Auf der Voice-Spur „Record MIDI to Track Here“ aktivieren (sonst entsteht keine Region); Logic nimmt die
   Ausgabe hinter dem Plugin auf (D-129).
 - **Live:** Eine MIDI-Spur mit „MIDI From“ der Voice-Spur und Monitoring „In“.
-- **Drag & Drop:** Der Griff unten im Fenster exportiert derzeit noch ein Platzhalter-Pattern; die echten Stimmen kommen mit
-  der Hub-UI.
+- **Drag & Drop:** Jede Stimme hat in der Hub-UI einen eigenen Griff, der die `.mid`-Datei dieser Stimme (mit dem DAW-Tempo) in die DAW zieht; die Voice-Oberfläche hat einen Griff für ihre eigene Stimme.
