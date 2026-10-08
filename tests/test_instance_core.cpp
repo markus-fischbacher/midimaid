@@ -250,3 +250,36 @@ TEST_CASE("an empty or zero length pattern gives a layout without notes", "[inst
     const RollLayout partial = layoutRoll({}, 3840 + 1);
     CHECK(partial.bars == 2); // a started bar counts
 }
+
+TEST_CASE("the seed text is decimal digits that fit 64 bits", "[instance-core]") {
+    CHECK(parseSeed("0") == 0);
+    CHECK(parseSeed("42") == 42);
+    CHECK(parseSeed("18446744073709551615") == UINT64_MAX);
+    CHECK_FALSE(parseSeed("18446744073709551616").has_value());
+    CHECK_FALSE(parseSeed("99999999999999999999").has_value());
+    CHECK_FALSE(parseSeed("123456789012345678901").has_value()); // 21 digits
+    CHECK_FALSE(parseSeed("").has_value());
+    CHECK_FALSE(parseSeed("-1").has_value());
+    CHECK_FALSE(parseSeed("+1").has_value());
+    CHECK_FALSE(parseSeed("12a").has_value());
+    CHECK_FALSE(parseSeed(" 5").has_value());
+    CHECK_FALSE(parseSeed("1e3").has_value());
+}
+
+TEST_CASE("an unknown key or scale in the settings becomes auto", "[instance-core]") {
+    GenerationSettings settings;
+    CHECK(settings.root == 9);
+    CHECK(settings.scaleId == "natural_minor");
+    CHECK(sanitize(settings) == settings);
+    settings.root = 12;
+    settings.scaleId = "whole_tone";
+    const auto clean = sanitize(settings);
+    CHECK_FALSE(clean.root.has_value());
+    CHECK_FALSE(clean.scaleId.has_value());
+    settings.root = 11;
+    settings.scaleId = "locrian";
+    CHECK(sanitize(settings).root == 11);
+    CHECK(sanitize(settings).scaleId == "locrian");
+    settings.seed = 7;
+    CHECK(sanitize(settings).seed == 7);
+}

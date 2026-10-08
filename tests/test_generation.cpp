@@ -8,6 +8,7 @@
 #include <cmath>
 #include <functional>
 #include <optional>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -265,7 +266,7 @@ TEST_CASE("the generation settings are saved, and invalid ones are made valid on
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor source("Test");
     auto settings = source.instanceSettings();
-    settings.generation = {"melodic_techno", 8, 70, 20};
+    settings.generation = {"melodic_techno", 8, 70, 20, 2, "dorian", 12345};
     source.setInstanceSettings(settings);
     juce::MemoryBlock saved;
     source.getStateInformation(saved);
@@ -568,4 +569,128 @@ TEST_CASE("the editor shows the group and can be used while the hub goes away", 
     }
     pumpFor(300);
     CHECK(voice.groupStatus() == GroupStatus::HubOffered);
+}
+
+TEST_CASE("the key and scale of the settings reach the pattern, auto draws them", "[generation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor styleSource("Styles");
+    std::vector<Delivered> delivered;
+    mm::plugin::GenerationService service(styleSource.styles(),
+                                          [&](const auto& job, auto pattern) { delivered.push_back({job, pattern}); });
+    for (const auto& [root, scale] :
+         {std::pair<int, const char*>{2, "dorian"}, {7, "phrygian"}, {11, "harmonic_minor"}}) {
+        auto job = jobFor(5);
+        job.settings.root = static_cast<mm::core::PitchClass>(root);
+        job.settings.scaleId = scale;
+        const size_t before = delivered.size();
+        service.request(job);
+        REQUIRE(pumpUntil([&] { return delivered.size() == before + 1; }));
+        REQUIRE(delivered.back().pattern.has_value());
+        CHECK(delivered.back().pattern->context.root == root);
+        CHECK(delivered.back().pattern->context.scaleId == scale);
+    }
+
+    // Auto: over several seeds the keys differ (drawn per request).
+    std::set<int> roots;
+    for (uint64_t seed = 1; seed <= 6; ++seed) {
+        auto job = jobFor(seed);
+        job.settings.root.reset();
+        job.settings.scaleId.reset();
+        const size_t before = delivered.size();
+        service.request(job);
+        REQUIRE(pumpUntil([&] { return delivered.size() == before + 1; }));
+        REQUIRE(delivered.back().pattern.has_value());
+        roots.insert(delivered.back().pattern->context.root);
+    }
+    CHECK(roots.size() > 1);
+}
+
+TEST_CASE("a fixed seed makes generate repeat itself, no seed draws a new one", "[generation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    auto settings = processor.instanceSettings();
+    settings.generation.seed = 4711;
+    processor.setInstanceSettings(settings);
+    std::vector<mm::core::Pattern> results;
+    const auto generateOnce = [&] {
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return processor.generationStatus() == mm::plugin::GenerationStatus::Done; }));
+        const auto bank = processor.slotsSnapshot();
+        REQUIRE(bank.slot(0)->pattern.has_value());
+        results.push_back(*bank.slot(0)->pattern);
+        pumpFor(20);
+    };
+    generateOnce();
+    generateOnce();
+    CHECK(results[0].info.seed == 4711);
+    CHECK(results[0].voices[0].notes.size() == results[1].voices[0].notes.size());
+    CHECK(results[0].voices[0].notes.front().pitch == results[1].voices[0].notes.front().pitch);
+    CHECK(results[0].info.winnerSeed == results[1].info.winnerSeed);
+
+    settings.generation.seed.reset();
+    processor.setInstanceSettings(settings);
+    generateOnce();
+    generateOnce();
+    CHECK(results[2].info.seed != results[3].info.seed);
+    CHECK(results[2].info.seed != 4711);
+}
+
+TEST_CASE("key, scale and seed are saved, and a state from before them keeps drawing the key", "[generation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor source("Test");
+    CHECK(source.instanceSettings().generation.root == 9); // a new instance starts in A minor
+    CHECK(source.instanceSettings().generation.scaleId == "natural_minor");
+    CHECK_FALSE(source.instanceSettings().generation.seed.has_value());
+    auto settings = source.instanceSettings();
+    settings.generation.root = 3;
+    settings.generation.scaleId = "locrian";
+    settings.generation.seed = 18446744073709551615ULL;
+    source.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.getStateInformation(saved);
+
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.instanceSettings().generation == settings.generation);
+
+    auto root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(root != nullptr);
+    const auto load = [&](const std::function<void(juce::XmlElement&)>& edit) {
+        auto copy = std::make_unique<juce::XmlElement>(*root);
+        edit(*copy);
+        juce::MemoryBlock block;
+        juce::AudioProcessor::copyXmlToBinary(*copy, block);
+        mm::plugin::InstrumentProcessor processor("Test");
+        processor.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
+        return processor.instanceSettings().generation;
+    };
+    const auto old = load([](juce::XmlElement& element) {
+        for (const char* name : {"genRoot", "genScale", "genSeed"}) {
+            element.removeAttribute(name);
+        }
+    });
+    CHECK_FALSE(old.root.has_value()); // an older project draws the key as before
+    CHECK_FALSE(old.scaleId.has_value());
+    CHECK_FALSE(old.seed.has_value());
+
+    const auto odd = load([](juce::XmlElement& element) {
+        element.setAttribute("genRoot", "12");
+        element.setAttribute("genScale", "bogus");
+        element.setAttribute("genSeed", "-3");
+    });
+    CHECK_FALSE(odd.root.has_value());
+    CHECK_FALSE(odd.scaleId.has_value());
+    CHECK_FALSE(odd.seed.has_value());
+
+    const auto words = load([](juce::XmlElement& element) {
+        element.setAttribute("genRoot", "auto");
+        element.setAttribute("genScale", "auto");
+        element.setAttribute("genSeed", "random");
+    });
+    CHECK_FALSE(words.root.has_value());
+    CHECK_FALSE(words.scaleId.has_value());
+    CHECK_FALSE(words.seed.has_value());
+
+    const auto huge = load([](juce::XmlElement& element) { element.setAttribute("genSeed", "18446744073709551616"); });
+    CHECK_FALSE(huge.seed.has_value());
 }

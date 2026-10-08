@@ -262,7 +262,8 @@ void ProcessorBase::generate() {
         }
         return;
     }
-    job.seed = static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
+    job.seed =
+        job.settings.seed ? *job.settings.seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     job.slot = std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
     parked_.reset(); // a newer request replaces a result that is still waiting
     parkTimer_.reset();
@@ -541,6 +542,14 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         root.setAttribute("genBars", static_cast<int>(settings_.generation.lengthBars));
         root.setAttribute("genEnergy", settings_.generation.energyPct);
         root.setAttribute("genCreativity", settings_.generation.creativityPct);
+        root.setAttribute("genRoot", settings_.generation.root
+                                         ? juce::String(static_cast<int>(*settings_.generation.root))
+                                         : juce::String("auto"));
+        root.setAttribute("genScale", settings_.generation.scaleId ? juce::String(*settings_.generation.scaleId)
+                                                                   : juce::String("auto"));
+        root.setAttribute("genSeed", settings_.generation.seed
+                                         ? juce::String(std::to_string(*settings_.generation.seed))
+                                         : juce::String("random"));
         root.createNewChildElement("Slots")->addTextElement(juce::String(mm::core::slotBankToString(slots_)));
     }
     copyXmlToBinary(root, destData);
@@ -570,6 +579,20 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     settings.octave = mm::core::clampOctave(root->getIntAttribute("octave", 0));
     settings.generation.energyPct = root->getIntAttribute("genEnergy", defaults.energyPct);
     settings.generation.creativityPct = root->getIntAttribute("genCreativity", defaults.creativityPct);
+    // A state without key and scale comes from before they were settings: it keeps drawing them (D-149).
+    settings.generation.root.reset();
+    settings.generation.scaleId.reset();
+    if (const auto text = root->getStringAttribute("genRoot"); text.containsOnly("0123456789") && text.isNotEmpty()) {
+        const int value = text.getIntValue();
+        if (value >= 0 && value <= 11) {
+            settings.generation.root = static_cast<mm::core::PitchClass>(value);
+        }
+    }
+    if (const auto text = root->getStringAttribute("genScale").toStdString();
+        !text.empty() && mm::core::findScale(text) != nullptr) {
+        settings.generation.scaleId = text;
+    }
+    settings.generation.seed = mm::core::parseSeed(root->getStringAttribute("genSeed").toStdString());
 
     mm::core::SlotBank bank;
     std::vector<std::string> problems;
