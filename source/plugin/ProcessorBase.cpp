@@ -16,6 +16,17 @@ constexpr size_t kMidiBufferBytes = mm::engine::MidiEventList::kCapacity * 12;
 
 } // namespace
 
+/// Retries a parked generation result on the message thread until the host renders in real time again.
+class ProcessorBase::ParkTimer : private juce::Timer {
+public:
+    explicit ParkTimer(std::function<void()> retry) : retry_(std::move(retry)) { startTimer(kReturnCollectIntervalMs); }
+    ~ParkTimer() override { stopTimer(); }
+
+private:
+    void timerCallback() override { retry_(); }
+    std::function<void()> retry_;
+};
+
 ProcessorBase::ReturnCollector::ReturnCollector(mm::engine::PatternHandover& handover) : handover_(handover) {
     startTimer(kReturnCollectIntervalMs);
 }
@@ -50,7 +61,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout ProcessorBase::createParamet
 ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     : juce::AudioProcessor(buses), name_(std::move(name)),
       parameters_(*this, nullptr, "MidiMaid", createParameterLayout()), styles_(embeddedStyles()),
-      publisher_(handover_, styles_), returnCollector_(handover_) {
+      publisher_(handover_, styles_), player_(mm::core::PatternView{nullptr, 0, mm::core::kTicksPerBar}),
+      returnCollector_(handover_),
+      generator_(styles_, [this](const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
+          onGenerated(job, std::move(pattern));
+      }) {
     slotValue_ = parameters_.getRawParameterValue("slot");
     for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
         muteValues_[static_cast<size_t>(voice - 1)] =
@@ -116,9 +131,50 @@ void ProcessorBase::setInstanceSettings(const mm::core::InstanceSettings& settin
 void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& settings) {
     settings_ = settings;
     settings_.outputVoice = mm::core::clampOutputVoice(settings.outputVoice);
+    settings_.generation = mm::core::sanitize(settings.generation);
     outputVoice_.store(settings_.outputVoice);
     publisher_.setOutputVoice(settings_.outputVoice);
     publisher_.sync(slots_);
+}
+
+void ProcessorBase::generate() {
+    GenerationJob job;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        job.settings = settings_.generation;
+    }
+    job.seed = static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
+    job.slot = std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
+    parked_.reset(); // a newer request replaces a result that is still waiting
+    parkTimer_.reset();
+    generationStatus_ = GenerationStatus::Generating;
+    generator_.request(job);
+}
+
+void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
+    if (!pattern) {
+        generationStatus_ = GenerationStatus::NoResult; // the slot stays as it was
+        return;
+    }
+    if (isNonRealtime()) {
+        // An offline bounce must not hear a pattern appear in the middle of the render.
+        parked_ = ParkedResult{job, std::move(*pattern)};
+        parkTimer_ = std::make_unique<ParkTimer>([this] {
+            if (!isNonRealtime() && parked_) {
+                auto parked = std::move(*parked_);
+                parked_.reset();
+                parkTimer_.reset(); // destroys the timer that is calling: nothing runs after this line
+                applyGenerated(parked.job, std::move(parked.pattern));
+            }
+        });
+        return;
+    }
+    applyGenerated(job, std::move(*pattern));
+}
+
+void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern pattern) {
+    editSlots([&](mm::core::SlotBank& bank) { bank.setResult(static_cast<size_t>(job.slot), std::move(pattern)); });
+    generationStatus_ = GenerationStatus::Done;
 }
 
 std::vector<std::string> ProcessorBase::slotLoadProblems() const {
@@ -254,6 +310,10 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         root.setAttribute("role", juce::String(role.data(), role.size()));
         root.setAttribute("outputMode", juce::String(mode.data(), mode.size()));
         root.setAttribute("outputVoice", settings_.outputVoice);
+        root.setAttribute("genStyle", juce::String(settings_.generation.styleId));
+        root.setAttribute("genBars", static_cast<int>(settings_.generation.lengthBars));
+        root.setAttribute("genEnergy", settings_.generation.energyPct);
+        root.setAttribute("genCreativity", settings_.generation.creativityPct);
         root.createNewChildElement("Slots")->addTextElement(juce::String(mm::core::slotBankToString(slots_)));
     }
     copyXmlToBinary(root, destData);
@@ -273,6 +333,14 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     settings.role = mm::core::parseRole(root->getStringAttribute("role").toStdString());
     settings.outputMode = mm::core::parseOutputMode(root->getStringAttribute("outputMode").toStdString());
     settings.outputVoice = root->getIntAttribute("outputVoice", 1);
+    const mm::core::GenerationSettings defaults;
+    if (root->hasAttribute("genStyle")) {
+        settings.generation.styleId = root->getStringAttribute("genStyle").toStdString();
+    }
+    settings.generation.lengthBars =
+        static_cast<uint32_t>(std::max(0, root->getIntAttribute("genBars", static_cast<int>(defaults.lengthBars))));
+    settings.generation.energyPct = root->getIntAttribute("genEnergy", defaults.energyPct);
+    settings.generation.creativityPct = root->getIntAttribute("genCreativity", defaults.creativityPct);
 
     mm::core::SlotBank bank;
     std::vector<std::string> problems;

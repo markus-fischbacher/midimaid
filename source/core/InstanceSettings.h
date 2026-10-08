@@ -2,6 +2,8 @@
 
 #include "core/Pattern.h"
 
+#include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace mm::core {
@@ -12,11 +14,26 @@ enum class InstanceRole { Solo, Hub, Voice };
 /// What the instance sends to its MIDI output (SPEC 6.5): the notes of one voice, or nothing.
 enum class OutputMode { OneVoice, None };
 
+/// What "Generate" asks for (SPEC 3.1). Key, scale and seed are not settings of the instance: the seed is drawn for
+/// every request (and stored in the pattern), key and scale stay automatic until the hub UI offers them.
+struct GenerationSettings {
+    std::string styleId = "peak_time";
+    uint32_t lengthBars = 4; ///< 1, 2, 4, 8 or 16
+    int energyPct = 50;      ///< 0 to 100
+    int creativityPct = 40;  ///< 0 to 100
+
+    bool operator==(const GenerationSettings&) const = default;
+};
+
+/// Brings every field into its valid range: an invalid length becomes 4 bars, percentages are clamped.
+GenerationSettings sanitize(GenerationSettings settings);
+
 /// Persistent settings of an instance besides the slots and the host parameters (SPEC 9.1).
 struct InstanceSettings {
     InstanceRole role = InstanceRole::Solo;
     OutputMode outputMode = OutputMode::OneVoice;
     int outputVoice = 1; ///< 1 to `kMaxVoices`
+    GenerationSettings generation;
 
     bool operator==(const InstanceSettings&) const = default;
 };

@@ -57,10 +57,22 @@ std::vector<NoteEvent> run(juce::AudioProcessor& processor, FakePlayHead& head, 
     return events;
 }
 
+/// The instance starts silent (D-140). These tests were written against the one-bar offbeat pattern of phase 0, so
+/// they put exactly that pattern into the selected slot before the transport starts.
+void useOffbeatPattern(mm::plugin::ProcessorBase& processor) {
+    const auto view = mm::core::placeholderPattern();
+    std::vector<mm::core::PatternNote> notes(view.notes, view.notes + view.count);
+    auto pattern = std::make_unique<mm::engine::OwnedPattern>();
+    pattern->notes = std::move(notes);
+    pattern->lengthTicks = view.lengthTicks;
+    processor.switchPattern(std::move(pattern));
+}
+
 } // namespace
 
-TEST_CASE("instrument processor plays the placeholder pattern from the host playhead", "[plugin]") {
+TEST_CASE("instrument processor plays the pattern of its slot from the host playhead", "[plugin]") {
     mm::plugin::InstrumentProcessor processor("Test");
+    useOffbeatPattern(processor);
     FakePlayHead head;
     const auto events = run(processor, head, 100, 512, 2); // about 1.07 s = 2.13 beats
 
@@ -74,6 +86,7 @@ TEST_CASE("instrument processor plays the placeholder pattern from the host play
 
 TEST_CASE("MIDI-FX processor without audio buses plays too", "[plugin]") {
     mm::plugin::MidiFxProcessor processor("Test");
+    useOffbeatPattern(processor);
     FakePlayHead head;
     const auto events = run(processor, head, 100, 512, 0);
     REQUIRE(events.size() >= 2);
@@ -89,6 +102,7 @@ TEST_CASE("no playhead position: nothing is played", "[plugin]") {
 
 TEST_CASE("bypass releases a sounding note", "[plugin]") {
     mm::plugin::InstrumentProcessor processor("Test");
+    useOffbeatPattern(processor);
     FakePlayHead head;
     // 30 blocks of 512 = 15360 samples: the first note (from sample 12000) is sounding.
     auto events = run(processor, head, 30, 512, 2);
@@ -309,6 +323,7 @@ TEST_CASE("the host MIDI buffer keeps its storage across blocks", "[plugin][hand
     // with malloc, which cannot be counted portably, so this only guards that the storage does not move between
     // blocks (the address of the first event).
     mm::plugin::InstrumentProcessor processor("Test");
+    useOffbeatPattern(processor);
     FakePlayHead head;
     processor.setRateAndBufferSizeDetails(48000.0, 512);
     processor.setPlayHead(&head);
@@ -402,6 +417,7 @@ TEST_CASE("the slot parameter drives the playback and a start plays it at once",
 
 TEST_CASE("the mute parameter silences the voice and un-muting brings it back", "[plugin][parameters]") {
     mm::plugin::InstrumentProcessor processor("Test");
+    useOffbeatPattern(processor);
     Rig rig(processor);
     auto notes = rig.run(30); // the first note (from sample 12000) sounds
     REQUIRE_FALSE(notes.empty());
@@ -424,6 +440,7 @@ TEST_CASE("the mute parameter silences the voice and un-muting brings it back", 
 
 TEST_CASE("the mute of another voice does not silence this instance", "[plugin][parameters]") {
     mm::plugin::InstrumentProcessor processor("Test");
+    useOffbeatPattern(processor);
     Rig rig(processor);
     setParameter(processor, "mute_2", 1.0f);
     CHECK_FALSE(rig.run(100).empty());
@@ -547,6 +564,7 @@ TEST_CASE("a pattern put in a slot plays when the slot is selected", "[plugin][i
 
 TEST_CASE("the mute parameter that applies follows the output voice", "[plugin][instance]") {
     mm::plugin::InstrumentProcessor processor("Test");
+    useOffbeatPattern(processor);
     Rig rig(processor);
     mm::core::InstanceSettings settings;
     settings.outputVoice = 2;
