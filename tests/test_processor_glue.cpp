@@ -1,3 +1,5 @@
+#include "core/PatternGenerator.h"
+#include "core/PlaybackRender.h"
 #include "plugin/ProcessorBase.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -495,4 +497,226 @@ TEST_CASE("a newer state version loads as far as understood, unknown parameters 
     mm::plugin::InstrumentProcessor target("Test");
     target.setStateInformation(newer.getData(), static_cast<int>(newer.getSize()));
     CHECK(target.activeSlot() == 9);
+}
+
+namespace {
+
+mm::core::Pattern generatedPattern(const std::string& style, uint64_t seed) {
+    mm::plugin::InstrumentProcessor processor("Styles");
+    mm::core::GenerationRequest request;
+    request.seed = seed;
+    return mm::core::generateCandidate(*processor.styles().find(style), request, seed);
+}
+
+int firstPitch(const mm::core::Pattern& pattern, const mm::core::StyleLibrary& styles, size_t voice) {
+    const auto rendered = mm::core::renderVoiceForPlayback(pattern, *styles.find(pattern.styleId), voice);
+    return rendered.notes.empty() ? -1 : rendered.notes.front().pitch;
+}
+
+} // namespace
+
+TEST_CASE("the embedded style library holds the three shipped profiles", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    CHECK(processor.styles().size() == 3);
+    CHECK(processor.styles().problems().empty());
+    CHECK(processor.styles().find("peak_time") != nullptr);
+}
+
+TEST_CASE("a pattern put in a slot plays when the slot is selected", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    const auto pattern = generatedPattern("peak_time", 5);
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(2, pattern)); });
+    processor.selectSlot(3);
+    const auto rendered = mm::core::renderVoiceForPlayback(pattern, *processor.styles().find("peak_time"), 0);
+    REQUIRE_FALSE(rendered.notes.empty());
+    const auto notes = rig.run(400); // to about 8.5 PPQ
+    std::vector<Rig::Note> played;
+    for (const auto& n : notes) {
+        if (n.sample >= 96000 && n.on) {
+            played.push_back(n);
+        }
+    }
+    // The first note of the pattern sounds at the bar line plus its own start.
+    const long long expected = 96000 + std::llround(rendered.notes.front().startTick / 960.0 * 24000.0);
+    REQUIRE_FALSE(played.empty());
+    CHECK(std::abs(played.front().sample - expected) <= 1);
+    CHECK(played.front().pitch == rendered.notes.front().pitch);
+    CHECK(processor.activePatternVersion() == processor.slotsSnapshot().slot(2)->pattern->version);
+}
+
+TEST_CASE("the mute parameter that applies follows the output voice", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    mm::core::InstanceSettings settings;
+    settings.outputVoice = 2;
+    processor.setInstanceSettings(settings);
+    CHECK(processor.instanceSettings().outputVoice == 2);
+
+    setParameter(processor, "mute_1", 1.0f); // another voice
+    CHECK_FALSE(rig.run(100).empty());
+    setParameter(processor, "mute_2", 1.0f);
+    rig.run(2);
+    CHECK(rig.run(120).empty());
+    setParameter(processor, "mute_2", 0.0f);
+    CHECK_FALSE(rig.run(200).empty());
+}
+
+TEST_CASE("the output voice is limited to the valid range", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    mm::core::InstanceSettings settings;
+    settings.outputVoice = 0;
+    processor.setInstanceSettings(settings);
+    CHECK(processor.instanceSettings().outputVoice == 1);
+    settings.outputVoice = 500;
+    processor.setInstanceSettings(settings);
+    CHECK(processor.instanceSettings().outputVoice == mm::core::kMaxVoices);
+    Rig rig(processor); // must not read a mute parameter beyond the table
+    rig.run(10);
+}
+
+TEST_CASE("changing the output voice plays the other voice of the slot", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    const auto pattern = generatedPattern("melodic_techno", 9);
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, pattern)); });
+    mm::core::InstanceSettings settings;
+    settings.outputVoice = 2;
+    processor.setInstanceSettings(settings);
+    Rig rig(processor);
+    const auto notes = rig.run(400); // to about 8.5 PPQ
+    REQUIRE_FALSE(notes.empty());
+    const int expected = firstPitch(pattern, processor.styles(), 1);
+    int first = -1;
+    for (const auto& n : notes) {
+        if (n.on) {
+            first = n.pitch;
+            break;
+        }
+    }
+    CHECK(first == expected);
+}
+
+TEST_CASE("the state keeps slots, role, output mode and output voice", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor source("Test");
+    source.editSlots([&](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(0, generatedPattern("peak_time", 1)));
+        REQUIRE(bank.setResult(7, generatedPattern("hard_industrial", 2)));
+        bank.setName(7, "Drop");
+        bank.setColor(7, 3);
+    });
+    mm::core::InstanceSettings settings;
+    settings.role = mm::core::InstanceRole::Hub;
+    settings.outputMode = mm::core::OutputMode::None;
+    settings.outputVoice = 2;
+    source.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.getStateInformation(saved);
+
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.instanceSettings() == settings);
+    const auto bank = target.slotsSnapshot();
+    const auto original = source.slotsSnapshot();
+    REQUIRE(bank.slot(0)->pattern.has_value());
+    CHECK(*bank.slot(0)->pattern == *original.slot(0)->pattern);
+    CHECK(*bank.slot(7)->pattern == *original.slot(7)->pattern);
+    CHECK(bank.slot(7)->name == "Drop");
+    CHECK(bank.slot(7)->color == 3);
+    CHECK(bank.isEmpty(1));
+    CHECK(target.slotLoadProblems().empty());
+
+    juce::MemoryBlock again;
+    target.getStateInformation(again);
+    CHECK(again == saved);
+}
+
+TEST_CASE("a loaded slot plays without any further call", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor source("Test");
+    const auto pattern = generatedPattern("peak_time", 4);
+    source.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, pattern)); });
+    juce::MemoryBlock saved;
+    source.getStateInformation(saved);
+
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    Rig rig(target);
+    const auto notes = rig.run(400);
+    REQUIRE_FALSE(notes.empty());
+    CHECK(target.activePatternVersion() == target.slotsSnapshot().slot(0)->pattern->version);
+}
+
+TEST_CASE("a state without slots or settings gives an empty bank and the defaults", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, generatedPattern("peak_time", 1))); });
+    mm::core::InstanceSettings changed;
+    changed.role = mm::core::InstanceRole::Voice;
+    changed.outputVoice = 3;
+    processor.setInstanceSettings(changed);
+
+    // The format of the parameter step: only the version and the parameters.
+    mm::plugin::InstrumentProcessor fresh("Test");
+    juce::MemoryBlock saved;
+    fresh.getStateInformation(saved);
+    auto root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(root != nullptr);
+    root->removeAttribute("role");
+    root->removeAttribute("outputMode");
+    root->removeAttribute("outputVoice");
+    if (auto* slots = root->getChildByName("Slots")) {
+        root->removeChildElement(slots, true);
+    }
+    juce::MemoryBlock old;
+    juce::AudioProcessor::copyXmlToBinary(*root, old);
+
+    processor.setStateInformation(old.getData(), static_cast<int>(old.getSize()));
+    CHECK(processor.instanceSettings() == mm::core::InstanceSettings{});
+    const auto bank = processor.slotsSnapshot();
+    for (size_t i = 0; i < mm::core::kSlotCount; ++i) {
+        CHECK(bank.isEmpty(i));
+    }
+}
+
+TEST_CASE("unreadable slot data leaves the bank empty and is reported, the rest of the state loads", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor source("Test");
+    setParameter(source, "slot", 6.0f);
+    mm::core::InstanceSettings settings;
+    settings.role = mm::core::InstanceRole::Hub;
+    source.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.getStateInformation(saved);
+    auto root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(root != nullptr);
+    auto* slots = root->getChildByName("Slots");
+    REQUIRE(slots != nullptr);
+    slots->deleteAllTextElements();
+    slots->addTextElement("{ this is not a slot bank");
+    juce::MemoryBlock damaged;
+    juce::AudioProcessor::copyXmlToBinary(*root, damaged);
+
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(damaged.getData(), static_cast<int>(damaged.getSize()));
+    CHECK(target.activeSlot() == 6);
+    CHECK(target.instanceSettings().role == mm::core::InstanceRole::Hub);
+    CHECK_FALSE(target.slotLoadProblems().empty());
+    CHECK(target.slotsSnapshot().isEmpty(0));
+}
+
+TEST_CASE("unknown role text and out-of-range voice in a state fall back safely", "[plugin][instance]") {
+    mm::plugin::InstrumentProcessor source("Test");
+    juce::MemoryBlock saved;
+    source.getStateInformation(saved);
+    auto root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(root != nullptr);
+    root->setAttribute("role", "conductor");
+    root->setAttribute("outputMode", "everything");
+    root->setAttribute("outputVoice", 99);
+    juce::MemoryBlock odd;
+    juce::AudioProcessor::copyXmlToBinary(*root, odd);
+
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(odd.getData(), static_cast<int>(odd.getSize()));
+    const auto settings = target.instanceSettings();
+    CHECK(settings.role == mm::core::InstanceRole::Solo);
+    CHECK(settings.outputMode == mm::core::OutputMode::OneVoice);
+    CHECK(settings.outputVoice == mm::core::kMaxVoices);
 }

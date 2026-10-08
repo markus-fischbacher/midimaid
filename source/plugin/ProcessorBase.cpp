@@ -1,5 +1,7 @@
 #include "plugin/ProcessorBase.h"
 
+#include "core/SlotBankJson.h"
+#include "plugin/EmbeddedStyles.h"
 #include "plugin/PlaceholderEditor.h"
 
 #include <algorithm>
@@ -47,10 +49,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout ProcessorBase::createParamet
 
 ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     : juce::AudioProcessor(buses), name_(std::move(name)),
-      parameters_(*this, nullptr, "MidiMaid", createParameterLayout()), returnCollector_(handover_) {
+      parameters_(*this, nullptr, "MidiMaid", createParameterLayout()), styles_(embeddedStyles()),
+      publisher_(handover_, styles_), returnCollector_(handover_) {
     slotValue_ = parameters_.getRawParameterValue("slot");
-    const std::string muteId = mm::core::muteParameterId(outputVoice_);
-    muteValue_ = parameters_.getRawParameterValue(muteId);
+    for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
+        muteValues_[static_cast<size_t>(voice - 1)] = parameters_.getRawParameterValue(mm::core::muteParameterId(voice));
+    }
     player_.attach(&handover_);
 }
 
@@ -85,6 +89,40 @@ int ProcessorBase::activeSlot() const {
 
 juce::AudioProcessorValueTreeState& ProcessorBase::parameters() {
     return parameters_;
+}
+
+void ProcessorBase::editSlots(const std::function<void(mm::core::SlotBank&)>& change) {
+    const juce::ScopedLock lock(slotsLock_);
+    change(slots_);
+    publisher_.sync(slots_);
+}
+
+mm::core::SlotBank ProcessorBase::slotsSnapshot() const {
+    const juce::ScopedLock lock(slotsLock_);
+    return slots_;
+}
+
+mm::core::InstanceSettings ProcessorBase::instanceSettings() const {
+    const juce::ScopedLock lock(slotsLock_);
+    return settings_;
+}
+
+void ProcessorBase::setInstanceSettings(const mm::core::InstanceSettings& settings) {
+    const juce::ScopedLock lock(slotsLock_);
+    setInstanceSettingsLocked(settings);
+}
+
+void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& settings) {
+    settings_ = settings;
+    settings_.outputVoice = mm::core::clampOutputVoice(settings.outputVoice);
+    outputVoice_.store(settings_.outputVoice);
+    publisher_.setOutputVoice(settings_.outputVoice);
+    publisher_.sync(slots_);
+}
+
+std::vector<std::string> ProcessorBase::slotLoadProblems() const {
+    const juce::ScopedLock lock(slotsLock_);
+    return slotLoadProblems_;
 }
 
 uint64_t ProcessorBase::activePatternVersion() const {
@@ -132,7 +170,8 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
 
     // Host parameters are read once per block and never written here (SPEC 3.13, 6.1a rule 1).
     player_.setSlot(static_cast<int>(std::lround(slotValue_->load())));
-    player_.setMuted(muteValue_->load() >= 0.5f);
+    const int voice = outputVoice_.load(std::memory_order_relaxed);
+    player_.setMuted(muteValues_[static_cast<size_t>(voice - 1)]->load() >= 0.5f);
     player_.process(transport, audio.getNumSamples(), getSampleRate(), events_);
     writeEvents(midi);
 }
@@ -201,11 +240,20 @@ const juce::String ProcessorBase::getProgramName(int) {
 void ProcessorBase::changeProgramName(int, const juce::String&) {}
 
 void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
-    // SPEC 9.1: XML with stateVersion; slots, hub and voice settings join the parameters in later versions.
+    // SPEC 9.1: XML with stateVersion; the hub settings of later versions join the same way.
     juce::XmlElement root("MidiMaid");
     root.setAttribute("stateVersion", kStateVersion);
     if (auto parameters = parameters_.copyState().createXml()) {
         root.addChildElement(parameters.release());
+    }
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        const auto role = mm::core::toString(settings_.role);
+        const auto mode = mm::core::toString(settings_.outputMode);
+        root.setAttribute("role", juce::String(role.data(), role.size()));
+        root.setAttribute("outputMode", juce::String(mode.data(), mode.size()));
+        root.setAttribute("outputVoice", settings_.outputVoice);
+        root.createNewChildElement("Slots")->addTextElement(juce::String(mm::core::slotBankToString(slots_)));
     }
     copyXmlToBinary(root, destData);
 }
@@ -219,6 +267,28 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     if (const auto* parameters = root->getChildByName(parameters_.state.getType())) {
         parameters_.replaceState(juce::ValueTree::fromXml(*parameters));
     }
+
+    mm::core::InstanceSettings settings;
+    settings.role = mm::core::parseRole(root->getStringAttribute("role").toStdString());
+    settings.outputMode = mm::core::parseOutputMode(root->getStringAttribute("outputMode").toStdString());
+    settings.outputVoice = root->getIntAttribute("outputVoice", 1);
+
+    mm::core::SlotBank bank;
+    std::vector<std::string> problems;
+    if (const auto* slotsElement = root->getChildByName("Slots")) {
+        auto loaded = mm::core::loadSlotBank(slotsElement->getAllSubText().toStdString());
+        if (loaded.ok()) {
+            bank = std::move(*loaded.bank);
+        }
+        problems = std::move(loaded.problems);
+        if (!loaded.error.empty()) {
+            problems.push_back(loaded.error);
+        }
+    }
+    const juce::ScopedLock lock(slotsLock_);
+    slots_ = std::move(bank);
+    slotLoadProblems_ = std::move(problems);
+    setInstanceSettingsLocked(settings);
 }
 
 InstrumentProcessor::InstrumentProcessor(juce::String name)
