@@ -54,6 +54,11 @@ public:
         REQUIRE(parameter != nullptr);
         parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(slot)));
     }
+    void setMute(int voice, bool on) {
+        auto* parameter = processor.parameters().getParameter("mute_" + juce::String(voice));
+        REQUIRE(parameter != nullptr);
+        parameter->setValueNotifyingHost(on ? 1.0f : 0.0f);
+    }
     void setPpq(double ppq) { ppq_ = ppq; }
     void setPlaying(bool playing) { playing_ = playing; }
     double ppq() const { return ppq_; }
@@ -107,6 +112,17 @@ mm::core::Pattern marked(uint8_t pitch) {
     note.startTick = 0;
     note.lengthTicks = 240;
     pattern.voices[0].notes.push_back(note);
+    return pattern;
+}
+
+/// Two voices: the bass plays `bass`, the second voice plays `second`, both on every bar line.
+mm::core::Pattern markedTwoVoices(uint8_t bass, uint8_t second) {
+    mm::core::Pattern pattern = marked(bass);
+    REQUIRE(pattern.voices.size() >= 2);
+    mm::core::Note note = pattern.voices[0].notes[0];
+    note.id = mm::core::allocateNoteId(pattern);
+    note.pitch = second;
+    pattern.voices[1].notes.push_back(note);
     return pattern;
 }
 
@@ -438,6 +454,14 @@ TEST_CASE("audio threads run while roles, switches and slots change on the messa
         if (round % 50 == 49) {
             hub->setRole(round % 100 == 49 ? InstanceRole::Solo : InstanceRole::Hub);
         }
+        hub->setMute(1 + round % 2, round % 4 < 2); // mute works twice: the mask is read by the voices meanwhile
+        voiceA->setMute(1, round % 3 == 0);
+        if (round % 25 == 0) {
+            auto settings = hub->processor.instanceSettings();
+            settings.outputMode = round % 50 == 0 ? mm::core::OutputMode::None : mm::core::OutputMode::OneVoice;
+            hub->processor.setInstanceSettings(settings);
+            voiceB->processor.generate(); // forwarded to the hub while the audio threads run
+        }
         Instance extra("Extra"); // instances that come and go meanwhile
         extra.setRole(InstanceRole::Voice);
     }
@@ -503,4 +527,104 @@ TEST_CASE("a pattern change while nobody plays has no stamp and plays from the s
     runTo({&hub, &voice}, 1.0);
     CHECK(near(hub.firstWith(50), at(0.0)));
     CHECK(near(voice.firstWith(50), at(0.0)));
+}
+
+TEST_CASE("mute works twice: the hub's switch silences the voice, its own switch too", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice1("Voice 1");
+    Instance voice2("Voice 2");
+    hub.setRole(InstanceRole::Hub);
+    voice1.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    voice2.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
+    runTo({&hub, &voice1, &voice2}, 5.0);
+    REQUIRE(voice1.played(41));
+    REQUIRE(voice2.played(71));
+
+    hub.setMute(2, true); // the hub mutes voice 2 only
+    runTo({&hub, &voice1, &voice2}, 9.0);
+    CHECK(voice1.firstWith(41, at(8.0)) >= 0);
+    CHECK(voice2.firstWith(71, at(8.0)) == -1);
+    CHECK(hub.firstWith(41, at(8.0)) >= 0);
+
+    hub.setMute(2, false);
+    runTo({&hub, &voice1, &voice2}, 13.0);
+    CHECK(voice2.firstWith(71, at(12.0)) >= 0);
+
+    voice1.setMute(1, true); // its own switch
+    runTo({&hub, &voice1, &voice2}, 17.0);
+    CHECK(voice1.firstWith(41, at(16.0)) == -1);
+    CHECK(voice2.firstWith(71, at(16.0)) >= 0);
+}
+
+TEST_CASE("a voice is audible again when the hub that muted it is gone", "[group-wiring]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    {
+        Instance hub("Hub");
+        hub.setRole(InstanceRole::Hub);
+        voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+        hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, marked(41)); });
+        hub.setMute(1, true);
+        runTo({&hub, &voice}, 5.0);
+        CHECK_FALSE(voice.played(41));
+    }
+    runTo({&voice}, 9.0);
+    CHECK(voice.firstWith(41, at(8.0)) >= 0);
+}
+
+TEST_CASE("a hub with output none plays nothing and the voices go on", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    fillSlots(hub);
+    runTo({&hub, &voice}, 5.0);
+    REQUIRE(hub.played(41));
+    auto settings = hub.processor.instanceSettings();
+    settings.outputMode = mm::core::OutputMode::None;
+    hub.processor.setInstanceSettings(settings);
+    hub.setSlotParameter(2);
+    runTo({&hub, &voice}, 13.0);
+    CHECK(hub.firstWith(41, at(8.0)) == -1);
+    CHECK(hub.firstWith(42, 0) == -1);
+    CHECK(near(voice.firstWith(42), at(8.0))); // the voice still follows the hub's slot
+    settings.outputMode = mm::core::OutputMode::OneVoice;
+    hub.processor.setInstanceSettings(settings);
+    runTo({&hub, &voice}, 17.0);
+    CHECK(hub.firstWith(42, at(16.0)) >= 0);
+}
+
+TEST_CASE("output none only silences a hub", "[group-wiring]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    fillSlots(solo);
+    auto settings = solo.processor.instanceSettings();
+    settings.outputMode = mm::core::OutputMode::None;
+    solo.processor.setInstanceSettings(settings);
+    runTo({&solo}, 5.0);
+    CHECK(solo.played(41));
+}
+
+TEST_CASE("a voice's generate request is carried out by the hub with the hub's settings", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    auto settings = hub.processor.instanceSettings();
+    settings.generation.lengthBars = 2;
+    hub.processor.setInstanceSettings(settings);
+    REQUIRE(voice.processor.groupStatus() == GroupStatus::VoiceConnected);
+    voice.processor.generate();
+    CHECK(voice.processor.generationStatus() == mm::plugin::GenerationStatus::Forwarded);
+    CHECK(hub.processor.generationStatus() == mm::plugin::GenerationStatus::Generating);
+    for (int i = 0; i < 300 && voice.processor.slotsSnapshot().isEmpty(0); ++i) {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    }
+    REQUIRE_FALSE(hub.processor.slotsSnapshot().isEmpty(0));
+    REQUIRE_FALSE(voice.processor.slotsSnapshot().isEmpty(0));
+    CHECK(voice.processor.slotsSnapshot().slot(0)->pattern->lengthBars == 2);
 }

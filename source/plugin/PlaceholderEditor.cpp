@@ -87,6 +87,16 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(followBox_);
 
+    outputBox_.addItem("Output: a voice", 1);
+    outputBox_.addItem("Output: none", 2);
+    outputBox_.setSelectedId(settings.outputMode == mm::core::OutputMode::None ? 2 : 1, juce::dontSendNotification);
+    outputBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.outputMode = outputBox_.getSelectedId() == 2 ? mm::core::OutputMode::None : mm::core::OutputMode::OneVoice;
+        processor_.setInstanceSettings(next);
+    };
+    addChildComponent(outputBox_);
+
     takeOverButton_.onClick = [this] { processor_.acceptHubOffer(); };
     addChildComponent(takeOverButton_);
 
@@ -163,8 +173,9 @@ void PlaceholderEditor::updateStatus() {
         roleBox_.setSelectedId(roleId, juce::dontSendNotification); // e.g. a voice that took over the hub
     }
     const bool isVoice = role == mm::core::InstanceRole::Voice;
-    generateButton_.setEnabled(!isVoice);
+    generateButton_.setEnabled(!isVoice || processor_.groupStatus() == GroupStatus::VoiceConnected);
     followBox_.setVisible(isVoice);
+    outputBox_.setVisible(role == mm::core::InstanceRole::Hub);
     if (isVoice && processor_.lateSwitches() > 0) {
         group += " (" + juce::String(static_cast<int>(processor_.lateSwitches())) + " late)";
     }
@@ -181,7 +192,10 @@ void PlaceholderEditor::updateStatus() {
         statusLabel_.setText("No result: the slot is unchanged", juce::dontSendNotification);
         break;
     case GenerationStatus::UseHub:
-        statusLabel_.setText("A voice plays what the hub generates", juce::dontSendNotification);
+        statusLabel_.setText("No hub to generate for this voice", juce::dontSendNotification);
+        break;
+    case GenerationStatus::Forwarded:
+        statusLabel_.setText("Asked the hub to generate", juce::dontSendNotification);
         break;
     case GenerationStatus::Idle:
         statusLabel_.setText({}, juce::dontSendNotification);
@@ -217,6 +231,7 @@ void PlaceholderEditor::resized() {
     takeOverButton_.setBounds(roles.removeFromRight(120));
     roles.removeFromRight(8);
     followBox_.setBounds(roles.removeFromRight(150));
+    outputBox_.setBounds(followBox_.getBounds()); // never visible together
     roles.removeFromRight(8);
     voiceBox_.setBounds(roles.removeFromRight(120));
     roles.removeFromRight(8);

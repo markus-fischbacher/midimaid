@@ -122,6 +122,20 @@ bool GroupRegistry::publish(MemberId id, SlotSnapshot snapshot, std::optional<do
     return true;
 }
 
+bool GroupRegistry::forward(MemberId id, GroupAction action) {
+    const Entry* from = find(id);
+    if (from == nullptr || from->role != InstanceRole::Voice || hub_ == 0) {
+        return false;
+    }
+    const Entry* hub = find(hub_);
+    if (hub == nullptr) {
+        return false;
+    }
+    const auto member = hub->member; // the callback may change the member list
+    member->onAction(action);
+    return true;
+}
+
 bool GroupRegistry::acceptOffer(MemberId id) {
     const Entry* entry = find(id);
     if (entry == nullptr || statusOf(*entry) != GroupStatus::HubOffered) {

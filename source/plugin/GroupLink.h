@@ -26,6 +26,8 @@ public:
     void setRole(mm::core::InstanceRole role, int outputVoice);
     /// Any thread: the hub's new slot set, with the PPQ stamp at which it takes effect when the hub planned one.
     void publish(mm::core::SlotSnapshot snapshot, std::optional<double> stampPpq = std::nullopt);
+    /// Any thread: asks the hub to do `action` for this voice (runs on the message thread).
+    void forward(mm::core::GroupAction action);
     /// Message thread: takes the hub role that was offered.
     void acceptOffer();
     /// Owner is going away: no callback reaches it after this returns; leaves the registry.
@@ -37,6 +39,7 @@ public:
     // GroupMember (message thread)
     void onSnapshot(const mm::core::SlotSnapshot& snapshot, std::optional<double> stampPpq) override;
     void onStatus(mm::core::GroupStatus status, size_t voices) override;
+    void onAction(mm::core::GroupAction action) override;
     mm::core::SlotSnapshot currentSlots() override;
 
 private:

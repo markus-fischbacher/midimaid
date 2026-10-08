@@ -114,11 +114,16 @@ void ProcessorBase::onGroupStatusChanged(mm::core::GroupStatus status) {
 void ProcessorBase::updateSlotMode() {
     mm::core::InstanceRole role;
     mm::core::SlotFollow follow;
+    mm::core::OutputMode output;
     {
         const juce::ScopedLock lock(slotsLock_);
         role = settings_.role;
         follow = settings_.slotFollow;
+        output = settings_.outputMode;
     }
+    silent_.store(role == mm::core::InstanceRole::Hub && output == mm::core::OutputMode::None,
+                  std::memory_order_release);
+    voiceRole_.store(role == mm::core::InstanceRole::Voice, std::memory_order_release);
     auto mode = mm::engine::SlotMode::Own;
     if (role == mm::core::InstanceRole::Hub && groupLink_ != nullptr &&
         groupLink_->status() == mm::core::GroupStatus::Hub) {
@@ -237,13 +242,22 @@ void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& 
 
 void ProcessorBase::generate() {
     GenerationJob job;
+    bool isVoice;
     {
         const juce::ScopedLock lock(slotsLock_);
         job.settings = settings_.generation;
-        if (settings_.role == mm::core::InstanceRole::Voice) {
-            generationStatus_ = GenerationStatus::UseHub; // a voice plays what the hub generates (forwarding: H5)
-            return;
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+    }
+    if (isVoice) {
+        // A voice plays what the hub generates: the request goes to the hub (SPEC 6.5), with the hub's settings.
+        // Outside the lock: the registry calls into another instance.
+        if (groupLink_->status() == mm::core::GroupStatus::VoiceConnected) {
+            generationStatus_ = GenerationStatus::Forwarded;
+            groupLink_->forward(mm::core::GroupAction::Generate);
+        } else {
+            generationStatus_ = GenerationStatus::UseHub; // no hub to ask
         }
+        return;
     }
     job.seed = static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     job.slot = std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
@@ -338,7 +352,19 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
         player_.setSlot(decision.slot);
     }
     const int voice = outputVoice_.load(std::memory_order_relaxed);
-    player_.setMuted(muteValues_[static_cast<size_t>(voice - 1)]->load() >= 0.5f);
+    if (static_cast<mm::engine::SlotMode>(slotMode_.load(std::memory_order_acquire)) == mm::engine::SlotMode::Hub) {
+        uint32_t mask = 0;
+        for (size_t i = 0; i < muteValues_.size(); ++i) {
+            if (muteValues_[i]->load() >= 0.5f) {
+                mask |= 1u << i;
+            }
+        }
+        groupSync_.reportMutes(mask); // mute works twice: the voices obey the hub's switches too
+    }
+    const bool muted = muteValues_[static_cast<size_t>(voice - 1)]->load() >= 0.5f ||
+                       silent_.load(std::memory_order_acquire) ||
+                       (voiceRole_.load(std::memory_order_acquire) && groupSync_.mutedByHub(voice));
+    player_.setMuted(muted);
     player_.process(transport, audio.getNumSamples(), getSampleRate(), events_);
     writeEvents(midi);
 }

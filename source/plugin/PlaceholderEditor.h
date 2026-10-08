@@ -28,6 +28,7 @@ private:
     juce::ComboBox roleBox_;
     juce::ComboBox voiceBox_;
     juce::ComboBox followBox_;
+    juce::ComboBox outputBox_; // hub only: plays a voice or nothing
     juce::ComboBox styleBox_;
     juce::TextButton takeOverButton_{"Become hub"};
     juce::TextButton generateButton_{"Generate"};

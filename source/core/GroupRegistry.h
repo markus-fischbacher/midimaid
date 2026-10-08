@@ -25,6 +25,9 @@ enum class GroupStatus {
 /// instances).
 using SlotSnapshot = std::shared_ptr<const SlotBank>;
 
+/// What a voice asks of the hub (SPEC 6.5: voice actions are forwarded to the hub).
+enum class GroupAction { Generate };
+
 /// An instance as the registry sees it. All calls come on the message thread.
 class GroupMember {
 public:
@@ -35,6 +38,8 @@ public:
     virtual void onSnapshot(const SlotSnapshot& snapshot, std::optional<double> stampPpq) = 0;
     /// The status or, for a hub, the number of voices changed.
     virtual void onStatus(GroupStatus status, size_t voices) = 0;
+    /// Hub: a voice asked for `action`. The default ignores it.
+    virtual void onAction(GroupAction action) { (void)action; }
     /// The slot set of this member as it is now (the registry asks when a member becomes hub).
     virtual SlotSnapshot currentSlots() = 0;
 };
@@ -62,6 +67,8 @@ public:
     /// The hub reports a new slot set, optionally with the PPQ stamp at which it takes effect. False when `id` is not
     /// the hub.
     bool publish(MemberId id, SlotSnapshot snapshot, std::optional<double> stampPpq = std::nullopt);
+    /// A voice forwards `action` to the hub. False when `id` is not a voice or there is no hub.
+    bool forward(MemberId id, GroupAction action);
     /// A member with status `HubOffered` becomes the hub. False when it is not offered the role.
     bool acceptOffer(MemberId id);
 

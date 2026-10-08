@@ -28,6 +28,14 @@ std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std:
     return ceilToBar(furthest + leadPpq);
 }
 
+bool GroupSync::mutedByHub(int voice) const {
+    const int hub = channel_.hub();
+    if (hub == GroupChannel::kNone || hub == member_.load(std::memory_order_acquire) || voice < 1 || voice > 32) {
+        return false;
+    }
+    return ((channel_.hubMute() >> (voice - 1)) & 1u) != 0;
+}
+
 SlotDecision GroupSync::beginBlock(SlotMode mode, int ownSlot, const TransportInfo& transport, int numSamples,
                                    double sampleRate, bool restart) {
     ownSlot = std::clamp(ownSlot, 1, 16);
