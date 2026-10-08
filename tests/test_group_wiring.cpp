@@ -703,3 +703,185 @@ TEST_CASE("the octave is saved, limited, and missing in older states", "[group-w
     target.processor.setInstanceSettings(settings);
     CHECK(target.processor.instanceSettings().octave == 2);
 }
+
+TEST_CASE("a voice's Open hub request reaches the hub's window, nobody else's", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    Instance solo("Solo");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    voice.processor.showHub();
+    CHECK(hub.processor.frontRequests() == 1);
+    CHECK(voice.processor.frontRequests() == 0);
+    CHECK(solo.processor.frontRequests() == 0);
+    hub.processor.showHub(); // a hub asks nobody
+    CHECK(hub.processor.frontRequests() == 1);
+}
+
+TEST_CASE("an Open hub request without a hub does nothing", "[group-wiring]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    voice.processor.showHub();
+    CHECK(voice.processor.frontRequests() == 0);
+}
+
+TEST_CASE("the playing voice is what the roll shows and the export writes", "[group-wiring]") {
+    Quiet quiet;
+    Instance instance("Instance");
+    CHECK_FALSE(instance.processor.playingVoice().hasPattern); // an empty slot shows nothing
+
+    instance.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
+    const auto bass = instance.processor.playingVoice();
+    REQUIRE(bass.hasPattern);
+    CHECK(bass.slot == 1);
+    CHECK(bass.voiceName == "Bass");
+    REQUIRE_FALSE(bass.notes.empty());
+    CHECK(bass.notes.front().pitch == 41);
+    CHECK(bass.lengthTicks == 3840);
+
+    instance.setRole(InstanceRole::Solo, SlotFollow::Hub, 2);
+    const auto melody = instance.processor.playingVoice();
+    CHECK(melody.voiceName == "Melody");
+    REQUIRE_FALSE(melody.notes.empty());
+    CHECK(melody.notes.front().pitch == 71);
+    CHECK_FALSE(melody.sameSource(bass));
+
+    auto settings = instance.processor.instanceSettings();
+    settings.octave = 1;
+    instance.processor.setInstanceSettings(settings);
+    const auto up = instance.processor.playingVoice();
+    CHECK(up.notes.front().pitch == 71 + 12);
+    CHECK_FALSE(up.sameSource(melody));
+    CHECK(instance.processor.playingVoice().sameSource(up)); // nothing changed since
+
+    instance.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(42, 72)); });
+    CHECK_FALSE(instance.processor.playingVoice().sameSource(up)); // a new revision
+}
+
+TEST_CASE("the mute state names its source", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+    fillSlots(hub);
+    runTo({&hub, &voice}, 1.0);
+    CHECK_FALSE(voice.processor.mutedByOwnSwitch());
+    CHECK_FALSE(voice.processor.mutedByHub());
+    hub.setMute(2, true);
+    runTo({&hub, &voice}, 2.0);
+    CHECK(voice.processor.mutedByHub());
+    CHECK_FALSE(voice.processor.mutedByOwnSwitch());
+    CHECK_FALSE(hub.processor.mutedByHub()); // a hub only has its own switch
+    voice.setMute(2, true);
+    CHECK(voice.processor.mutedByOwnSwitch());
+}
+
+namespace {
+
+void pumpMessages(int milliseconds) {
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(milliseconds);
+}
+
+template <typename T> T* child(juce::Component& parent, const char* id) {
+    return dynamic_cast<T*>(parent.findChildWithID(id));
+}
+
+} // namespace
+
+TEST_CASE("the editor of a voice is the compact voice UI, other roles keep the placeholder layout",
+          "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    REQUIRE(editor != nullptr);
+    CHECK(editor->getWidth() == 600);
+    CHECK(editor->getHeight() == 320);
+    CHECK(child<juce::ToggleButton>(*editor, "mute")->isVisible());
+    CHECK(child<juce::Component>(*editor, "roll")->isVisible());
+    CHECK(child<juce::ComboBox>(*editor, "octave")->isVisible());
+    CHECK(child<juce::TextButton>(*editor, "openHub")->isVisible());
+
+    voice.setRole(InstanceRole::Solo);
+    pumpMessages(500); // the editor's timer notices the new role
+    CHECK(editor->getHeight() == 360);
+    CHECK_FALSE(child<juce::ToggleButton>(*editor, "mute")->isVisible());
+    CHECK_FALSE(child<juce::Component>(*editor, "roll")->isVisible());
+
+    voice.setRole(InstanceRole::Voice);
+    pumpMessages(500);
+    CHECK(editor->getHeight() == 320);
+    CHECK(child<juce::ToggleButton>(*editor, "mute")->isVisible());
+
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> soloEditor(solo.processor.createEditor());
+    CHECK(soloEditor->getHeight() == 360);
+    CHECK_FALSE(child<juce::Component>(*soloEditor, "roll")->isVisible());
+}
+
+TEST_CASE("the mute button is the host parameter of the voice, both ways", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* mute = child<juce::ToggleButton>(*editor, "mute");
+    REQUIRE(mute != nullptr);
+    auto* parameter = voice.processor.parameters().getParameter("mute_2");
+    REQUIRE(parameter != nullptr);
+    CHECK_FALSE(mute->getToggleState());
+
+    mute->setToggleState(true, juce::sendNotificationSync);
+    CHECK(parameter->getValue() == 1.0f);
+    CHECK(voice.processor.parameters().getRawParameterValue("mute_1")->load() == 0.0f); // only its own voice
+    CHECK(voice.processor.mutedByOwnSwitch());
+
+    parameter->setValueNotifyingHost(0.0f); // automation moves the switch
+    pumpMessages(100);
+    CHECK_FALSE(mute->getToggleState());
+
+    voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 1); // another voice: the button follows that parameter
+    pumpMessages(500);
+    mute->setToggleState(true, juce::sendNotificationSync);
+    CHECK(voice.processor.parameters().getRawParameterValue("mute_1")->load() == 1.0f);
+    CHECK(parameter->getValue() == 0.0f);
+}
+
+TEST_CASE("the octave box sets the octave of the instance and shows it", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* box = child<juce::ComboBox>(*editor, "octave");
+    REQUIRE(box != nullptr);
+    CHECK(box->getSelectedId() == 3); // octave 0
+    box->setSelectedId(5, juce::sendNotificationSync);
+    CHECK(voice.processor.instanceSettings().octave == 2);
+    box->setSelectedId(1, juce::sendNotificationSync);
+    CHECK(voice.processor.instanceSettings().octave == -2);
+
+    auto settings = voice.processor.instanceSettings();
+    settings.octave = 1; // set from outside: the box follows
+    voice.processor.setInstanceSettings(settings);
+    pumpMessages(500);
+    CHECK(box->getSelectedId() == 4);
+}
+
+TEST_CASE("the Open hub button works only with a hub", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* button = child<juce::TextButton>(*editor, "openHub");
+    REQUIRE(button != nullptr);
+    CHECK_FALSE(button->isEnabled());
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    pumpMessages(500);
+    CHECK(button->isEnabled());
+    button->triggerClick(); // asynchronous
+    pumpMessages(200);
+    CHECK(hub.processor.frontRequests() == 1);
+}
