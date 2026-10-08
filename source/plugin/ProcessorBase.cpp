@@ -4,8 +4,46 @@
 
 namespace mm::plugin {
 
+namespace {
+
+constexpr int kReturnCollectIntervalMs = 250;
+/// Upper bound of the bytes one block can write: the engine's event capacity, with room for the event header.
+constexpr size_t kMidiBufferBytes = mm::engine::MidiEventList::kCapacity * 12;
+
+} // namespace
+
+ProcessorBase::ReturnCollector::ReturnCollector(mm::engine::PatternHandover& handover) : handover_(handover) {
+    startTimer(kReturnCollectIntervalMs);
+}
+
+ProcessorBase::ReturnCollector::~ReturnCollector() {
+    stopTimer();
+}
+
+void ProcessorBase::ReturnCollector::timerCallback() {
+    handover_.collectReturned();
+}
+
 ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
-    : juce::AudioProcessor(buses), name_(std::move(name)) {}
+    : juce::AudioProcessor(buses), name_(std::move(name)), returnCollector_(handover_) {
+    player_.attach(&handover_);
+}
+
+ProcessorBase::~ProcessorBase() = default;
+
+void ProcessorBase::switchPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq) {
+    handover_.publishSwitch(std::move(pattern), gridPpq);
+    handover_.collectReturned();
+}
+
+void ProcessorBase::editPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern) {
+    handover_.publishEdit(std::move(pattern));
+    handover_.collectReturned();
+}
+
+uint64_t ProcessorBase::activePatternVersion() const {
+    return handover_.activeVersion();
+}
 
 const juce::String ProcessorBase::getName() const {
     return name_;
@@ -22,6 +60,9 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
     juce::ScopedNoDenormals noDenormals;
     audio.clear();
     midi.clear(); // incoming MIDI is not evaluated in v1.0 and not passed through
+    // The host owns the buffer, so it cannot be reserved in prepareToPlay (O-23, D-134). Reserving the bound once
+    // keeps addEvent from growing it; this allocates at most once per host buffer, in the first blocks.
+    midi.ensureSize(kMidiBufferBytes);
 
     mm::engine::TransportInfo transport;
     if (auto* host = getPlayHead()) {
@@ -50,6 +91,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
 void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi) {
     audio.clear();
     midi.clear();
+    midi.ensureSize(kMidiBufferBytes);
     events_.clear();
     player_.releaseAll(events_, 0);
     player_.invalidateTransport();

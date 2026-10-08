@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/PatternHandover.h"
 #include "engine/PatternPlayer.h"
 #include "plugin/MidiExporter.h"
 
@@ -12,6 +13,7 @@ namespace mm::plugin {
 class ProcessorBase : public juce::AudioProcessor {
 public:
     ProcessorBase(const BusesProperties& buses, juce::String name);
+    ~ProcessorBase() override;
 
     const juce::String getName() const override;
 
@@ -38,14 +40,34 @@ public:
     /// Last tempo reported by the host (120 until the host reported one). Safe to read from any thread.
     double lastKnownBpm() const;
 
+    /// Message thread: queues a pattern for the audio thread (SPEC 6.3). A switch takes effect at the next grid point
+    /// (`gridPpq`, rounded up to a bar line), an edit at the next block without restarting the position.
+    void switchPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq = 4.0);
+    void editPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern);
+    /// Version of the pattern that is playing (0 for the built-in placeholder). Safe to read from any thread.
+    uint64_t activePatternVersion() const;
+
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
 private:
     void writeEvents(juce::MidiBuffer& midi) const;
 
+    /// Empties the handover's return queue on the message thread (SPEC 6.3: patterns are freed there only).
+    class ReturnCollector : private juce::Timer {
+    public:
+        explicit ReturnCollector(mm::engine::PatternHandover& handover);
+        ~ReturnCollector() override;
+
+    private:
+        void timerCallback() override;
+        mm::engine::PatternHandover& handover_;
+    };
+
     juce::String name_;
+    mm::engine::PatternHandover handover_;
     mm::engine::PatternPlayer player_;
+    ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;
     std::atomic<double> lastBpm_{120.0};
     MidiExporter exporter_;
