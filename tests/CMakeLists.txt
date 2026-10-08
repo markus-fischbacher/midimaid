@@ -11,7 +11,8 @@ add_executable(mm_plugin_tests test_host_capabilities.cpp)
 target_link_libraries(mm_plugin_tests PRIVATE mm_host_capabilities Catch2::Catch2WithMain mm_warnings)
 
 add_executable(mm_engine_tests test_pattern_player.cpp)
-target_link_libraries(mm_engine_tests PRIVATE mm_engine Catch2::Catch2WithMain mm_warnings)
+find_package(Threads REQUIRED)
+target_link_libraries(mm_engine_tests PRIVATE mm_engine Threads::Threads Catch2::Catch2WithMain mm_warnings)
 
 add_executable(mm_plugin_glue_tests test_processor_glue.cpp)
 mm_warn_sources(test_processor_glue.cpp)

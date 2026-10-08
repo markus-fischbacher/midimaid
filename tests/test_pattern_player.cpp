@@ -1,10 +1,13 @@
 #include "engine/PatternPlayer.h"
 
+#include <atomic>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <set>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -674,4 +677,247 @@ TEST_CASE("a note that starts in the sample of the switch point is never left ha
             CHECK(e.sample > 0);
         }
     }
+}
+
+// ---- lock-free handover (SPEC 6.3, D-133) ----
+
+namespace {
+
+std::unique_ptr<OwnedPattern> owned(std::vector<PatternNote> notes, uint64_t version,
+                                    std::shared_ptr<const void> token = {},
+                                    uint32_t lengthTicks = 4 * kTicksPerQuarter) {
+    auto pattern = std::make_unique<OwnedPattern>();
+    pattern->notes = std::move(notes);
+    pattern->lengthTicks = lengthTicks;
+    pattern->version = version;
+    pattern->lifetimeToken = std::move(token);
+    return pattern;
+}
+
+std::vector<PatternNote> longNotes() {
+    return {{3000, 900, 1, 40, 100}};
+}
+std::vector<PatternNote> nextNotes() {
+    return {{0, 240, 1, 50, 100}, {1920, 240, 1, 50, 100}};
+}
+
+} // namespace
+
+TEST_CASE("a published switch plays like a requested one and the old pattern is retired", "[engine][handover]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    sim.setPpq(5.3);
+    sim.block(512);
+    handover.publishSwitch(owned(nextNotes(), 7), 4.0);
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx((8.0 - 5.3) * 24000).margin(1.0));
+    CHECK(handover.activeVersion() == 7);
+    CHECK(handover.collectReturned() == 0); // the first pattern had no owner
+
+    handover.publishSwitch(owned(longNotes(), 8), 4.0);
+    while (sim.clock() < 10 * 24000) {
+        sim.block(512);
+    }
+    CHECK(handover.activeVersion() == 8);
+    CHECK(handover.collectReturned() == 1); // version 7 came back
+}
+
+TEST_CASE("a newer switch replaces an older one the audio thread has not seen", "[engine][handover]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    auto tokenA = std::make_shared<int>(0);
+    handover.publishSwitch(owned(longNotes(), 1, tokenA), 4.0);
+    CHECK(tokenA.use_count() == 2);
+    handover.publishSwitch(owned(nextNotes(), 2), 4.0);
+    CHECK(tokenA.use_count() == 1); // freed by the producer, never seen by the audio thread
+    sim.setPpq(5.3);
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    CHECK(handover.activeVersion() == 2);
+    CHECK(handover.collectReturned() == 0);
+}
+
+TEST_CASE("a pending switch replaced inside the player is handed back", "[engine][handover]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    auto tokenA = std::make_shared<int>(0);
+    sim.setPpq(5.3);
+    sim.block(512);
+    handover.publishSwitch(owned(longNotes(), 1, tokenA), 4.0);
+    sim.block(512); // taken, the point 8.0 is fixed
+    handover.publishSwitch(owned(nextNotes(), 2), 4.0);
+    sim.block(512); // replaces it
+    CHECK(handover.collectReturned() == 1);
+    CHECK(tokenA.use_count() == 1);
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    CHECK(handover.activeVersion() == 2);
+}
+
+TEST_CASE("a full return queue postpones the switch to the next grid point", "[engine][handover]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    sim.setPpq(5.3);
+    // Each edit retires the previous pattern; the first one had no owner, so 9 edits fill the 8 places.
+    for (uint64_t version = 1; version <= PatternHandover::kReturnCapacity + 1; ++version) {
+        handover.publishEdit(owned(longNotes(), version));
+        sim.block(512);
+    }
+    REQUIRE(handover.freeReturnSlots() == 0);
+    handover.publishSwitch(owned(nextNotes(), 100), 4.0);
+    while (sim.clock() < 3 * 24000) { // past the bar line at 8.0
+        sim.block(512);
+    }
+    CHECK(ofPitch(sim.events(), 50, true).empty()); // the old pattern keeps playing
+    CHECK(handover.activeVersion() == PatternHandover::kReturnCapacity + 1);
+    CHECK(handover.collectReturned() == PatternHandover::kReturnCapacity);
+    while (sim.clock() < 8 * 24000) {
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx((12.0 - 5.3) * 24000).margin(1.0)); // the next bar line
+    CHECK(handover.activeVersion() == 100);
+}
+
+TEST_CASE("a full return queue holds an edit in the mailbox", "[engine][handover]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    for (uint64_t version = 1; version <= PatternHandover::kReturnCapacity + 1; ++version) {
+        handover.publishEdit(owned(longNotes(), version));
+        sim.block(512);
+    }
+    handover.publishEdit(owned(longNotes(), 50));
+    sim.block(512);
+    CHECK(handover.activeVersion() == PatternHandover::kReturnCapacity + 1);
+    handover.collectReturned();
+    sim.block(512);
+    CHECK(handover.activeVersion() == 50);
+}
+
+TEST_CASE("an edit keeps the position and ends only the notes that changed", "[engine][handover]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    sim.blockAt(7.0, 12000); // 7.0 to 7.5: the long note (7.125 to 8.0625) sounds
+    REQUIRE(sim.soundingCount() == 1);
+
+    SECTION("an unchanged note keeps sounding, a new note plays at its place in the cycle") {
+        auto notes = longNotes();
+        notes.push_back({3600, 120, 1, 60, 100}); // position 3.75, so 7.75
+        handover.publishEdit(owned(notes, 2));
+        while (sim.clock() < 28800) { // up to 8.2
+            sim.block(512);
+        }
+        CHECK(ofPitch(sim.events(), 40, false).size() == 1);
+        CHECK(ofPitch(sim.events(), 40, false).front().sample == Catch::Approx(25500.0).margin(1.0)); // 8.0625
+        const auto ons = ofPitch(sim.events(), 60, true);
+        REQUIRE(ons.size() == 1);
+        CHECK(ons.front().sample == Catch::Approx(18000.0).margin(1.0)); // 7.75
+        CHECK(ofPitch(sim.events(), 40, true).size() == 1);              // not retriggered
+    }
+    SECTION("a removed note ends at once") {
+        handover.publishEdit(owned(nextNotes(), 2));
+        const long long before = sim.clock();
+        sim.block(512);
+        const auto offs = ofPitch(sim.events(), 40, false);
+        REQUIRE(offs.size() == 1);
+        CHECK(offs.front().sample == before);
+        CHECK(sim.soundingCount() == 0);
+    }
+    SECTION("a note with a changed length ends at once") {
+        handover.publishEdit(owned({{3000, 500, 1, 40, 100}}, 2));
+        const long long before = sim.clock();
+        sim.block(512);
+        const auto offs = ofPitch(sim.events(), 40, false);
+        REQUIRE(offs.size() == 1);
+        CHECK(offs.front().sample == before);
+    }
+    SECTION("a different pattern length ends everything") {
+        handover.publishEdit(owned(longNotes(), 2, {}, 8 * kTicksPerQuarter));
+        const long long before = sim.clock();
+        sim.block(512);
+        const auto offs = ofPitch(sim.events(), 40, false);
+        REQUIRE(offs.size() == 1);
+        CHECK(offs.front().sample == before);
+    }
+}
+
+TEST_CASE("an edit is taken while the transport stands", "[engine][handover]") {
+    PatternHandover handover;
+    Simulation sim(longPattern());
+    sim.player().attach(&handover);
+    handover.publishEdit(owned(nextNotes(), 3));
+    sim.block(512, false);
+    CHECK(handover.activeVersion() == 3);
+}
+
+TEST_CASE("two threads hand patterns over without losing or leaking any", "[engine][handover]") {
+    auto token = std::make_shared<int>(0);
+    {
+        PatternHandover handover;
+        PatternPlayer player;
+        player.attach(&handover);
+        std::atomic<bool> stop{false};
+        std::atomic<bool> failed{false};
+
+        std::thread audio([&] {
+            MidiEventList out;
+            std::set<std::pair<uint8_t, uint8_t>> sounding;
+            double ppq = 0.0;
+            while (!stop.load()) {
+                TransportInfo info;
+                info.hasPosition = true;
+                info.isPlaying = true;
+                info.ppq = ppq;
+                info.bpm = 120.0;
+                player.process(info, 256, kSampleRate, out);
+                ppq += 256 * 120.0 / 60.0 / kSampleRate;
+                for (const auto& e : out) {
+                    const auto key = std::make_pair(e.channel, e.pitch);
+                    if (e.noteOn ? !sounding.insert(key).second : sounding.erase(key) == 0) {
+                        failed = true;
+                    }
+                }
+            }
+            out.clear();
+            player.releaseAll(out, 0);
+            for (const auto& e : out) {
+                if (sounding.erase(std::make_pair(e.channel, e.pitch)) == 0) {
+                    failed = true;
+                }
+            }
+            if (!sounding.empty()) {
+                failed = true;
+            }
+        });
+
+        for (uint64_t i = 1; i <= 4000; ++i) {
+            auto pattern = owned(i % 2 == 0 ? nextNotes() : longNotes(), i, token);
+            if (i % 3 == 0) {
+                handover.publishEdit(std::move(pattern));
+            } else {
+                handover.publishSwitch(std::move(pattern), 1.0);
+            }
+            handover.collectReturned();
+            if (i % 8 == 0) {
+                std::this_thread::yield();
+            }
+        }
+        stop = true;
+        audio.join();
+        CHECK_FALSE(failed.load());
+    }
+    CHECK(token.use_count() == 1); // everything was freed exactly once
 }
