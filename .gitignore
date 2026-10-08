@@ -21,3 +21,6 @@ cpm_source_cache/
 
 # Local Claude settings (shared settings.json stays in the repo)
 .claude/settings.local.json
+
+# Listening-test material (generated, ratings are personal; docs/HOERTEST.md)
+/hoertest/

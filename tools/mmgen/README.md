@@ -49,6 +49,8 @@ andere Stimme wird automatisch gewählt. Bei `one` ohne festen Archetyp steht `a
 
 ## Ablauf der Hörtest-Session (SPEC §12)
 
+Die ausführliche Anleitung (Live-Aufbau, Stufen, Stichworte, Blindvergleich) steht in `docs/HOERTEST.md`.
+
 1. `mmgen series --style all --out hoertest` erzeugt alle Muster und `hoertest/manifest.csv`.
 2. In Live (oder Logic) die `_all.mid` auf Spuren mit den Referenz-Instrumenten ziehen (Bass: Mono-Synth mit Glide,
    Melodie: je nach Archetyp), Kick auf Kanal 10 mit einer Drum-Rack-Kick belegen.
