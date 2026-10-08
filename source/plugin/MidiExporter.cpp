@@ -3,6 +3,8 @@
 #include "core/MidiFile.h"
 #include "core/PlaybackPattern.h"
 
+#include <algorithm>
+
 namespace mm::plugin {
 
 namespace {
@@ -40,54 +42,66 @@ MidiExporter::~MidiExporter() {
     done.wait(2000);
 }
 
-void MidiExporter::requestExport(Request request) {
-    pool_.addJob([this, request = std::move(request)] {
-        mm::core::MidiFileOptions options;
-        options.bpm = request.bpm;
-        options.trackName = request.trackName.toStdString();
-        const mm::core::PatternView view{request.notes.data(), request.notes.size(), request.lengthTicks};
-        const auto bytes = mm::core::writeMidiFile(view, options);
-
+void MidiExporter::requestExport(Batch batch) {
+    pool_.addJob([this, batch = std::move(batch)] {
         if (folder_.createDirectory().failed()) {
             return;
         }
-        const auto next = folder_.getChildFile(request.fileName);
-        if (!next.replaceWithData(bytes.data(), bytes.size())) {
-            return;
+        std::map<int, juce::File> written;
+        for (const auto& request : batch.files) {
+            mm::core::MidiFileOptions options;
+            options.bpm = batch.bpm;
+            options.trackName = request.trackName.toStdString();
+            const mm::core::PatternView view{request.notes.data(), request.notes.size(), request.lengthTicks};
+            const auto bytes = mm::core::writeMidiFile(view, options);
+            const auto next = folder_.getChildFile(request.fileName);
+            if (next.replaceWithData(bytes.data(), bytes.size())) {
+                written[request.voice] = next;
+            }
         }
-        juce::File previous;
+        std::map<int, juce::File> previous;
         {
             const juce::ScopedLock lock(fileLock_);
-            previous = file_;
-            file_ = next;
+            previous = std::move(files_);
+            files_ = written;
+            primaryVoice_ = batch.primaryVoice;
         }
-        if (previous != juce::File() && previous != next) {
-            previous.deleteFile();
+        for (const auto& [voice, file] : previous) {
+            const bool stillUsed =
+                std::any_of(written.begin(), written.end(), [&](const auto& entry) { return entry.second == file; });
+            if (!stillUsed) {
+                file.deleteFile();
+            }
         }
-        exportedBpm_.store(request.bpm);
-        ready_.store(true);
+        exportedBpm_.store(batch.bpm);
     });
 }
 
 void MidiExporter::clear() {
     pool_.addJob([this] {
-        juce::File previous;
+        std::map<int, juce::File> previous;
         {
             const juce::ScopedLock lock(fileLock_);
-            previous = file_;
-            file_ = juce::File();
+            previous = std::move(files_);
+            files_.clear();
         }
-        ready_.store(false);
         exportedBpm_.store(0.0);
-        if (previous != juce::File()) {
-            previous.deleteFile();
+        for (const auto& [voice, file] : previous) {
+            file.deleteFile();
         }
     });
 }
 
 juce::File MidiExporter::readyFile() const {
     const juce::ScopedLock lock(fileLock_);
-    return ready_.load() ? file_ : juce::File();
+    const auto it = files_.find(primaryVoice_);
+    return it != files_.end() ? it->second : juce::File();
+}
+
+juce::File MidiExporter::readyFile(int voice) const {
+    const juce::ScopedLock lock(fileLock_);
+    const auto it = files_.find(voice);
+    return it != files_.end() ? it->second : juce::File();
 }
 
 double MidiExporter::exportedBpm() const {

@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -244,6 +245,164 @@ TEST_CASE("the export follows the slot, the octave and the tempo", "[plugin][exp
     setHostTempo(processor, head, 140.0);
     processor.updateExport();
     CHECK(waitForExport(processor.midiExporter(), 140.0));
+}
+
+/// Bass plays `bass` and the melody plays `melody`, four notes each on the offbeats.
+mm::core::Pattern twoVoices(uint8_t bass, uint8_t melody) {
+    mm::core::Pattern pattern = offbeatBass(bass);
+    REQUIRE(pattern.voices.size() >= 2);
+    for (const uint32_t step : {2u, 6u, 10u, 14u}) {
+        mm::core::Note note;
+        note.id = mm::core::allocateNoteId(pattern);
+        note.pitch = melody;
+        note.startTick = step * 240;
+        note.lengthTicks = 240;
+        pattern.voices[1].notes.push_back(note);
+    }
+    return pattern;
+}
+
+bool waitUntil(const std::function<bool()>& condition) {
+    for (int i = 0; i < 400; ++i) {
+        if (condition()) {
+            return true;
+        }
+        juce::Thread::sleep(5);
+    }
+    return condition();
+}
+
+TEST_CASE("a solo instance exports every voice, the primary one is its own", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, twoVoices(45, 72));
+    processor.updateExport();
+    auto& exporter = processor.midiExporter();
+    REQUIRE(waitForExport(exporter, 120.0));
+    const auto bass = exporter.readyFile(1);
+    const auto melody = exporter.readyFile(2);
+    REQUIRE(bass != juce::File());
+    REQUIRE(melody != juce::File());
+    CHECK(bass.getFileName() == "MidiMaid_Slot1_Bass.mid");
+    CHECK(melody.getFileName() == "MidiMaid_Slot1_Melody.mid");
+    CHECK(exporter.readyFile() == bass); // the own voice is the first
+    CHECK(notePitches(bass).front() == 45);
+    CHECK(notePitches(melody).front() == 72);
+    CHECK(exporter.readyFile(3) == juce::File()); // the pattern has two voices
+    CHECK(exporter.readyFile(0) == juce::File());
+}
+
+TEST_CASE("the primary file is the one of the output voice", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, twoVoices(45, 72));
+    auto settings = processor.instanceSettings();
+    settings.outputVoice = 2;
+    processor.setInstanceSettings(settings);
+    processor.updateExport();
+    auto& exporter = processor.midiExporter();
+    REQUIRE(waitForExport(exporter, 120.0));
+    CHECK(exporter.readyFile().getFileName() == "MidiMaid_Slot1_Melody.mid");
+    CHECK(exporter.readyFile(1).getFileName() == "MidiMaid_Slot1_Bass.mid");
+}
+
+TEST_CASE("a voice exports only its own voice, and a change of role changes the files", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, twoVoices(45, 72));
+    processor.updateExport();
+    auto& exporter = processor.midiExporter();
+    REQUIRE(waitForExport(exporter, 120.0));
+    const auto bass = exporter.readyFile(1);
+    const auto melody = exporter.readyFile(2);
+    REQUIRE(melody != juce::File());
+
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    settings.outputVoice = 2;
+    processor.setInstanceSettings(settings);
+    processor.updateExport();
+    REQUIRE(waitUntil([&] { return exporter.readyFile(1) == juce::File(); }));
+    CHECK(exporter.readyFile(2) == melody);
+    CHECK(exporter.readyFile() == melody);
+    CHECK(waitUntil([&] { return !bass.exists(); })); // the file of the other voice is gone
+    CHECK(melody.existsAsFile());
+
+    settings.role = mm::core::InstanceRole::Solo; // and back
+    processor.setInstanceSettings(settings);
+    processor.updateExport();
+    REQUIRE(waitUntil([&] { return exporter.readyFile(1) != juce::File() && exporter.readyFile(1).existsAsFile(); }));
+    CHECK(notePitches(exporter.readyFile(1)).front() == 45);
+}
+
+TEST_CASE("the octave of the instance moves its own voice in the export, not the others", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, twoVoices(45, 72));
+    auto settings = processor.instanceSettings();
+    settings.octave = 1;
+    settings.outputVoice = 2;
+    processor.setInstanceSettings(settings);
+    processor.updateExport();
+    auto& exporter = processor.midiExporter();
+    REQUIRE(waitForExport(exporter, 120.0));
+    CHECK(notePitches(exporter.readyFile(2)).front() == 84);
+    CHECK(notePitches(exporter.readyFile(1)).front() == 45);
+}
+
+TEST_CASE("every voice of a pattern is exported, however many there are", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    mm::core::Pattern pattern = twoVoices(45, 72);
+    pattern.voices.push_back(pattern.voices[1]); // a third voice
+    pattern.voices[2].midiChannel = 3;
+    for (auto& note : pattern.voices[2].notes) {
+        note.id = mm::core::allocateNoteId(pattern);
+        note.pitch = 60;
+    }
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, pattern)); });
+    processor.updateExport();
+    auto& exporter = processor.midiExporter();
+    REQUIRE(waitForExport(exporter, 120.0));
+    REQUIRE(exporter.readyFile(3) != juce::File());
+    CHECK(exporter.readyFile(3).getFileName() == "MidiMaid_Slot1_Voice3.mid");
+    CHECK(notePitches(exporter.readyFile(3)).front() == 60);
+    CHECK(processor.playingVoices().size() == 3);
+}
+
+TEST_CASE("leaving the slot removes the files of all its voices", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, twoVoices(45, 72));
+    fillSlot(processor, 1, twoVoices(50, 77));
+    processor.updateExport();
+    auto& exporter = processor.midiExporter();
+    REQUIRE(waitForExport(exporter, 120.0));
+    const auto oldBass = exporter.readyFile(1);
+    const auto oldMelody = exporter.readyFile(2);
+    processor.selectSlot(2);
+    FakePlayHead head;
+    setHostTempo(processor, head, 120.0); // the audio thread reports the slot that plays
+    processor.updateExport();
+    REQUIRE(waitUntil([&] { return exporter.readyFile(2).getFileName() == "MidiMaid_Slot2_Melody.mid"; }));
+    CHECK(waitUntil([&] { return !oldBass.exists() && !oldMelody.exists(); }));
+    CHECK(notePitches(exporter.readyFile(2)).front() == 77);
+}
+
+TEST_CASE("the playing voices are those of the pattern, with the octave on the own voice only", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    CHECK(processor.playingVoices().empty()); // an empty slot has no voices
+    fillSlot(processor, 0, twoVoices(45, 72));
+    auto settings = processor.instanceSettings();
+    settings.octave = -1;
+    settings.outputVoice = 1;
+    processor.setInstanceSettings(settings);
+    const auto views = processor.playingVoices();
+    REQUIRE(views.size() == 2);
+    CHECK(views[0].voice == 1);
+    CHECK(views[1].voice == 2);
+    CHECK(views[0].octave == -1);
+    CHECK(views[1].octave == 0);
+    CHECK(views[0].notes.front().pitch == 33);
+    CHECK(views[1].notes.front().pitch == 72);
+    CHECK(views[0].voiceName == "Bass");
+    CHECK(views[1].voiceName == "Melody");
+    CHECK(views[0].slot == 1);
+    CHECK(views[0].sameSource(processor.playingVoice())); // the own voice is the same view
 }
 
 TEST_CASE("an empty slot leaves nothing to drag", "[plugin][export]") {
