@@ -649,7 +649,7 @@ Prompt / Referenzen / importierte Stimme / Parameter
 Wahrscheinlichkeit, Groove, Transposition und Kick-Freiraum wirken erst bei der Ausgabe (Engine und
 Export). Damit sie sich nicht gegenseitig aushebeln, gilt diese feste Reihenfolge:
 0. [v1.1] Wahrscheinlichkeit und Bedingungen auswerten (welche Noten erklingen in diesem Durchlauf)
-1. Transposition (inkl. Oktavierung bei Bereichsüberschreitung)
+1. Transposition (inkl. Oktavierung bei Bereichsüberschreitung); in v1.0 wirkt hier die Oktave der Instanz (−2 bis +2, D-147)
 2. Groove und Swing (Zeitversatz, Velocity-Profil)
 3. Slide-Überlappung neu berechnen (die Überlappung bezieht sich auf die verschobene Folgenote)
 4. Kick-Freiraum neu prüfen und Notenenden kürzen (Groove kann Notenenden in die Kick schieben)
@@ -1406,7 +1406,7 @@ Damit der erste Einsatz nicht an Routing scheitert, liefert MidiMaid fertige Vor
   Stand D-139: Attribute `role` (`solo`/`hub`/`voice`), `outputMode` (`one_voice`/`none`), `outputVoice` (1 bis 8) und das
   Kindelement `Slots` mit dem Slot-Satz als JSON (D-137). Fehlende oder unbekannte Werte ergeben Solo, eine Stimme, Stimme 1
   und leere Slots; ein unlesbarer Slot-Satz bleibt leer und wird gemeldet, der übrige State lädt.
-  Dazu (D-140) die Einstellungen für „Generieren“: `genStyle`, `genBars`, `genEnergy`, `genCreativity`; (D-143) `slotFollow` (`hub`/`own`)
+  Dazu (D-140) die Einstellungen für „Generieren“: `genStyle`, `genBars`, `genEnergy`, `genCreativity`; (D-143) `slotFollow` (`hub`/`own`), (D-147) `octave` (−2 bis +2, fehlend = 0)
 - Laden eines Projekts aus einer neueren Plugin-Version darf nicht abstürzen
 
 ### 9.2 Bibliothek und Einstellungen

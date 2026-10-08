@@ -131,44 +131,146 @@ bool waitForExport(mm::plugin::MidiExporter& exporter, double bpm) {
     return false;
 }
 
-} // namespace
+/// A pattern with four bass notes on the offbeats (steps 2, 6, 10, 14) in slot `slot` (1-based).
+mm::core::Pattern offbeatBass(uint8_t pitch) {
+    mm::core::Pattern pattern = mm::core::makeEmptyPattern(1, "peak_time");
+    for (const uint32_t step : {2u, 6u, 10u, 14u}) {
+        mm::core::Note note;
+        note.id = mm::core::allocateNoteId(pattern);
+        note.pitch = pitch;
+        note.startTick = step * 240;
+        note.lengthTicks = 240;
+        pattern.voices[0].notes.push_back(note);
+    }
+    return pattern;
+}
 
-TEST_CASE("exported .mid is readable by JUCE and carries the DAW tempo", "[plugin][export]") {
-    mm::plugin::InstrumentProcessor processor("Test");
-    processor.midiExporter().requestExport(128.0);
-    REQUIRE(waitForExport(processor.midiExporter(), 128.0));
+void fillSlot(mm::plugin::ProcessorBase& processor, size_t index, const mm::core::Pattern& pattern) {
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(index, pattern)); });
+}
 
-    const auto file = processor.midiExporter().readyFile();
-    CHECK(file.getFileName() == "MidiMaid_Slot1_Bass.mid");
-
+/// The pitches of the note-ons of a .mid file in order.
+std::vector<int> notePitches(const juce::File& file, double* bpm = nullptr) {
     juce::MidiFile midi;
     juce::FileInputStream stream(file);
     REQUIRE(stream.openedOk());
     REQUIRE(midi.readFrom(stream));
-    CHECK(midi.getNumTracks() == 1);
+    REQUIRE(midi.getNumTracks() == 1);
     CHECK(midi.getTimeFormat() == 960);
-
-    const auto* track = midi.getTrack(0);
-    int noteOns = 0;
-    int noteOffs = 0;
-    double secondsPerQuarter = 0.0;
-    for (const auto* event : *track) {
-        noteOns += event->message.isNoteOn() ? 1 : 0;
-        noteOffs += event->message.isNoteOff() ? 1 : 0;
-        if (event->message.isTempoMetaEvent()) {
-            secondsPerQuarter = event->message.getTempoSecondsPerQuarterNote();
+    std::vector<int> pitches;
+    for (const auto* event : *midi.getTrack(0)) {
+        if (event->message.isNoteOn()) {
+            pitches.push_back(event->message.getNoteNumber());
+        }
+        if (bpm != nullptr && event->message.isTempoMetaEvent()) {
+            *bpm = 60.0 / event->message.getTempoSecondsPerQuarterNote();
         }
     }
-    CHECK(noteOns == 4);
-    CHECK(noteOffs == 4);
-    CHECK(std::abs(60.0 / secondsPerQuarter - 128.0) < 0.01);
+    return pitches;
+}
+
+void setHostTempo(mm::plugin::ProcessorBase& processor, FakePlayHead& head, double bpm) {
+    head.info.setBpm(bpm);
+    head.info.setPpqPosition(0.0);
+    head.info.setIsPlaying(false);
+    processor.setPlayHead(&head);
+    juce::AudioBuffer<float> audio(2, 512);
+    juce::MidiBuffer midi;
+    processor.processBlock(audio, midi);
+}
+
+} // namespace
+
+TEST_CASE("the export carries the notes of the playing slot and the DAW tempo", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, offbeatBass(45));
+    FakePlayHead head;
+    setHostTempo(processor, head, 128.0);
+    processor.updateExport();
+    REQUIRE(waitForExport(processor.midiExporter(), 128.0));
+
+    const auto file = processor.midiExporter().readyFile();
+    CHECK(file.getFileName() == "MidiMaid_Slot1_Bass.mid");
+    double bpm = 0.0;
+    const auto pitches = notePitches(file, &bpm);
+    CHECK(pitches == std::vector<int>(pitches.size(), 45));
+    CHECK(pitches.size() >= 3);
+    CHECK(std::abs(bpm - 128.0) < 0.01);
+
+    juce::MidiFile midi;
+    juce::FileInputStream stream(file);
+    REQUIRE(midi.readFrom(stream));
+    int noteOffs = 0;
+    for (const auto* event : *midi.getTrack(0)) {
+        noteOffs += event->message.isNoteOff() ? 1 : 0;
+    }
+    CHECK(noteOffs == static_cast<int>(pitches.size()));
+}
+
+TEST_CASE("the export follows the slot, the octave and the tempo", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, offbeatBass(45));
+    fillSlot(processor, 1, offbeatBass(50));
+    FakePlayHead head;
+    setHostTempo(processor, head, 120.0);
+    processor.updateExport();
+    REQUIRE(waitForExport(processor.midiExporter(), 120.0));
+    const auto first = processor.midiExporter().readyFile();
+    CHECK(notePitches(first).front() == 45);
+
+    processor.selectSlot(2);
+    setHostTempo(processor, head, 120.0); // the audio thread reports the slot that plays
+    processor.updateExport();
+    for (int i = 0; i < 400 && processor.midiExporter().readyFile().getFileName() != "MidiMaid_Slot2_Bass.mid"; ++i) {
+        juce::Thread::sleep(5);
+    }
+    const auto second = processor.midiExporter().readyFile();
+    REQUIRE(second.getFileName() == "MidiMaid_Slot2_Bass.mid");
+    CHECK(notePitches(second).front() == 50);
+    for (int i = 0; i < 400 && first.exists(); ++i) {
+        juce::Thread::sleep(5);
+    }
+    CHECK_FALSE(first.exists()); // the file of the slot before is gone
+
+    auto settings = processor.instanceSettings();
+    settings.octave = 1;
+    processor.setInstanceSettings(settings);
+    processor.updateExport();
+    for (int i = 0; i < 400 && notePitches(processor.midiExporter().readyFile()).front() != 62; ++i) {
+        juce::Thread::sleep(5);
+    }
+    CHECK(notePitches(processor.midiExporter().readyFile()).front() == 62);
+
+    setHostTempo(processor, head, 140.0);
+    processor.updateExport();
+    CHECK(waitForExport(processor.midiExporter(), 140.0));
+}
+
+TEST_CASE("an empty slot leaves nothing to drag", "[plugin][export]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, offbeatBass(45));
+    processor.updateExport();
+    REQUIRE(waitForExport(processor.midiExporter(), 120.0));
+    const auto file = processor.midiExporter().readyFile();
+
+    processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.clear(0)); });
+    processor.updateExport();
+    for (int i = 0; i < 400 && processor.midiExporter().readyFile() != juce::File(); ++i) {
+        juce::Thread::sleep(5);
+    }
+    CHECK(processor.midiExporter().readyFile() == juce::File());
+    for (int i = 0; i < 400 && file.exists(); ++i) {
+        juce::Thread::sleep(5);
+    }
+    CHECK_FALSE(file.exists());
 }
 
 TEST_CASE("exported file is removed with the instance", "[plugin][export]") {
     juce::File file;
     {
         mm::plugin::InstrumentProcessor processor("Test");
-        processor.midiExporter().requestExport(120.0);
+        fillSlot(processor, 0, offbeatBass(45));
+        processor.updateExport();
         REQUIRE(waitForExport(processor.midiExporter(), 120.0));
         file = processor.midiExporter().readyFile();
         REQUIRE(file.existsAsFile());
@@ -180,6 +282,7 @@ TEST_CASE("exported file is removed with the instance", "[plugin][export]") {
 TEST_CASE("editor starts the export and can be created and destroyed", "[plugin][export]") {
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, offbeatBass(45));
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
         REQUIRE(editor != nullptr);

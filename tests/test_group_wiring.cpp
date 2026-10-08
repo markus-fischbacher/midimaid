@@ -646,3 +646,60 @@ TEST_CASE("only a voice that finds no hub gets the hint about separate plug-in p
     CHECK(groupStatusText(GroupStatus::Solo, 0).empty());
     CHECK(groupStatusText(GroupStatus::HubOffered, 0).find("you can take over") != std::string::npos);
 }
+
+TEST_CASE("a voice's octave is its own: it shifts that voice and nothing else", "[group-wiring]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voiceUp("Up");
+    Instance voicePlain("Plain");
+    hub.setRole(InstanceRole::Hub);
+    voiceUp.setRole(InstanceRole::Voice);
+    voicePlain.setRole(InstanceRole::Voice);
+    auto settings = voiceUp.processor.instanceSettings();
+    settings.octave = 1;
+    voiceUp.processor.setInstanceSettings(settings);
+    fillSlots(hub);
+    runTo({&hub, &voiceUp, &voicePlain}, 5.0);
+    CHECK(voiceUp.played(41 + 12));
+    CHECK_FALSE(voiceUp.played(41));
+    CHECK(voicePlain.played(41));
+    CHECK(hub.played(41));
+    CHECK(hub.processor.instanceSettings().octave == 0); // the hub is not told
+
+    settings.octave = -1; // a change of the octave republishes the slots of that instance
+    voiceUp.processor.setInstanceSettings(settings);
+    runTo({&hub, &voiceUp, &voicePlain}, 13.0);
+    CHECK(voiceUp.firstWith(41 - 12, at(8.0)) >= 0);
+    CHECK(voiceUp.firstWith(41 + 12, at(8.0)) == -1);
+}
+
+TEST_CASE("the octave is saved, limited, and missing in older states", "[group-wiring]") {
+    Quiet quiet;
+    Instance source("Source");
+    auto settings = source.processor.instanceSettings();
+    settings.octave = -2;
+    source.processor.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.processor.instanceSettings().octave == -2);
+
+    auto root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(root != nullptr);
+    root->setAttribute("octave", 7);
+    juce::MemoryBlock far;
+    juce::AudioProcessor::copyXmlToBinary(*root, far);
+    target.processor.setStateInformation(far.getData(), static_cast<int>(far.getSize()));
+    CHECK(target.processor.instanceSettings().octave == 2);
+
+    root->removeAttribute("octave");
+    juce::MemoryBlock old;
+    juce::AudioProcessor::copyXmlToBinary(*root, old);
+    target.processor.setStateInformation(old.getData(), static_cast<int>(old.getSize()));
+    CHECK(target.processor.instanceSettings().octave == 0);
+
+    settings.octave = 5; // out of range through the setter
+    target.processor.setInstanceSettings(settings);
+    CHECK(target.processor.instanceSettings().octave == 2);
+}

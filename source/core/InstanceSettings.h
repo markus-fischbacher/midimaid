@@ -38,6 +38,7 @@ struct InstanceSettings {
     int outputVoice = 1; ///< 1 to `kMaxVoices`
     GenerationSettings generation;
     SlotFollow slotFollow = SlotFollow::Hub; ///< only a voice looks at it
+    int octave = 0;                          ///< -2 to +2: this instance plays its voice that many octaves up (D-147)
 
     bool operator==(const InstanceSettings&) const = default;
 };
@@ -52,5 +53,7 @@ OutputMode parseOutputMode(std::string_view text);
 SlotFollow parseSlotFollow(std::string_view text);
 /// Clamps to 1 to `kMaxVoices`.
 int clampOutputVoice(int voice);
+/// Clamps to -2 to +2.
+int clampOctave(int octave);
 
 } // namespace mm::core

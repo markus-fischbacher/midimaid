@@ -252,3 +252,24 @@ TEST_CASE("a stamped sync publishes every changed slot with the same stamp", "[s
     REQUIRE(plain != nullptr);
     CHECK_FALSE(plain->hasStamp);
 }
+
+TEST_CASE("a change of the octave republishes every slot shifted", "[slot-publisher]") {
+    Rig rig;
+    const core::Pattern pattern = generated("peak_time", 5);
+    REQUIRE(rig.bank.setResult(2, pattern));
+    CHECK(rig.publisher.sync(rig.bank) == 1);
+    const auto plain = takeResult(rig.handover, 2);
+    REQUIRE_FALSE(plain->notes.empty());
+
+    rig.publisher.setOctave(1);
+    rig.publisher.setOctave(1); // the same octave again changes nothing
+    CHECK(rig.publisher.sync(rig.bank) == 1);
+    CHECK(rig.publisher.sync(rig.bank) == 0);
+    const auto shifted = takeResult(rig.handover, 2);
+    REQUIRE(shifted->notes.size() == plain->notes.size());
+    for (size_t i = 0; i < plain->notes.size(); ++i) {
+        CHECK(shifted->notes[i].pitch == plain->notes[i].pitch + 12);
+    }
+    rig.publisher.setOctave(7);
+    CHECK(rig.publisher.octave() == 2);
+}

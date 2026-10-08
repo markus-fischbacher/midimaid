@@ -13,6 +13,14 @@ void SlotPublisher::setOutputVoice(int voice) {
     }
 }
 
+void SlotPublisher::setOctave(int octave) {
+    const int clamped = core::clampOctave(octave);
+    if (clamped != octave_) {
+        octave_ = clamped;
+        reset();
+    }
+}
+
 void SlotPublisher::reset() {
     published_.fill(std::nullopt);
 }
@@ -33,7 +41,7 @@ std::unique_ptr<OwnedPattern> SlotPublisher::render(const core::Slot& slot) {
         owned->version = pattern.version;
         return owned;
     }
-    auto rendered = core::renderVoiceForPlayback(pattern, *style, static_cast<size_t>(outputVoice_ - 1));
+    auto rendered = core::renderVoiceForPlayback(pattern, *style, static_cast<size_t>(outputVoice_ - 1), octave_);
     owned->notes = std::move(rendered.notes);
     owned->lengthTicks = rendered.lengthTicks;
     owned->version = pattern.version;

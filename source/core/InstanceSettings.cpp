@@ -51,6 +51,10 @@ GenerationSettings sanitize(GenerationSettings settings) {
     return settings;
 }
 
+int clampOctave(int octave) {
+    return std::clamp(octave, -2, 2);
+}
+
 int clampOutputVoice(int voice) {
     return std::clamp(voice, 1, kMaxVoices);
 }

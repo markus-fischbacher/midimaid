@@ -13,13 +13,8 @@ juce::File exportRoot() {
 
 } // namespace
 
-juce::String MidiExporter::fileName() {
-    return "MidiMaid_Slot1_Bass.mid"; // MidiMaid_<slot name>_<voice>.mid; slots and voices follow later
-}
-
 MidiExporter::MidiExporter() {
     folder_ = exportRoot().getChildFile(juce::Uuid().toDashedString());
-    file_ = folder_.getChildFile(fileName());
 
     // Clean up folders of earlier sessions that were not removed (crash, kill) in the background.
     pool_.addJob([root = exportRoot(), own = folder_] {
@@ -45,24 +40,53 @@ MidiExporter::~MidiExporter() {
     done.wait(2000);
 }
 
-void MidiExporter::requestExport(double bpm) {
-    pool_.addJob([this, bpm] {
+void MidiExporter::requestExport(Request request) {
+    pool_.addJob([this, request = std::move(request)] {
         mm::core::MidiFileOptions options;
-        options.bpm = bpm;
-        options.trackName = "MidiMaid Bass";
-        const auto bytes = mm::core::writeMidiFile(mm::core::placeholderPattern(), options);
+        options.bpm = request.bpm;
+        options.trackName = request.trackName.toStdString();
+        const mm::core::PatternView view{request.notes.data(), request.notes.size(), request.lengthTicks};
+        const auto bytes = mm::core::writeMidiFile(view, options);
 
         if (folder_.createDirectory().failed()) {
             return;
         }
-        if (file_.replaceWithData(bytes.data(), bytes.size())) {
-            exportedBpm_.store(bpm);
-            ready_.store(true);
+        const auto next = folder_.getChildFile(request.fileName);
+        if (!next.replaceWithData(bytes.data(), bytes.size())) {
+            return;
+        }
+        juce::File previous;
+        {
+            const juce::ScopedLock lock(fileLock_);
+            previous = file_;
+            file_ = next;
+        }
+        if (previous != juce::File() && previous != next) {
+            previous.deleteFile();
+        }
+        exportedBpm_.store(request.bpm);
+        ready_.store(true);
+    });
+}
+
+void MidiExporter::clear() {
+    pool_.addJob([this] {
+        juce::File previous;
+        {
+            const juce::ScopedLock lock(fileLock_);
+            previous = file_;
+            file_ = juce::File();
+        }
+        ready_.store(false);
+        exportedBpm_.store(0.0);
+        if (previous != juce::File()) {
+            previous.deleteFile();
         }
     });
 }
 
 juce::File MidiExporter::readyFile() const {
+    const juce::ScopedLock lock(fileLock_);
     return ready_.load() ? file_ : juce::File();
 }
 

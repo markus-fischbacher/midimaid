@@ -1,5 +1,6 @@
 #include "core/PlaybackRender.h"
 
+#include "core/InstanceSettings.h"
 #include "core/OutputStage.h"
 #include "core/Register.h"
 
@@ -7,8 +8,10 @@
 
 namespace mm::core {
 
-PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile& style, size_t voiceIndex) {
+PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile& style, size_t voiceIndex,
+                                     int octaveShift) {
     OutputSettings settings;
+    settings.octaveShift = clampOctave(octaveShift);
     settings.kickClearanceTicks = style.bass.kickClearanceTicks;
     for (const Track& track : pattern.voices) {
         settings.ignoresKick.push_back(ignoresKickArchetype(track.archetypeId));

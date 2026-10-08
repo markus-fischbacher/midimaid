@@ -19,6 +19,7 @@ struct OutputSettings {
     uint32_t minNoteTicks = 60;        ///< notes that end up shorter are dropped
     bool includeGroove = true;         ///< false skips stage 2: the notes keep their grid (export without groove)
     std::vector<bool> ignoresKick;     ///< per voice (pattern order): the archetype may hold over kicks (`long_tied`)
+    int octaveShift = 0;               ///< stage 1: octaves added to every pitch (an instance's own octave, D-147)
 };
 
 /// A sounding note. Positions are ticks from the pattern start; `endTick` of a slide on the last note lies behind the
@@ -56,12 +57,13 @@ struct OutputPattern {
 int32_t swingOffsetTicks(float swing, float amount);
 
 /// SPEC 4.2a, the v1.0 stages in their fixed order:
+///   1. octave shift of the instance (pitches that leave 0 to 127 are folded back by octaves)
 ///   2. groove and swing (timing offset, velocity profile)
 ///   3. slide overlaps, relative to the shifted next note
 ///   4. kick clearance re-checked, note ends shortened (the kick stays straight)
 ///   5. accent velocity
-/// The stages 0 (probability), 1 (transposition) and the ratchets of stage 5 belong to v1.1 and slot in at the same
-/// places. Pure and deterministic; the pattern is not changed.
+/// The stages 0 (probability), the semitone transposition of stage 1 and the ratchets of stage 5 belong to v1.1 and
+/// slot in at the same places. Pure and deterministic; the pattern is not changed.
 OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& settings);
 
 } // namespace mm::core

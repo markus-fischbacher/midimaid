@@ -25,6 +25,11 @@ public:
     void setOutputVoice(int voice);
     int outputVoice() const { return outputVoice_; }
 
+    /// The octave this instance adds to its voice, -2 to +2 (D-147). A change republishes every slot at the next
+    /// `sync`.
+    void setOctave(int octave);
+    int octave() const { return octave_; }
+
     /// Publishes every slot that changed since the last call. Returns the number of slots published. With `stampPpq`
     /// the changes take effect at that PPQ position (planned by the hub, D-144); a stamp already behind falls back
     /// to the next grid point.
@@ -44,6 +49,7 @@ private:
     PatternHandover& handover_;
     const core::StyleLibrary& styles_;
     int outputVoice_ = 1;
+    int octave_ = 0;
     uint64_t origin_ = 0;                                         ///< origin of the bank that was last synced
     std::array<std::optional<uint64_t>, kSlotCount> published_{}; ///< revision last published per slot
     std::array<bool, kSlotCount> everPublished_{};                ///< survives `reset`: the engine holds something

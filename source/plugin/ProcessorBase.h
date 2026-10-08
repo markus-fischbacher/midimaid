@@ -52,6 +52,10 @@ public:
 
     /// Export for drag & drop (SPEC 3.4).
     MidiExporter& midiExporter();
+    /// Message thread: makes the exported file match what this instance plays now (the playing slot's pattern for its
+    /// voice, with the octave, at the DAW tempo); writes in the background and only when something changed. An empty
+    /// slot leaves nothing to drag. Called by the editor's timer.
+    void updateExport();
     /// Last tempo reported by the host (120 until the host reported one). Safe to read from any thread.
     double lastKnownBpm() const;
 
@@ -150,6 +154,17 @@ private:
     mm::engine::MidiEventList events_;
     std::atomic<double> lastBpm_{120.0};
     MidiExporter exporter_;
+    struct ExportKey {
+        uint64_t origin = 0;
+        uint64_t revision = 0;
+        int slot = 0;
+        int voice = 0;
+        int octave = 0;
+        long long bpmCentis = 0;
+        bool empty = true;
+        bool operator==(const ExportKey&) const = default;
+    };
+    std::optional<ExportKey> exportKey_; // message thread
 
     mm::engine::GroupSync groupSync_{mm::engine::processGroupChannel(), mm::engine::GroupChannel::kNone};
     std::atomic<int> slotMode_{static_cast<int>(mm::engine::SlotMode::Own)}; // read in the audio thread
