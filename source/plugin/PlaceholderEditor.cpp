@@ -1,5 +1,7 @@
 #include "plugin/PlaceholderEditor.h"
 
+#include "plugin/GroupText.h"
+
 namespace mm::plugin {
 
 /// Grip area: dragging it starts an external drag of the exported file (no text, icon only).
@@ -130,6 +132,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 
     statusLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
     statusLabel_.setJustificationType(juce::Justification::centredLeft);
+    statusLabel_.setMinimumHorizontalScale(1.0f); // the hub hint is long: wrap instead of squeezing
     addAndMakeVisible(statusLabel_);
 
     setSize(600, 360);
@@ -144,28 +147,7 @@ PlaceholderEditor::~PlaceholderEditor() {
 
 void PlaceholderEditor::updateStatus() {
     using mm::core::GroupStatus;
-    juce::String group;
-    switch (processor_.groupStatus()) {
-    case GroupStatus::Hub: {
-        const auto voices = processor_.groupVoices();
-        group = "Hub: " + juce::String(static_cast<int>(voices)) + (voices == 1 ? " voice" : " voices");
-        break;
-    }
-    case GroupStatus::VoiceConnected:
-        group = "Connected to the hub";
-        break;
-    case GroupStatus::HubMissing:
-        group = "Hub not found";
-        break;
-    case GroupStatus::HubOffered:
-        group = "Hub not found: you can take over";
-        break;
-    case GroupStatus::HubRefused:
-        group = "There is already a hub";
-        break;
-    case GroupStatus::Solo:
-        break;
-    }
+    juce::String group = groupStatusText(processor_.groupStatus(), processor_.groupVoices());
     takeOverButton_.setVisible(processor_.groupStatus() == GroupStatus::HubOffered);
     const auto role = processor_.instanceSettings().role;
     const int roleId = role == mm::core::InstanceRole::Hub ? 2 : role == mm::core::InstanceRole::Voice ? 3 : 1;
@@ -240,7 +222,7 @@ void PlaceholderEditor::resized() {
     generateButton_.setBounds(top.removeFromRight(120));
     top.removeFromRight(8);
     styleBox_.setBounds(top);
-    statusLabel_.setBounds(area.removeFromTop(28).reduced(16, 0));
+    statusLabel_.setBounds(area.removeFromTop(48).reduced(16, 0));
 }
 
 } // namespace mm::plugin
