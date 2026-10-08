@@ -7,13 +7,18 @@
 #include "engine/PatternHandover.h"
 #include "engine/PatternPlayer.h"
 #include "engine/SlotPublisher.h"
+#include "plugin/GenerationService.h"
 #include "plugin/MidiExporter.h"
 
 #include <array>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <optional>
 
 namespace mm::plugin {
+
+/// What the last "Generate" did, for the editor (message thread).
+enum class GenerationStatus { Idle, Generating, Done, NoResult };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
 /// audio and a hard-coded one-bar pattern played in sync with the host transport.
@@ -70,6 +75,11 @@ public:
     /// Role, output mode and output voice (SPEC 6.5, 9.1). The voice also selects the mute parameter that applies.
     mm::core::InstanceSettings instanceSettings() const;
     void setInstanceSettings(const mm::core::InstanceSettings& settings);
+    /// Message thread: generates a pattern in the background for the slot that is selected now (SPEC 3.1, D-140).
+    /// The result lands in that slot and plays at the next bar line; during an offline bounce it waits until the
+    /// host is real-time again. A new request replaces a running one.
+    void generate();
+    GenerationStatus generationStatus() const { return generationStatus_; }
     /// Slots that were left empty by the last state load because their data was bad (path and reason).
     std::vector<std::string> slotLoadProblems() const;
     /// Version of the pattern that is playing (0 for the built-in placeholder). Safe to read from any thread.
@@ -80,6 +90,8 @@ public:
 
 private:
     void writeEvents(juce::MidiBuffer& midi) const;
+    void onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern);
+    void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
 
     /// Empties the handover's return queue on the message thread (SPEC 6.3: patterns are freed there only).
@@ -109,11 +121,21 @@ private:
     std::vector<std::string> slotLoadProblems_;
     mm::engine::PatternHandover handover_;
     mm::engine::SlotPublisher publisher_;
+    GenerationStatus generationStatus_ = GenerationStatus::Idle; // message thread
+    struct ParkedResult {
+        GenerationJob job;
+        mm::core::Pattern pattern;
+    };
+    std::optional<ParkedResult> parked_; // a result that arrived during an offline render (message thread)
+    class ParkTimer;
+    std::unique_ptr<ParkTimer> parkTimer_;
     mm::engine::PatternPlayer player_;
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;
     std::atomic<double> lastBpm_{120.0};
     MidiExporter exporter_;
+
+    GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProcessorBase)
 };
