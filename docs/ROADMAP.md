@@ -118,7 +118,7 @@ Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind gr�
       (Engine D-135, Datenmodell mit Name, Farbe, Verlauf, Kopieren/Leeren/Tauschen und Serialisierung D-137)
 - [x] Hub & Voices (Zuschnitt H1 bis H6; **H1 Instanzkern** (D-139) **H2 Generieren im Hintergrund** (D-140) und **H3 Registry und Gruppe** (D-141) **H4a Kanal und geplante Wechsel, Engine-Teil** (D-142) **H4b Plugin-Verdrahtung, Schalter „folgt Hub / eigen“** (D-143) **H4c Pattern-Wechsel des Hubs mit Stempel** (D-144) und **H5 Mute doppelt, Weiterleiten, Ausgabe „keine“** (D-145) und **H6 Sandbox-Hinweis, Prüfliste Teil H, Setup-Hilfe** (D-146) **erledigt**; die Durchführung der Prüfliste in Live und Logic steht bei Abnahme 1b aus; Drag & Drop exportiert noch das Platzhalter-Pattern, die Umstellung auf die echten Stimmen kommt mit der Hub-UI): Rollen Hub/Voice/Solo, Ausgabemodus eine Stimme/keine, Registry, lock-freier Kanal
       für geplante Wechsel, eine Gruppe, Persistenz des kompletten Slot-Satzes, Hub-Verlust (SPEC §6.5)
-- [ ] Voice-Oberfläche (SPEC §8.1)
+- [ ] Voice-Oberfläche (SPEC §8.1; **V1 Oktave der Instanz und Export der echten Stimme** (D-147) erledigt, V2 Oberfläche mit Notenansicht, Mute, Oktave, „Hub öffnen“ offen)
 - [x] Alle Host-Parameter nach dem Parameter-Register mit fester ID anlegen; aktiv: Slot, Mute 1–8;
       nicht aktive als nicht automatisierbar (SPEC §3.13, D-138)
 - [ ] Einfache Hub-UI: Stil, Tonart, Skala, Takte, Seed, Generieren, Anzeige (nur lesend), Drag & Drop pro Stimme
