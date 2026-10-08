@@ -84,6 +84,12 @@ public:
     /// Grid of slot changes in PPQ (default one bar; rounded up to a bar line).
     void setSlotGrid(double gridPpq) { slotGridPpq_ = gridPpq; }
 
+    /// Mute of the voice this player plays (SPEC 3.13, `mute_<voice>`), read at the block start: sounding notes end at
+    /// once (note-off at offset 0), while muted no note starts. The position keeps running and changes still happen,
+    /// so after un-muting the next notes play; a note that is already under way is not started late.
+    void setMuted(bool muted) { muted_ = muted; }
+    bool muted() const { return muted_; }
+
     /// Puts `next` into the selected slot like a result from the handover (no owner): it plays at the next grid
     /// point (SPEC 6.1a, D-131). The point is the first multiple of `gridPpq` (rounded up to a bar line, v1.0
     /// restarts on bars only) not before the start of the block that first sees the change; it is never in the
@@ -165,6 +171,7 @@ private:
     std::array<std::array<ActiveNote, 128>, 16> active_{};
     size_t activeCount_ = 0;
     bool playing_ = false;
+    bool muted_ = false;
     bool pendingWrapRelease_ = false;
     double expectedPpq_ = 0.0;
     double lastPpqPerSample_ = 0.0; // tempo and length of the previous block, for the tempo-change tolerance

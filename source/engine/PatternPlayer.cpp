@@ -262,6 +262,9 @@ void PatternPlayer::releaseAt(MidiEventList& out, int sampleOffset, bool guardOw
 }
 
 void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out) {
+    if (muted_) {
+        return;
+    }
     auto& slot = active_[static_cast<size_t>(note.channel - 1)][note.pitch];
     if (slot.active) {
         // Same pitch still sounding: end it first so the new note-on is never swallowed.
@@ -348,6 +351,9 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     out.clear();
     ++call_;
     pollHandover(out);
+    if (muted_) {
+        releaseAt(out, 0, false); // nothing starts while muted, so this only ends what sounded before
+    }
 
     if (!transport.hasPosition || !transport.isPlaying || transport.bpm <= 0.0 || sampleRate <= 0.0 ||
         numSamples <= 0) {

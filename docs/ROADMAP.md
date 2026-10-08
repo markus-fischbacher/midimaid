@@ -119,8 +119,8 @@ Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind gr�
 - [ ] Hub & Voices: Rollen Hub/Voice/Solo, Ausgabemodus eine Stimme/keine, Registry, lock-freier Kanal
       für geplante Wechsel, eine Gruppe, Persistenz des kompletten Slot-Satzes, Hub-Verlust (SPEC §6.5)
 - [ ] Voice-Oberfläche (SPEC §8.1)
-- [ ] Alle Host-Parameter nach dem Parameter-Register mit fester ID anlegen; aktiv: Slot, Mute 1–8;
-      nicht aktive als nicht automatisierbar (SPEC §3.13)
+- [x] Alle Host-Parameter nach dem Parameter-Register mit fester ID anlegen; aktiv: Slot, Mute 1–8;
+      nicht aktive als nicht automatisierbar (SPEC §3.13, D-138)
 - [ ] Einfache Hub-UI: Stil, Tonart, Skala, Takte, Seed, Generieren, Anzeige (nur lesend), Drag & Drop pro Stimme
 
 **Abnahme 1b:** In beiden DAWs laufen Hub und Voice taktgenau synchron, auch bei Slot-Wechseln
