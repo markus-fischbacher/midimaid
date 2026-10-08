@@ -72,6 +72,9 @@ public:
         }
     };
     VoiceView playingVoice() const;
+    /// Every voice of the pattern in the playing slot, in pattern order (iterates `Pattern::voices`, D-52); empty when
+    /// the slot holds no pattern. The octave of this instance applies to its own voice only. Message thread.
+    std::vector<VoiceView> playingVoices() const;
     /// True when this instance is silent because of a mute switch: its own, or (for a voice) the hub's. Any thread.
     bool mutedByOwnSwitch() const;
     bool mutedByHub() const;
@@ -138,6 +141,10 @@ public:
 
 private:
     void writeEvents(juce::MidiBuffer& midi) const;
+    // Under `slotsLock_`: the playing slot (also fills slot, origin and revision of `view`), and one voice of a
+    // pattern.
+    const mm::core::Slot* playingSlotLocked(VoiceView& view) const;
+    void fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pattern, size_t voiceIndex) const;
     void onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern);
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
@@ -190,6 +197,7 @@ private:
         int voice = 0;
         int octave = 0;
         long long bpmCentis = 0;
+        bool all = false; ///< every voice is exported (Solo and Hub), not only the own one
         bool empty = true;
         bool operator==(const ExportKey&) const = default;
     };

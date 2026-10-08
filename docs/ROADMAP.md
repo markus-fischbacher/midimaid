@@ -122,7 +122,7 @@ Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind gr�
 - [x] Alle Host-Parameter nach dem Parameter-Register mit fester ID anlegen; aktiv: Slot, Mute 1–8;
       nicht aktive als nicht automatisierbar (SPEC §3.13, D-138)
 - [ ] Einfache Hub-UI: Stil, Tonart, Skala, Takte, Seed, Generieren, Anzeige (nur lesend), Drag & Drop pro Stimme
-      (**U1 Tonart, Skala, Seed in den Einstellungen** (D-149) erledigt; U2 Export aller Stimmen, U3 Oberfläche offen)
+      (**U1 Tonart, Skala, Seed in den Einstellungen** (D-149) und **U2 Export aller Stimmen** (D-150) erledigt; U3 Oberfläche offen)
 
 **Abnahme 1b:** In beiden DAWs laufen Hub und Voice taktgenau synchron, auch bei Slot-Wechseln
 kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und ohne Hub öffnen korrekt.

@@ -391,38 +391,84 @@ void ProcessorBase::writeEvents(juce::MidiBuffer& midi) const {
     }
 }
 
+namespace {
+
+/// Bass or Melody for the first voice of that role, "Voice n" for every other: the names are the file names of the
+/// export, so two voices never share one.
+juce::String voiceDisplayName(const mm::core::Pattern& pattern, size_t voiceIndex) {
+    if (voiceIndex < pattern.voices.size()) {
+        const auto role = pattern.voices[voiceIndex].role;
+        const bool firstOfRole =
+            std::none_of(pattern.voices.begin(), pattern.voices.begin() + static_cast<std::ptrdiff_t>(voiceIndex),
+                         [role](const mm::core::Track& track) { return track.role == role; });
+        if (firstOfRole) {
+            return role == mm::core::VoiceRole::Melody ? "Melody" : "Bass";
+        }
+    }
+    return "Voice " + juce::String(static_cast<int>(voiceIndex) + 1);
+}
+
+} // namespace
+
 ProcessorBase::VoiceView ProcessorBase::playingVoice() const {
     VoiceView view;
     const juce::ScopedLock lock(slotsLock_);
+    const mm::core::Pattern* pattern = nullptr;
+    const auto* slot = playingSlotLocked(view);
+    view.voice = settings_.outputVoice;
+    view.octave = settings_.octave;
+    if (slot != nullptr && slot->pattern) {
+        pattern = &*slot->pattern;
+    }
+    if (pattern == nullptr) {
+        return view;
+    }
+    fillVoiceLocked(view, *pattern, static_cast<size_t>(settings_.outputVoice - 1));
+    return view;
+}
+
+std::vector<ProcessorBase::VoiceView> ProcessorBase::playingVoices() const {
+    std::vector<VoiceView> views;
+    const juce::ScopedLock lock(slotsLock_);
+    VoiceView base;
+    const auto* slot = playingSlotLocked(base);
+    if (slot == nullptr || !slot->pattern) {
+        return views;
+    }
+    const mm::core::Pattern& pattern = *slot->pattern;
+    const size_t count = std::min<size_t>(pattern.voices.size(), mm::core::kMaxVoices);
+    for (size_t index = 0; index < count; ++index) {
+        VoiceView view = base;
+        view.voice = static_cast<int>(index) + 1;
+        view.octave = view.voice == settings_.outputVoice ? settings_.octave : 0;
+        fillVoiceLocked(view, pattern, index);
+        views.push_back(std::move(view));
+    }
+    return views;
+}
+
+const mm::core::Slot* ProcessorBase::playingSlotLocked(VoiceView& view) const {
     const int playing = handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
     const int slotIndex = std::clamp(playing, 1, static_cast<int>(mm::core::kSlotCount)) - 1;
     view.slot = slotIndex + 1;
-    view.voice = settings_.outputVoice;
-    view.octave = settings_.octave;
     view.origin = slots_.origin();
     const mm::core::Slot* slot = slots_.slot(static_cast<size_t>(slotIndex));
-    if (slot == nullptr) {
-        return view;
+    if (slot != nullptr) {
+        view.revision = slot->revision;
     }
-    view.revision = slot->revision;
-    if (!slot->pattern) {
-        return view;
-    }
-    const mm::core::Pattern& pattern = *slot->pattern;
-    const auto voiceIndex = static_cast<size_t>(settings_.outputVoice - 1);
+    return slot;
+}
+
+void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pattern, size_t voiceIndex) const {
     const auto* style = styles_.findOrFallback(pattern.styleId);
     if (style == nullptr) {
-        return view;
+        return;
     }
-    auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, settings_.octave);
+    auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave);
     view.hasPattern = true;
     view.notes = std::move(rendered.notes);
     view.lengthTicks = rendered.lengthTicks;
-    view.voiceName =
-        voiceIndex < pattern.voices.size() && pattern.voices[voiceIndex].role == mm::core::VoiceRole::Melody ? "Melody"
-        : voiceIndex == 0 ? "Bass"
-                          : "Voice " + juce::String(settings_.outputVoice);
-    return view;
+    view.voiceName = voiceDisplayName(pattern, voiceIndex);
 }
 
 bool ProcessorBase::mutedByOwnSwitch() const {
@@ -450,15 +496,25 @@ void ProcessorBase::bringEditorToFront() {
 
 void ProcessorBase::updateExport() {
     const double bpm = lastKnownBpm();
-    VoiceView view = playingVoice();
+    const auto role = instanceSettings().role;
+    const bool all = role != mm::core::InstanceRole::Voice; // a voice drags its own voice, Solo and Hub every voice
+    std::vector<VoiceView> views;
+    if (all) {
+        views = playingVoices();
+    }
+    const VoiceView own = playingVoice();
+    if (!all && own.hasPattern) {
+        views.push_back(own);
+    }
     ExportKey key;
     key.bpmCentis = std::llround(bpm * 100.0);
-    key.origin = view.origin;
-    key.revision = view.revision;
-    key.slot = view.slot - 1;
-    key.voice = view.voice;
-    key.octave = view.octave;
-    key.empty = !view.hasPattern;
+    key.origin = own.origin;
+    key.revision = own.revision;
+    key.slot = own.slot - 1;
+    key.voice = own.voice;
+    key.octave = own.octave;
+    key.all = all;
+    key.empty = views.empty();
     if (exportKey_ && *exportKey_ == key) {
         return;
     }
@@ -467,13 +523,19 @@ void ProcessorBase::updateExport() {
         exporter_.clear();
         return;
     }
-    MidiExporter::Request request;
-    request.notes = std::move(view.notes);
-    request.lengthTicks = view.lengthTicks;
-    request.bpm = bpm;
-    request.fileName = "MidiMaid_Slot" + juce::String(view.slot) + "_" + view.voiceName.replace(" ", "") + ".mid";
-    request.trackName = "MidiMaid " + view.voiceName;
-    exporter_.requestExport(std::move(request));
+    MidiExporter::Batch batch;
+    batch.bpm = bpm;
+    batch.primaryVoice = own.voice;
+    for (auto& view : views) {
+        MidiExporter::Request request;
+        request.notes = std::move(view.notes);
+        request.lengthTicks = view.lengthTicks;
+        request.voice = view.voice;
+        request.fileName = "MidiMaid_Slot" + juce::String(view.slot) + "_" + view.voiceName.replace(" ", "") + ".mid";
+        request.trackName = "MidiMaid " + view.voiceName;
+        batch.files.push_back(std::move(request));
+    }
+    exporter_.requestExport(std::move(batch));
 }
 
 MidiExporter& ProcessorBase::midiExporter() {
