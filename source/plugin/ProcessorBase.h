@@ -75,6 +75,21 @@ public:
     /// Every voice of the pattern in the playing slot, in pattern order (iterates `Pattern::voices`, D-52); empty when
     /// the slot holds no pattern. The octave of this instance applies to its own voice only. Message thread.
     std::vector<VoiceView> playingVoices() const;
+    /// Which of the 16 slots hold a pattern. Message thread.
+    std::array<bool, mm::core::kSlotCount> slotUsage() const;
+    /// What the playing slot holds, for the info line of the hub UI. Message thread.
+    struct SlotInfo {
+        bool filled = false;
+        int slot = 1; ///< 1 to 16
+        std::string styleId;
+        int root = 0;
+        std::string scaleId;
+        uint32_t lengthBars = 0;
+        uint64_t seed = 0;
+        uint64_t winnerSeed = 0;
+        bool operator==(const SlotInfo&) const = default;
+    };
+    SlotInfo playingSlotInfo() const;
     /// True when this instance is silent because of a mute switch: its own, or (for a voice) the hub's. Any thread.
     bool mutedByOwnSwitch() const;
     bool mutedByHub() const;

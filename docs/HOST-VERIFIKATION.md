@@ -7,7 +7,7 @@
 
 Stand nach Hub & Voices (D-139 bis D-146): Das Plugin spielt die Patterns aus 16 Slots, kennt die Rollen Solo, Hub und
 Voice, verteilt den Slot-Satz vom Hub an die Voices und wechselt Slots und Patterns gruppenweit zum selben PPQ. Es gibt
-noch **keine** Voice-Oberfläche, keine Hub-UI mit Tonart und Seed, kein Log und keine Übersetzungstabelle (Editor-Texte
+eine einfache Hub-UI (Stil, Tonart, Skala, Takte, Seed, Energie, Kreativität, Slot-Leiste, Notenansicht und Griff je Stimme) und die kompakte Voice-Oberfläche, aber noch kein Log und keine Übersetzungstabelle (Editor-Texte
 fest auf Englisch). Daher gilt:
 
 - **Jetzt prüfbar:** Teil A (Vorbereitung), B (Live), C (Logic), D (Drag & Drop), E (Vorzähler, O-24), F (Versatz
@@ -124,7 +124,7 @@ Instanzen **derselben Variante** (D-141, O-28): in Logic alle als MIDI-FX `MidiM
 Hub und zwei Voices anlegen, je auf einer eigenen Spur mit einem Synth mit hartem Klick-Sound (wie in Teil F). In jeder
 Instanz stellst du oben links die **Rolle** ein (Solo, Hub, Voice) und bei Voices daneben die **Stimme** (Voice 1 =
 Bass, Voice 2 = Melodie). Der Hub zeigt „Hub: 2 voices“, eine verbundene Voice „Connected to the hub“. Vor dem Test
-im Hub Slot 1 bis 3 mit **Generate** füllen (zwischen den Klicks den Slot-Parameter 1, 2, 3 stellen). Die Zahl
+im Hub Slot 1 bis 3 mit **Generate** füllen (zwischen den Klicks in der Slot-Leiste die Slots 1, 2, 3 wählen; belegte Slots sind heller). Die Zahl
 „(n late)“ in der Statuszeile einer Voice zählt Wechsel, die zu spät ankamen; sie soll in allen Tests 0 bleiben.
 
 **Was „taktgenau“ heißt:** Wie in Teil B: Hub und Voice schlagen im Bounce oder Mitschnitt sample-gleich an, und ein
