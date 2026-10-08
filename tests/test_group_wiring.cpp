@@ -454,6 +454,14 @@ TEST_CASE("audio threads run while roles, switches and slots change on the messa
         if (round % 50 == 49) {
             hub->setRole(round % 100 == 49 ? InstanceRole::Solo : InstanceRole::Hub);
         }
+        hub->setMute(1 + round % 2, round % 4 < 2); // mute works twice: the mask is read by the voices meanwhile
+        voiceA->setMute(1, round % 3 == 0);
+        if (round % 25 == 0) {
+            auto settings = hub->processor.instanceSettings();
+            settings.outputMode = round % 50 == 0 ? mm::core::OutputMode::None : mm::core::OutputMode::OneVoice;
+            hub->processor.setInstanceSettings(settings);
+            voiceB->processor.generate(); // forwarded to the hub while the audio threads run
+        }
         Instance extra("Extra"); // instances that come and go meanwhile
         extra.setRole(InstanceRole::Voice);
     }
