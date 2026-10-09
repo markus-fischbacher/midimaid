@@ -1796,10 +1796,10 @@ TEST_CASE("the mouse handlers of the roll translate into gestures with the key g
     }
     CHECK(rig.roll.viewport().lowPitch == lowSmall + 6); // 6.4 rows
     small.deltaY = -0.04f;
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 19; ++i) { // 6.08 rows back
         rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second), small);
     }
-    CHECK(rig.roll.viewport().lowPitch == lowSmall); // the leftover 0.4 of the first direction did not count
+    CHECK(rig.roll.viewport().lowPitch == lowSmall); // the leftover 0.4 of the first direction did not count (it would leave one row)
     rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second, 1, juce::ModifierKeys::shiftModifier), wheel);
     CHECK(rig.roll.viewport().startTick >= 0);
     rig.roll.selectAll();
