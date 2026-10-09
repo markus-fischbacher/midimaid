@@ -31,6 +31,10 @@ namespace mm::core::text {
     X(kButtonGenerate, "button.generate")                                                                              \
     X(kButtonOpenHub, "button.openHub")                                                                                \
     X(kButtonMute, "button.mute")                                                                                      \
+    X(kButtonLock, "button.lock")                                                                                      \
+    X(kVoiceLockedSuffix, "voice.lockedSuffix")                                                                        \
+    X(kStatusDoneLocked, "status.doneLocked")                                                                          \
+    X(kStatusAllLocked, "status.allLocked")                                                                            \
     X(kButtonMuteByHub, "button.muteByHub")                                                                            \
     X(kLabelEnergy, "label.energy")                                                                                    \
     X(kLabelCreativity, "label.creativity")                                                                            \

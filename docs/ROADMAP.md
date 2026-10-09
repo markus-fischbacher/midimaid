@@ -131,7 +131,7 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
 - [ ] Piano-Roll (eine Spur pro Stimme): Setzen, Löschen, Verschieben, Länge, Velocity-Spur, Slide, Akzent
 - [ ] Raster, Skalen-Einrasten, Undo/Redo (Kern und Plugin-Anbindung fertig, D-153; die Bedienung folgt mit Piano-Roll und Schaltflächen)
 - [ ] Spurfokus (alle / einzelne Stimme)
-- [ ] Stimme sperren (SPEC §3.5)
+- [x] Stimme sperren (SPEC §3.5; D-154: Erzeugen um gesperrte Stimmen, Schalter je Stimmenzeile; Variation und Verfeinern folgen den Hilfsfunktionen)
 - [ ] Variations-Engine mit subtilen und strukturellen Operatoren und Stärke-Regler (SPEC §3.6)
 - [ ] Verlauf (20 Ergebnisse pro Slot) und Undo-Stapel nach SPEC §3.6
 - [ ] Schaltflächen für alle Aktionen (Rückgängig, Wiederholen, Duplizieren, Generieren, Variation)

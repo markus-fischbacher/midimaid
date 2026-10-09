@@ -17,6 +17,9 @@ struct GenerationJob {
     mm::core::GenerationSettings settings;
     uint64_t seed = 1;
     int slot = 0; ///< 0-based target slot, kept from the moment of the request
+    /// The pattern of the slot when a voice of it is locked: the locked voices, the harmony and the length stay
+    /// (SPEC 3.5, `generatePatternAroundLocks`). Empty: a new pattern.
+    std::optional<mm::core::Pattern> lockedFrom;
 };
 
 /// Runs generations on a background thread (CLAUDE.md: threading). One worker; a new request cancels the running

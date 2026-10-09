@@ -61,6 +61,18 @@ uint32_t addNote(Pattern& pattern, size_t voice, uint8_t pitch, uint32_t startTi
     return note.id;
 }
 
+size_t setVoiceLocked(Pattern& pattern, size_t voice, bool locked) {
+    if (voice >= pattern.voices.size()) {
+        return 0;
+    }
+    auto& lock = pattern.voices[voice].lock;
+    if (lock.pitch == locked && lock.rhythm == locked && lock.velocity == locked) {
+        return 0;
+    }
+    lock.pitch = lock.rhythm = lock.velocity = locked;
+    return 1;
+}
+
 size_t removeNotes(Pattern& pattern, size_t voice, std::span<const uint32_t> ids) {
     if (voice >= pattern.voices.size()) {
         return 0;

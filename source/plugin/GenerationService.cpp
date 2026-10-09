@@ -58,7 +58,9 @@ void GenerationService::request(const GenerationJob& job) {
     pool_.addJob([state = state_, cancel = cancel_, job, style, number] {
         std::optional<mm::core::Pattern> pattern;
         if (style != nullptr && !cancel->load()) {
-            auto result = mm::core::generatePattern(*style, requestFor(job, cancel.get()));
+            const auto request = requestFor(job, cancel.get());
+            auto result = job.lockedFrom ? mm::core::generatePatternAroundLocks(*style, request, *job.lockedFrom)
+                                         : mm::core::generatePattern(*style, request);
             if (result.success && !cancel->load()) {
                 pattern = std::move(result.pattern);
             }

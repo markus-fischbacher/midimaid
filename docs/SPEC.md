@@ -226,7 +226,8 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
   verschieben sie nicht (§3.9).
 - Rückgängig und Wiederholen (eigener Undo-Stapel in `core`, D-153; statt `juce::UndoManager`, damit `core` ohne JUCE bleibt)
 - Velocity-Spur unter den Noten (Balken ziehen, mehrere gleichzeitig)
-- **Stimme sperren:** Eine gesperrte Stimme bleibt bei Generieren und Variieren unverändert
+- **Stimme sperren:** Eine gesperrte Stimme bleibt bei Generieren und Variieren unverändert. Beim Generieren bleiben dann auch
+  Tonart, Skala, Akkordfolge, Länge und Phrasenplan des Slots; die Felder dafür wirken nicht (D-154)
 - **[v1.1] Hilfen:** Velocity-Spur umschaltbar auf Wahrscheinlichkeit und Bedingung (§3.19), Scale-Fold
   (nur Skalentöne als Zeilen, wie in Ableton), Phrasengrenzen und Kick-Raster als Hintergrund, eigene
   Zeile für Slide- und Akzent-Markierungen

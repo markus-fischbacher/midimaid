@@ -29,7 +29,7 @@ private:
 };
 
 /// One voice of the hub UI (SPEC 8.1): name, Mute (host parameter `mute_<voice>`), the read-only roll and the grip to
-/// drag the voice's file into the host. Texts fixed English until the translation table (phase 2).
+/// drag the voice's file into the host, and the lock of the voice (SPEC 3.5).
 class VoiceRow : public juce::Component {
 public:
     VoiceRow(ProcessorBase& processor, int voice);
@@ -47,6 +47,8 @@ private:
     int voice_;
     juce::Label nameLabel_;
     juce::ToggleButton muteButton_;
+    juce::ToggleButton lockButton_;
+    int slotIndex_ = -1; // the slot the row shows (0-based), -1 while there is none
     RollView roll_;
     DragHandle drag_;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;

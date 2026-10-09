@@ -1194,3 +1194,36 @@ TEST_CASE("an undo in the hub reaches the voice, a voice cannot undo", "[group-w
     CHECK(voice.firstWith(60, at(8.0)) < 0);
     CHECK(hub.firstWith(60, at(8.0)) < 0);
 }
+
+TEST_CASE("the lock switch of a voice row follows the pattern and locks the voice", "[group-wiring][editor][lock]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    auto* lock1 = dynamic_cast<juce::Button*>(find(*editor, "lock_1"));
+    auto* lock2 = dynamic_cast<juce::Button*>(find(*editor, "lock_2"));
+    REQUIRE((lock1 != nullptr && lock2 != nullptr));
+    CHECK(lock1->getButtonText() == "Sperren");
+    CHECK_FALSE(lock1->isEnabled()); // an empty slot has nothing to lock
+
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+    REQUIRE(waitFor([&] { return lock1->isEnabled(); }));
+    CHECK_FALSE(lock1->getToggleState());
+
+    lock2->triggerClick();
+    REQUIRE(waitFor([&] { return solo.processor.playingVoices()[1].locked; }));
+    CHECK_FALSE(solo.processor.playingVoices()[0].locked);
+    REQUIRE(waitFor([&] { return lock2->getToggleState(); }));
+    CHECK_FALSE(lock1->getToggleState());
+
+    // From outside (undo): the switch follows.
+    REQUIRE(solo.processor.undo());
+    REQUIRE(waitFor([&] { return !lock2->getToggleState(); }));
+    lock2->triggerClick();
+    REQUIRE(waitFor([&] { return solo.processor.playingVoices()[1].locked; }));
+    lock2->triggerClick(); // and off again
+    REQUIRE(waitFor([&] { return !solo.processor.playingVoices()[1].locked; }));
+
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { bank.clear(0); }); // the slot is empty again
+    REQUIRE(waitFor([&] { return !lock1->isEnabled(); }));
+    CHECK_FALSE(lock2->isEnabled());
+}

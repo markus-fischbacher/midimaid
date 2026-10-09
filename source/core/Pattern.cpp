@@ -1,8 +1,13 @@
 #include "core/Pattern.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace mm::core {
+
+bool hasLockedVoice(const Pattern& pattern) {
+    return std::any_of(pattern.voices.begin(), pattern.voices.end(), [](const Track& t) { return isVoiceLocked(t); });
+}
 
 bool isValidPatternLength(uint32_t bars) {
     return bars == 1 || bars == 2 || bars == 4 || bars == 8 || bars == 16;
