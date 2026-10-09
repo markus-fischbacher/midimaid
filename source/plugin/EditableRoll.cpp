@@ -38,7 +38,7 @@ juce::Rectangle<float> toRect(const mm::core::RollBox& box, juce::Point<int> ori
 } // namespace
 
 EditableRoll::EditableRoll(ProcessorBase& processor, int voice) : processor_(processor), voice_(voice) {
-    setWantsKeyboardFocus(true);
+    setWantsKeyboardFocus(false); // D-126, D-159: the roll takes no keys; actions come as buttons and menus
     viewport_.rows = 24;
 }
 
@@ -375,7 +375,7 @@ void EditableRoll::runMenuAction(int id) {
     } else if (id == kMenuSlide) {
         toggleSlide();
     } else if (id == kMenuDelete) {
-        removeIds(std::vector<uint32_t>(selection_.begin(), selection_.end()));
+        deleteSelection();
     }
 }
 
@@ -492,7 +492,7 @@ void EditableRoll::doubleClick(juce::Point<double> point) {
     }
 }
 
-void EditableRoll::moveByKey(int64_t ticks, int pitchDirection, int pitchSteps) {
+void EditableRoll::moveSelection(int64_t ticks, int pitchDirection, bool octave) {
     if (selection_.empty() || !haveView_) {
         return;
     }
@@ -512,63 +512,23 @@ void EditableRoll::moveByKey(int64_t ticks, int pitchDirection, int pitchSteps) 
             if (anchor == notes.end()) {
                 return 0;
             }
-            deltaPitch = pitchSteps == 12 ? pitchDirection * 12
-                                          : mm::core::stepPitch(anchor->pitch, pitchDirection, rules) - anchor->pitch;
+            deltaPitch = octave ? pitchDirection * 12
+                                : mm::core::stepPitch(anchor->pitch, pitchDirection, rules) - anchor->pitch;
         }
         return mm::core::moveNotes(pattern, voice, ids, static_cast<int32_t>(ticks), deltaPitch);
     });
 }
 
-bool EditableRoll::handleKey(const juce::KeyPress& key) {
-    const auto mods = key.getModifiers();
-    const int code = key.getKeyCode();
-    if (mods.isCommandDown() && (code == 'Z' || code == 'z')) {
-        if (mods.isShiftDown()) {
-            processor_.redo();
-        } else {
-            processor_.undo();
-        }
-        return true;
+void EditableRoll::selectAll() {
+    selection_.clear();
+    for (const auto& note : source_) {
+        selection_.insert(note.id);
     }
-    if (mods.isCommandDown() && (code == 'A' || code == 'a')) {
-        selection_.clear();
-        for (const auto& note : source_) {
-            selection_.insert(note.id);
-        }
-        repaint();
-        return true;
-    }
-    if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
-        removeIds(std::vector<uint32_t>(selection_.begin(), selection_.end()));
-        return true;
-    }
-    if (!mods.isCommandDown() && !mods.isAltDown() && (code == 'A' || code == 'a')) {
-        toggleAccent();
-        return true;
-    }
-    if (!mods.isCommandDown() && !mods.isAltDown() && (code == 'S' || code == 's')) {
-        toggleSlide();
-        return true;
-    }
-    if (mods.isAltDown() && (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey)) {
-        const int amount = mods.isShiftDown() ? 10 : 1;
-        changeVelocity(code == juce::KeyPress::upKey ? amount : -amount);
-        return true;
-    }
-    const int64_t step = static_cast<int64_t>(grid_.ticks()) * (mods.isShiftDown() ? 4 : 1);
-    if (code == juce::KeyPress::leftKey) {
-        moveByKey(-step, 0, 0);
-        return true;
-    }
-    if (code == juce::KeyPress::rightKey) {
-        moveByKey(step, 0, 0);
-        return true;
-    }
-    if (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) {
-        moveByKey(0, code == juce::KeyPress::upKey ? 1 : -1, mods.isShiftDown() ? 12 : 1);
-        return true;
-    }
-    return false;
+    repaint();
+}
+
+void EditableRoll::deleteSelection() {
+    removeIds(std::vector<uint32_t>(selection_.begin(), selection_.end()));
 }
 
 void EditableRoll::zoomAt(double x, double factor) {
@@ -600,8 +560,14 @@ void EditableRoll::resized() {
     }
 }
 
+void EditableRoll::visibilityChanged() {
+    if (!isVisible()) {
+        endGesture();
+        repaint();
+    }
+}
+
 void EditableRoll::mouseDown(const juce::MouseEvent& event) {
-    grabKeyboardFocus();
     const auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
     if (event.position.y >= static_cast<float>(field().getBottom())) {
         pressLane({point.x, point.y - field().getBottom()}, event.mods);
@@ -674,10 +640,6 @@ void EditableRoll::mouseWheelMove(const juce::MouseEvent& event, const juce::Mou
         return;
     }
     scrollBy(0, static_cast<int>(std::lround(wheel.deltaY * 8.0)));
-}
-
-bool EditableRoll::keyPressed(const juce::KeyPress& key) {
-    return handleKey(key);
 }
 
 void EditableRoll::paint(juce::Graphics& g) {

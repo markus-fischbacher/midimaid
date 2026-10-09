@@ -4,6 +4,7 @@
 #include "plugin/EditableRoll.h"
 #include "plugin/EditorParts.h"
 #include "plugin/GroupText.h"
+#include "plugin/PlaceholderEditor.h"
 #include "plugin/ProcessorBase.h"
 
 #include <algorithm>
@@ -1536,41 +1537,58 @@ TEST_CASE("another slot or length starts a fresh view and drops the selection", 
     CHECK(rig.solo.processor.slotsSnapshot().slot(0)->pattern == std::nullopt);
 }
 
-TEST_CASE("keys: delete, select all, arrows, undo and redo", "[roll][editor]") {
+TEST_CASE("select all, delete and moving the selection by a step are actions of the roll", "[roll][editor]") {
     RollRig rig;
-    using mm::core::kTicksPerBar;
-    const auto key = [](int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); };
-
-    CHECK(rig.roll.handleKey(key('A', juce::ModifierKeys::commandModifier)));
+    rig.roll.selectAll();
     CHECK(rig.roll.selection().size() == 4);
 
     rig.roll.press(rig.at(960, 64), {});
     rig.roll.release(rig.at(960, 64));
     REQUIRE(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
 
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::rightKey)));
+    rig.roll.moveSelection(240);
     CHECK(rig.melody()[1].startTick == 1200);
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier)));
-    CHECK(rig.melody()[1].startTick == 240); // one bar-fraction back: four grid steps
+    rig.roll.moveSelection(-960);
+    CHECK(rig.melody()[1].startTick == 240);
     rig.refresh();
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey))); // E -> F in A minor
+    rig.roll.moveSelection(0, 1); // E -> F in A minor
     CHECK(rig.melody()[1].pitch == 65);
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::downKey)));
+    rig.roll.moveSelection(0, -1);
     CHECK(rig.melody()[1].pitch == 64);
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier)));
+    rig.roll.moveSelection(0, 1, true); // an octave
     CHECK(rig.melody()[1].pitch == 76);
+    rig.roll.moveSelection(0, -1, true);
+    CHECK(rig.melody()[1].pitch == 64);
 
-    CHECK(rig.roll.handleKey(key('Z', juce::ModifierKeys::commandModifier)));
-    CHECK(rig.melody()[1].pitch == 64);
-    CHECK(rig.roll.handleKey(key('Z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier)));
+    REQUIRE(rig.solo.processor.undo()); // each is one step
     CHECK(rig.melody()[1].pitch == 76);
+    REQUIRE(rig.solo.processor.redo());
+    CHECK(rig.melody()[1].pitch == 64);
 
     rig.refresh();
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::deleteKey)));
+    rig.roll.deleteSelection();
     rig.refresh();
     CHECK(rig.roll.source().size() == 3);
     CHECK(rig.roll.selection().empty());
-    CHECK_FALSE(rig.roll.handleKey(key('Q')));
+}
+
+TEST_CASE("the roll takes no keys: D-126 gives MidiMaid no predefined shortcuts", "[roll][editor]") {
+    RollRig rig;
+    CHECK_FALSE(rig.roll.getWantsKeyboardFocus());
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    const auto before = rig.melody();
+    for (const auto& key : {juce::KeyPress('Z', juce::ModifierKeys::commandModifier, 0),
+                            juce::KeyPress('A', juce::ModifierKeys::commandModifier, 0),
+                            juce::KeyPress('A', juce::ModifierKeys(), 0), juce::KeyPress('S', juce::ModifierKeys(), 0),
+                            juce::KeyPress(juce::KeyPress::deleteKey), juce::KeyPress(juce::KeyPress::backspaceKey),
+                            juce::KeyPress(juce::KeyPress::leftKey), juce::KeyPress(juce::KeyPress::rightKey),
+                            juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0)}) {
+        CHECK_FALSE(rig.roll.keyPressed(key));
+    }
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)}); // nothing selected all, nothing deleted
 }
 
 TEST_CASE("zoom and scroll move the window and stay inside the pattern", "[roll][editor]") {
@@ -1607,7 +1625,7 @@ TEST_CASE("a voice instance cannot edit through the roll", "[roll][editor]") {
     rig.dragBy(rig.at(960, 64), rig.pixelsForTicks(480.0), 0.0);
     rig.roll.press(rig.at(960, 64), {});
     rig.roll.release(rig.at(960, 64));
-    CHECK(rig.roll.handleKey(juce::KeyPress(juce::KeyPress::deleteKey)));
+    rig.roll.deleteSelection();
     CHECK(rig.melody() == before);
     CHECK_FALSE(rig.solo.processor.canUndo());
 }
@@ -1634,9 +1652,9 @@ TEST_CASE("deleting or moving a sounding note in the roll leaves no hanging note
         roll.release(onNote);
         REQUIRE(roll.selection().size() == 1);
         if (remove) {
-            REQUIRE(roll.handleKey(juce::KeyPress(juce::KeyPress::deleteKey)));
+            roll.deleteSelection();
         } else {
-            REQUIRE(roll.handleKey(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(), 0)));
+            roll.moveSelection(240);
         }
         runTo({&solo}, 1.5);
         CHECK(solo.noteOffs().size() == 1); // the sounding note ended at once
@@ -1766,8 +1784,7 @@ TEST_CASE("the mouse handlers of the roll translate into gestures with the key g
     CHECK(rig.roll.viewport().lowPitch > lowBefore);
     rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second, 1, juce::ModifierKeys::shiftModifier), wheel);
     CHECK(rig.roll.viewport().startTick >= 0);
-    // the key handler of the component is the key handler of the roll
-    CHECK(rig.roll.keyPressed(juce::KeyPress('A', juce::ModifierKeys::commandModifier, 0)));
+    rig.roll.selectAll();
     CHECK(rig.roll.selection().size() == 3);
 }
 
@@ -1920,9 +1937,8 @@ TEST_CASE("a with several bars covering each other the topmost is grabbed", "[ro
     rig.roll.release({rig.xOf(960, 2.0), laneY(90)});
 }
 
-TEST_CASE("A and S toggle accent and slide of the selection, mixed selections get it first", "[roll][editor]") {
+TEST_CASE("accent and slide of the selection toggle, mixed selections get it first", "[roll][editor]") {
     RollRig rig;
-    const auto key = [](int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); };
     const auto rendered = [&](size_t index) { return rig.solo.processor.playingVoices()[1].notes.at(index); };
     REQUIRE(rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) {
         const std::vector<uint32_t> ids{rig.idAt(0)};
@@ -1932,14 +1948,14 @@ TEST_CASE("A and S toggle accent and slide of the selection, mixed selections ge
     const auto baseVelocity = rendered(1).velocity;
     CHECK(rendered(0).velocity > baseVelocity); // the accent plays louder
 
-    rig.roll.handleKey(key('A', juce::ModifierKeys::commandModifier)); // select all
-    CHECK(rig.roll.handleKey(key('A')));
+    rig.roll.selectAll();
+    rig.roll.toggleAccent();
     for (const auto& note : rig.melody()) {
         CHECK(note.accent); // one of four had it: now all have it
     }
     CHECK(rendered(1).velocity > baseVelocity);
     rig.refresh();
-    CHECK(rig.roll.handleKey(key('a')));
+    rig.roll.toggleAccent();
     for (const auto& note : rig.melody()) {
         CHECK_FALSE(note.accent); // all had it: now none
     }
@@ -1951,60 +1967,51 @@ TEST_CASE("A and S toggle accent and slide of the selection, mixed selections ge
 
     rig.refresh();
     const auto lengthBefore = rendered(0).lengthTicks;
-    CHECK(rig.roll.handleKey(key('S')));
+    rig.roll.toggleSlide();
     for (const auto& note : rig.melody()) {
         CHECK(note.slide);
     }
     CHECK(rendered(0).lengthTicks > lengthBefore); // the slide reaches over the next note
     rig.refresh();
-    CHECK(rig.roll.handleKey(key('s')));
+    rig.roll.toggleSlide();
     for (const auto& note : rig.melody()) {
         CHECK_FALSE(note.slide);
     }
     CHECK(rendered(0).lengthTicks == lengthBefore);
 }
 
-TEST_CASE("accent and slide do nothing without a selection and do not steal the shortcuts", "[roll][editor]") {
+TEST_CASE("accent, slide, velocity and delete do nothing without a selection", "[roll][editor]") {
     RollRig rig;
     const auto before = rig.melody();
-    CHECK(rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys(), 0)));
-    CHECK(rig.roll.handleKey(juce::KeyPress('S', juce::ModifierKeys(), 0)));
+    rig.roll.toggleAccent();
+    rig.roll.toggleSlide();
+    rig.roll.changeVelocity(10);
+    rig.roll.deleteSelection();
+    rig.roll.moveSelection(240, 1);
     CHECK(rig.melody() == before);
     CHECK_FALSE(rig.solo.processor.canUndo());
-    // Cmd+A still selects all, Alt+A and Cmd+S are not ours
-    CHECK(rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys::commandModifier, 0)));
-    CHECK(rig.roll.selection().size() == 4);
-    CHECK_FALSE(rig.roll.handleKey(juce::KeyPress('S', juce::ModifierKeys::commandModifier, 0)));
-    CHECK_FALSE(rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys::altModifier, 0)));
-    CHECK(rig.melody() == before);
 }
 
-TEST_CASE("Alt with the arrow keys changes the velocity of the selection", "[roll][editor]") {
+TEST_CASE("the velocity of the selection changes by a step and stays inside 1 to 127", "[roll][editor]") {
     RollRig rig;
-    const auto key = [](int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); };
     rig.roll.press(rig.at(960, 64), {});
     rig.roll.release(rig.at(960, 64));
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier)));
+    rig.roll.changeVelocity(-1);
     CHECK(rig.melody()[1].velocity == 99);
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey, juce::ModifierKeys::altModifier)));
+    rig.roll.changeVelocity(1);
     CHECK(rig.melody()[1].velocity == 100);
-    CHECK(rig.roll.handleKey(
-        key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier)));
+    rig.roll.changeVelocity(-10);
     CHECK(rig.melody()[1].velocity == 90);
-    for (int i = 0; i < 6; ++i) {
-        rig.roll.handleKey(
-            key(juce::KeyPress::upKey, juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier));
-    }
+    rig.roll.changeVelocity(60);
     CHECK(rig.melody()[1].velocity == 127);
-    for (int i = 0; i < 20; ++i) {
-        rig.roll.handleKey(
-            key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier));
-    }
+    rig.roll.changeVelocity(-500);
     CHECK(rig.melody()[1].velocity == 1);
-    // the plain arrows still move the pitch
-    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey)));
-    CHECK(rig.melody()[1].pitch == 65);
+    CHECK(rig.melody()[1].pitch == 64);
+    // at the edge nothing changes and nothing is recorded: one undo goes back to the step before
+    rig.roll.changeVelocity(-5);
     CHECK(rig.melody()[1].velocity == 1);
+    REQUIRE(rig.solo.processor.undo());
+    CHECK(rig.melody()[1].velocity == 127);
 }
 
 TEST_CASE("the context menu shows the state of the selection and runs its items", "[roll][editor]") {
@@ -2085,7 +2092,7 @@ TEST_CASE("the velocity lane does nothing in a voice instance or an empty slot",
     rig.roll.pressLane({rig.xOf(960, 2.0), laneY(100)}, {});
     rig.roll.drag({rig.xOf(960, 2.0), laneY(10)});
     rig.roll.release({rig.xOf(960, 2.0), laneY(10)});
-    rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys(), 0));
+    rig.roll.toggleAccent();
     CHECK(rig.melody() == before);
     CHECK_FALSE(rig.solo.processor.canUndo());
 
@@ -2095,4 +2102,171 @@ TEST_CASE("the velocity lane does nothing in a voice instance or an empty slot",
     rig.roll.setSource(nullptr);
     rig.roll.pressLane({100.0, 10.0}, juce::ModifierKeys::altModifier);
     CHECK_FALSE(rig.roll.gestureActive());
+}
+
+namespace {
+
+struct FocusRig {
+    FocusRig() : editor(solo.processor.createEditor()) {
+        panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+        REQUIRE(panel != nullptr);
+        solo.processor.editSlots(
+            [&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+        roll1 = dynamic_cast<mm::plugin::EditableRoll*>(find(*editor, "roll_1"));
+        roll2 = dynamic_cast<mm::plugin::EditableRoll*>(find(*editor, "roll_2"));
+        REQUIRE((roll1 != nullptr && roll2 != nullptr));
+        REQUIRE(waitFor([&] { return roll2->source().size() == 1; }));
+    }
+    juce::Component& row(int voice) { return *find(*editor, "row_" + juce::String(voice)); }
+    juce::Button& focusButton(int voice) {
+        return *dynamic_cast<juce::Button*>(find(*editor, "focus_" + juce::String(voice)));
+    }
+    /// The click is posted to the message queue: wait until the editor has the focus it should have.
+    void click(int voice, int expectedFocus) {
+        focusButton(voice).triggerClick();
+        REQUIRE(waitFor([&] { return panel->focusedVoice() == expectedFocus; }));
+    }
+
+    Quiet quiet;
+    Instance solo{"Solo"};
+    std::unique_ptr<juce::AudioProcessorEditor> editor;
+    mm::plugin::PlaceholderEditor* panel = nullptr;
+    mm::plugin::EditableRoll* roll1 = nullptr;
+    mm::plugin::EditableRoll* roll2 = nullptr;
+};
+
+} // namespace
+
+TEST_CASE("the focus switch gives one voice the whole height and folds the others into strips", "[focus][editor]") {
+    FocusRig rig;
+    CHECK(rig.panel->focusedVoice() == 0);
+    CHECK(rig.focusButton(1).getButtonText() == "Fokus");
+    const int half = rig.row(1).getHeight();
+    CHECK(std::abs(half - rig.row(2).getHeight()) <= 1);
+    CHECK(rig.roll1->isVisible());
+    CHECK(rig.roll2->isVisible());
+
+    rig.click(1, 1);
+    CHECK(rig.panel->focusedVoice() == 1);
+    CHECK(rig.focusButton(1).getToggleState());
+    CHECK_FALSE(rig.focusButton(2).getToggleState());
+    CHECK(rig.row(2).getHeight() == 36);
+    CHECK(rig.row(1).getHeight() == 2 * half - 36);
+    CHECK(rig.roll1->isVisible());
+    CHECK_FALSE(rig.roll2->isVisible());
+    // the strip keeps name, mute, lock, focus and the grip, all inside it and none of them empty
+    for (const char* id : {"name_2", "mute_2", "lock_2", "focus_2", "drag_2"}) {
+        auto* component = find(*rig.editor, id);
+        REQUIRE(component != nullptr);
+        INFO(id);
+        CHECK(component->isVisible());
+        CHECK(component->getWidth() > 0);
+        CHECK(component->getHeight() > 0);
+        CHECK(rig.row(2).getLocalBounds().contains(component->getBounds()));
+    }
+    // the rows still fill the area without a gap: the strip sits directly below the focused row
+    CHECK(rig.row(2).getY() == rig.row(1).getBottom());
+
+    rig.click(1, 0); // the same switch again: back to all
+    CHECK(rig.panel->focusedVoice() == 0);
+    CHECK_FALSE(rig.focusButton(1).getToggleState());
+    CHECK(rig.roll2->isVisible());
+    CHECK(rig.row(1).getHeight() == half);
+    CHECK(rig.row(2).getHeight() == half);
+
+    rig.click(1, 1);
+    rig.click(2, 2); // another voice takes the focus
+    CHECK(rig.panel->focusedVoice() == 2);
+    CHECK_FALSE(rig.focusButton(1).getToggleState());
+    CHECK(rig.focusButton(2).getToggleState());
+    CHECK(rig.row(1).getHeight() == 36);
+    CHECK_FALSE(rig.roll1->isVisible());
+    CHECK(rig.roll2->isVisible());
+}
+
+TEST_CASE("a focused roll shows more pitch rows and keeps its place", "[focus][editor]") {
+    FocusRig rig;
+    const auto before = rig.roll1->viewport();
+    rig.roll1->scrollBy(0, 3);
+    const auto scrolled = rig.roll1->viewport();
+    rig.click(1, 1);
+    const auto focused = rig.roll1->viewport();
+    CHECK(focused.rows > scrolled.rows);
+    CHECK(focused.startTick == scrolled.startTick);
+    CHECK(focused.spanTicks == scrolled.spanTicks);
+    CHECK(focused.lowPitch + focused.rows / 2 == scrolled.lowPitch + scrolled.rows / 2); // the middle stays
+    rig.click(1, 0);
+    CHECK(rig.roll1->viewport().rows == before.rows);
+}
+
+TEST_CASE("folding a roll ends its gesture, selection and window survive", "[focus][editor]") {
+    FocusRig rig;
+    const auto g = rig.roll2->geometry();
+    const juce::Point<double> onNote{g.tickToX(0.0) + 2.0, g.pitchToY(42) + g.rowHeight() / 2.0};
+    rig.roll2->press(onNote, {});
+    rig.roll2->release(onNote);
+    REQUIRE(rig.roll2->selection().size() == 1);
+    rig.roll2->zoomAt(10.0, 0.5);
+    const auto viewport = rig.roll2->viewport();
+
+    rig.roll2->press(onNote, {});
+    rig.roll2->drag({onNote.x + 80.0, onNote.y});
+    REQUIRE(rig.roll2->gestureActive());
+    rig.click(1, 1); // the melody roll folds away under the mouse
+    CHECK(rig.roll2->gestureActive() == false);
+    rig.roll2->release(onNote); // a late mouse-up of the folded roll is harmless
+
+    rig.click(1, 0);
+    CHECK(rig.roll2->isVisible());
+    CHECK(rig.roll2->selection().size() == 1);
+    CHECK(rig.roll2->viewport().startTick == viewport.startTick);
+    CHECK(rig.roll2->viewport().spanTicks == viewport.spanTicks);
+}
+
+TEST_CASE("the focus goes back to all when the focused voice is gone", "[focus][editor]") {
+    FocusRig rig;
+    mm::core::Pattern three = markedTwoVoices(41, 42);
+    three.voices.push_back(three.voices[1]);
+    three.voices.back().midiChannel = 3;
+    three.voices.back().notes[0].id = mm::core::allocateNoteId(three);
+    rig.solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(1, three)); });
+    rig.solo.processor.selectSlot(2);
+    REQUIRE(waitFor([&] { return find(*rig.editor, "focus_3") != nullptr; }));
+
+    rig.click(3, 3);
+    REQUIRE(rig.panel->focusedVoice() == 3);
+    CHECK(rig.row(1).getHeight() == 36);
+    CHECK(rig.row(2).getHeight() == 36);
+
+    rig.solo.processor.selectSlot(1); // two voices again
+    REQUIRE(waitFor([&] { return find(*rig.editor, "focus_3") == nullptr; }));
+    CHECK(rig.panel->focusedVoice() == 0);
+    CHECK(rig.row(1).getHeight() > 36);
+    CHECK(std::abs(rig.row(1).getHeight() - rig.row(2).getHeight()) <= 1);
+    CHECK_FALSE(rig.focusButton(1).getToggleState());
+}
+
+TEST_CASE("a focus on a voice that still exists survives another pattern", "[focus][editor]") {
+    FocusRig rig;
+    rig.click(2, 2);
+    rig.solo.processor.editSlots(
+        [&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(43, 44))); });
+    REQUIRE(waitFor([&] { return rig.roll2->source().front().pitch == 44; }));
+    CHECK(rig.panel->focusedVoice() == 2);
+    CHECK(rig.row(1).getHeight() == 36);
+    CHECK(rig.focusButton(2).getToggleState());
+}
+
+TEST_CASE("the strip of a folded row still mutes and locks its voice", "[focus][editor]") {
+    FocusRig rig;
+    rig.click(1, 1);
+    auto* lock = dynamic_cast<juce::Button*>(find(*rig.editor, "lock_2"));
+    REQUIRE(lock != nullptr);
+    REQUIRE(waitFor([&] { return lock->isEnabled(); }));
+    lock->triggerClick();
+    REQUIRE(waitFor([&] { return rig.solo.processor.playingVoices()[1].locked; }));
+    auto* mute = dynamic_cast<juce::Button*>(find(*rig.editor, "mute_2"));
+    REQUIRE(mute != nullptr);
+    mute->triggerClick();
+    REQUIRE(waitFor([&] { return mute->getToggleState(); }));
 }

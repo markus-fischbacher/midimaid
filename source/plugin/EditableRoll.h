@@ -13,7 +13,7 @@ namespace mm::plugin {
 /// The piano roll of one voice of the hub UI (SPEC 3.5, D-157): draws the source notes of the pattern and edits them
 /// through `ProcessorBase::editNotes`. Click selects, drag in the empty rubber-bands, double click adds or deletes,
 /// dragging a note moves the selection, dragging its right edge changes the length. Zoom with Cmd/Ctrl + wheel, scroll
-/// with the wheel (Shift: sideways). One gesture is one undo step.
+/// with the wheel (Shift: sideways). One gesture is one undo step. The roll handles no keys (D-126, D-159).
 ///
 /// All gesture methods take positions in the coordinates of the note field (the component without the key gutter), so
 /// that the mouse handlers only translate and tests can call them directly.
@@ -44,8 +44,13 @@ public:
     void drag(juce::Point<double> point);
     void release(juce::Point<double> point);
     void doubleClick(juce::Point<double> point);
-    /// Cmd/Ctrl+Z (Shift: redo), Delete, Cmd/Ctrl+A, the arrow keys. False for a key that is not ours.
-    bool handleKey(const juce::KeyPress& key);
+    /// The editing actions the roll offers without a key (D-126: no predefined keys; the menu and, from v1.1, the keys
+    /// the user assigns call them). Each is one undo step.
+    void selectAll();
+    void deleteSelection();
+    /// Moves the selection as a block: `ticks` later (negative: earlier), and one pitch step up or down
+    /// (`pitchDirection` +1 or -1, the next tone the snapping allows), or an octave with `octave`.
+    void moveSelection(int64_t ticks, int pitchDirection = 0, bool octave = false);
     /// Accent and slide of the selection: all set takes them away, otherwise they are set (one undo step).
     void toggleAccent();
     void toggleSlide();
@@ -63,12 +68,13 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    /// A roll that disappears ends the gesture it is in (a collapsed row, D-159).
+    void visibilityChanged() override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
-    bool keyPressed(const juce::KeyPress& key) override;
 
     static constexpr int kGutter = 34; ///< width of the key labels at the left
     static constexpr int kRowPixels = 7;
@@ -92,7 +98,6 @@ private:
     void stepResize(double dx);
     bool editSelection(const std::function<size_t(mm::core::Pattern&)>& change, bool merge);
     void removeIds(const std::vector<uint32_t>& ids);
-    void moveByKey(int64_t ticks, int pitchDirection, int pitchSteps);
 
     ProcessorBase& processor_;
     int voice_;

@@ -226,6 +226,7 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
   verschieben sie nicht (§3.9).
 - Rückgängig und Wiederholen (eigener Undo-Stapel in `core`, D-153; statt `juce::UndoManager`, damit `core` ohne JUCE bleibt)
 - Velocity-Spur unter den Noten (Balken ziehen, mehrere gleichzeitig)
+- Die Roll nimmt **keine Tasten** an (D-126, D-159); Aktionen über Maus und Menü, ab v1.1 über die belegbaren Kürzel
 - Stand der Umsetzung: Noten setzen (Doppelklick), löschen, verschieben, Länge, Auswahl, Zoom, Raster und Einrasten in der Roll der Hub-Zeilen (D-157); Velocity-Spur, Akzent (`A`) und Slide (`S`, Rechtsklick-Menü) (D-158)
 - **Stimme sperren:** Eine gesperrte Stimme bleibt bei Generieren und Variieren unverändert. Beim Generieren bleiben dann auch
   Tonart, Skala, Akkordfolge, Länge und Phrasenplan des Slots; die Felder dafür wirken nicht (D-154)
@@ -1310,8 +1311,8 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
 - **Starttonart:** zuletzt verwendete Tonart, beim allerersten Start A-Moll
 - Look: dunkel, minimalistisch, an Ableton angelehnt: flache Flächen, wenig Farbe, eine Akzentfarbe
   pro Stimme (Bass, Melodie), gut lesbare Sans-Serif-Schrift, keine Skeuomorphie
-- Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Knopf
-  und Tastenkürzel
+- Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Knopf „Fokus“
+  je Zeile (die anderen Zeilen klappen zu Leisten zusammen, D-159); ein Kürzel gibt es nur als belegbare Aktion ab v1.1 (§8.3, D-126)
 - **Voice-Oberfläche** (kompakt, ca. 600 × 320 px): Gruppe und Stimme wählen, Spur der eigenen Stimme
   (nur lesend, Bearbeitung im Hub), Mute, Oktave, Schalter „Slot: folgt Hub / eigen“ (§6.1a), Drag & Drop, Ablage für Drum-Referenzen,
   Status „mit Hub verbunden“, [v1.1] Anzeige der Gruppen-Transposition,

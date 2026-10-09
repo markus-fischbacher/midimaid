@@ -34,6 +34,7 @@
   "status.allLocked": "Alle Stimmen sind gesperrt: nichts zu erzeugen",
   "status.varied": "Variation fertig: {n} Noten geändert, spielt ab dem nächsten Takt",
   "roll.triplet": "Triolen",
+  "roll.focus": "Fokus",
   "roll.accent": "Akzent",
   "roll.slide": "Slide",
   "roll.delete": "Löschen",

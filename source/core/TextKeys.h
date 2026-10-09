@@ -53,6 +53,7 @@ namespace mm::core::text {
     X(kRollTitle, "roll.title")                                                                                        \
     X(kRollEmpty, "roll.empty")                                                                                        \
     X(kRollTriplet, "roll.triplet")                                                                                    \
+    X(kRollFocus, "roll.focus")                                                                                        \
     X(kRollAccent, "roll.accent")                                                                                      \
     X(kRollSlide, "roll.slide")                                                                                        \
     X(kRollDelete, "roll.delete")                                                                                      \
