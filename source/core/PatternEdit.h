@@ -19,6 +19,11 @@ namespace mm::core {
 uint32_t addNote(Pattern& pattern, size_t voice, uint8_t pitch, uint32_t startTick, uint32_t lengthTicks,
                  uint8_t velocity);
 
+/// Locks or unlocks the whole voice (all three dimensions). The locks of single notes stay as they are. Returns 1 when
+/// the lock changed and 0 for an unknown voice or a voice that is already in that state. `info.source` stays: locking
+/// does not edit notes.
+size_t setVoiceLocked(Pattern& pattern, size_t voice, bool locked);
+
 /// Removes the notes.
 size_t removeNotes(Pattern& pattern, size_t voice, std::span<const uint32_t> ids);
 

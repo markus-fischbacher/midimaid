@@ -22,7 +22,9 @@
 namespace mm::plugin {
 
 /// What the last "Generate" did, for the editor (message thread).
-enum class GenerationStatus { Idle, Generating, Done, NoResult, UseHub, Forwarded };
+/// `DoneLocked`: done, and locked voices, key and length of the slot were kept. `AllLocked`: every voice is locked,
+/// nothing was generated.
+enum class GenerationStatus { Idle, Generating, Done, DoneLocked, NoResult, UseHub, Forwarded, AllLocked };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
 /// audio and a hard-coded one-bar pattern played in sync with the host transport.
@@ -68,6 +70,7 @@ public:
         juce::String voiceName;   ///< Bass, Melody or Voice n: the names of the export files, never translated
         juce::String displayName; ///< the same in the language of the UI
         bool melody = false;      ///< the voice has the melody role (accent colour)
+        bool locked = false;      ///< the voice is locked (SPEC 3.5)
         /// True when `other` shows the same thing (no need to redraw or export again).
         bool sameSource(const VoiceView& other) const {
             return hasPattern == other.hasPattern && slot == other.slot && voice == other.voice &&
@@ -138,6 +141,9 @@ public:
     /// Message thread: takes the last undo step back or does the undone one again (D-153). The result plays at once.
     /// False when there is nothing to do or this instance is a voice.
     bool undo();
+    /// Message thread: locks or unlocks a voice of the slot (0-based indices, SPEC 3.5). An undo step like a note edit.
+    /// False in a voice, for an empty slot or when the lock is already as asked.
+    bool setVoiceLocked(size_t slotIndex, size_t voice, bool locked);
     bool redo();
     bool canUndo() const;
     bool canRedo() const;

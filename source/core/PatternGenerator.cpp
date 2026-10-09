@@ -84,20 +84,37 @@ Pattern phrasePattern(const Pattern& pattern, const Phrase& phrase) {
 using VoiceNotes = std::vector<std::vector<Note>>; ///< per voice, absolute ticks, without ids
 
 /// Generates all voices of one phrase; nullopt if one of them cannot be generated.
+/// `keep[i]` (optional): the voice stays as it is in `pattern`; its notes of the phrase are the context of the others
+/// and it gets no new notes.
 std::optional<VoiceNotes> generatePhraseNotes(const Pattern& pattern, const Phrase& phrase,
                                               const std::vector<std::string>& archetypes, const StyleProfile& style,
-                                              const ArchetypeSettings& base, uint64_t phraseSeed) {
+                                              const ArchetypeSettings& base, uint64_t phraseSeed,
+                                              const std::vector<bool>& keep = {}) {
     Pattern sub = phrasePattern(pattern, phrase);
+    const auto kept = [&keep](size_t i) { return i < keep.size() && keep[i]; };
+    const uint32_t phraseFrom = phrase.startBar * kTicksPerBar;
+    const uint32_t phraseTo = phraseFrom + phrase.lengthBars * kTicksPerBar;
+    for (size_t i = 0; i < sub.voices.size(); ++i) {
+        if (!kept(i)) {
+            continue;
+        }
+        for (Note note : pattern.voices[i].notes) {
+            if (note.startTick >= phraseFrom && note.startTick < phraseTo) {
+                note.startTick -= phraseFrom;
+                sub.voices[i].notes.push_back(note);
+            }
+        }
+    }
     const ArchetypeSettings settings = settingsForRole(base, phrase.role);
     Pcg32 rng = Pcg32::fromSeed(phraseSeed);
     for (const size_t index : generationOrder(sub)) {
-        if (!generateVoice(sub, index, archetypes[index], style, settings, rng)) {
+        if (!kept(index) && !generateVoice(sub, index, archetypes[index], style, settings, rng)) {
             return std::nullopt;
         }
     }
     VoiceNotes result;
-    for (const Track& track : sub.voices) {
-        std::vector<Note> notes = track.notes;
+    for (size_t i = 0; i < sub.voices.size(); ++i) {
+        std::vector<Note> notes = kept(i) ? std::vector<Note>{} : sub.voices[i].notes;
         for (Note& note : notes) {
             note.startTick += phrase.startBar * kTicksPerBar;
         }
@@ -116,6 +133,65 @@ void appendNotes(Pattern& pattern, size_t voice, std::vector<Note> notes) {
         note.id = allocateNoteId(pattern);
         pattern.voices[voice].notes.push_back(note);
     }
+}
+
+/// One candidate around the locked voices of `current` (a pure function of `seed`, like `generateCandidate`): harmony,
+/// length, form plan, kick grid and locked voices stay; the other voices are generated again. A candidate that cannot
+/// be generated is an empty pattern without archetypes, which the hard check rejects.
+Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& request, const Pattern& current,
+                            uint64_t seed) {
+    if (request.cancel != nullptr && request.cancel->load(std::memory_order_relaxed)) {
+        return makeEmptyPattern(current.lengthBars, style.id);
+    }
+    Pcg32 rng = Pcg32::fromSeed(seed);
+    Pattern pattern = current;
+    std::vector<bool> keep;
+    for (Track& track : pattern.voices) {
+        keep.push_back(isVoiceLocked(track));
+        if (!keep.back()) {
+            track.notes.clear();
+        }
+    }
+    const auto failed = [&] { return makeEmptyPattern(current.lengthBars, style.id); };
+    if (pattern.phrases.size() <= 1) {
+        for (const size_t index : generationOrder(pattern)) {
+            if (!keep[index] && !fillVoice(pattern, index, style, request.settings, rng)) {
+                return failed();
+            }
+        }
+    } else {
+        std::vector<std::string> archetypes(pattern.voices.size());
+        for (const size_t index : generationOrder(pattern)) {
+            archetypes[index] = keep[index] ? pattern.voices[index].archetypeId
+                                            : resolveArchetype(pattern.voices[index], style, request.settings.energyPct,
+                                                               rng, request.settings.creativityPct);
+        }
+        for (const Phrase& phrase : pattern.phrases) {
+            const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, request.settings,
+                                                   phraseSeed(seed, phrase.role), keep);
+            if (!notes.has_value()) {
+                return failed();
+            }
+            for (size_t i = 0; i < pattern.voices.size(); ++i) {
+                if (!keep[i]) {
+                    appendNotes(pattern, i, (*notes)[i]);
+                }
+            }
+        }
+        for (size_t i = 0; i < pattern.voices.size(); ++i) {
+            if (!keep[i]) {
+                pattern.voices[i].archetypeId = archetypes[i];
+            }
+        }
+    }
+    applyConstraints(pattern, constraintSettingsFor(pattern, style));
+    pattern.info.source = "algorithm";
+    pattern.info.seed = request.seed;
+    pattern.info.winnerSeed = seed;
+    pattern.info.styleProfileVersion = style.version;
+    pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
+    pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
+    return pattern;
 }
 
 } // namespace
@@ -183,6 +259,27 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
     pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
     return pattern;
+}
+
+SelectionResult generatePatternAroundLocks(const StyleProfile& style, const GenerationRequest& request,
+                                           const Pattern& current) {
+    const bool anythingToGenerate = std::any_of(current.voices.begin(), current.voices.end(),
+                                                [](const Track& track) { return !isVoiceLocked(track); });
+    if (!anythingToGenerate) {
+        return {};
+    }
+    const auto generate = [&](uint64_t seed) { return generateAroundLocks(style, request, current, seed); };
+    const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
+    // the voices that are generated have an archetype; a locked one may have none (an imported or drawn line)
+    const HardCheck hardCheck = [](const Pattern& pattern) {
+        return std::all_of(pattern.voices.begin(), pattern.voices.end(),
+                           [](const Track& track) { return isVoiceLocked(track) || !track.archetypeId.empty(); });
+    };
+    SelectionResult result = selectBest(generate, request.seed, style.quality, contextFor, hardCheck);
+    if (result.success) {
+        applyResult(result.pattern, result);
+    }
+    return result;
 }
 
 SelectionResult generatePattern(const StyleProfile& style, const GenerationRequest& request) {

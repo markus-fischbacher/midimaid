@@ -1,5 +1,6 @@
 #include "plugin/ProcessorBase.h"
 
+#include "core/PatternEdit.h"
 #include "core/PlaybackRender.h"
 #include "core/SlotBankJson.h"
 #include "core/TextKeys.h"
@@ -8,6 +9,7 @@
 #include "plugin/PlaceholderEditor.h"
 
 #include <algorithm>
+#include <set>
 
 namespace mm::plugin {
 
@@ -216,6 +218,11 @@ bool ProcessorBase::editNotes(size_t slotIndex, const std::function<size_t(mm::c
     return true;
 }
 
+bool ProcessorBase::setVoiceLocked(size_t slotIndex, size_t voice, bool locked) {
+    return editNotes(slotIndex,
+                     [&](mm::core::Pattern& pattern) { return mm::core::setVoiceLocked(pattern, voice, locked); });
+}
+
 bool ProcessorBase::undo() {
     return stepUndo(true);
 }
@@ -336,6 +343,18 @@ void ProcessorBase::generate() {
     job.seed =
         job.settings.seed ? *job.settings.seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     job.slot = std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        const auto* slot = slots_.slot(static_cast<size_t>(job.slot));
+        if (slot != nullptr && slot->pattern && mm::core::hasLockedVoice(*slot->pattern)) {
+            job.lockedFrom = slot->pattern;
+        }
+    }
+    if (job.lockedFrom && std::all_of(job.lockedFrom->voices.begin(), job.lockedFrom->voices.end(),
+                                      [](const mm::core::Track& track) { return mm::core::isVoiceLocked(track); })) {
+        generationStatus_ = GenerationStatus::AllLocked; // nothing to generate
+        return;
+    }
     parked_.reset(); // a newer request replaces a result that is still waiting
     parkTimer_.reset();
     generationStatus_ = GenerationStatus::Generating;
@@ -364,16 +383,56 @@ void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core
 }
 
 void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern pattern) {
+    bool discarded = false;
+    bool kept = false;
     editSlots([&](mm::core::SlotBank& bank) {
         const auto index = static_cast<size_t>(job.slot);
         const auto* slot = bank.slot(index);
+        // Locked voices survive whatever happened while the job ran (SPEC 3.5): they are put back from the slot as it
+        // is now. A result that no longer fits them (another length or number of voices) is dropped.
+        if (slot != nullptr && slot->pattern && mm::core::hasLockedVoice(*slot->pattern)) {
+            const auto& current = *slot->pattern;
+            if (pattern.lengthBars != current.lengthBars || pattern.voices.size() != current.voices.size()) {
+                discarded = true;
+                return;
+            }
+            for (size_t i = 0; i < current.voices.size(); ++i) {
+                if (mm::core::isVoiceLocked(current.voices[i])) {
+                    pattern.voices[i] = current.voices[i];
+                }
+            }
+            pattern.nextNoteId = std::max(pattern.nextNoteId, current.nextNoteId);
+            // A result that was not made around the locks may reuse the ids of the locked notes: number it again.
+            std::set<uint32_t> lockedIds;
+            for (const auto& track : pattern.voices) {
+                if (mm::core::isVoiceLocked(track)) {
+                    for (const auto& note : track.notes) {
+                        lockedIds.insert(note.id);
+                    }
+                }
+            }
+            for (auto& track : pattern.voices) {
+                if (!mm::core::isVoiceLocked(track) &&
+                    std::any_of(track.notes.begin(), track.notes.end(),
+                                [&](const mm::core::Note& n) { return lockedIds.count(n.id) != 0; })) {
+                    for (auto& note : track.notes) {
+                        note.id = pattern.nextNoteId++;
+                    }
+                }
+            }
+            kept = true;
+        }
         std::optional<mm::core::Pattern> before = slot != nullptr ? slot->pattern : std::nullopt;
         const size_t cursor = slot != nullptr ? slot->cursor : 0;
         if (bank.setResult(index, std::move(pattern))) {
             undo_.recordResult(index, std::move(before), cursor, *bank.slot(index)->pattern);
+        } else {
+            discarded = true;
         }
     });
-    generationStatus_ = GenerationStatus::Done;
+    generationStatus_ = discarded ? GenerationStatus::NoResult
+                        : kept    ? GenerationStatus::DoneLocked
+                                  : GenerationStatus::Done;
 }
 
 std::vector<std::string> ProcessorBase::slotLoadProblems() const {
@@ -549,6 +608,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.lengthTicks = rendered.lengthTicks;
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
     view.melody = view.voiceName == "Melody";
+    view.locked = voiceIndex < pattern.voices.size() && mm::core::isVoiceLocked(pattern.voices[voiceIndex]);
     view.displayName = view.melody ? tr(mm::core::text::kVoiceMelody)
                        : view.voiceName == "Bass"
                            ? tr(mm::core::text::kVoiceBass)

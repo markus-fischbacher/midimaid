@@ -47,6 +47,14 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
 /// set. `success == false`: no valid candidate, nothing is returned.
 SelectionResult generatePattern(const StyleProfile& style, const GenerationRequest& request);
 
+/// Generation with locked voices (SPEC 3.5): the locked voices of `current` stay exactly as they are (notes, ids,
+/// archetype), and with them the harmony, the length, the form plan and the kick grid of `current`: the key, scale and
+/// length of the request do not apply. The other voices are generated again with the selection of `generatePattern`,
+/// the constraint layer runs (it leaves locked voices alone). `success == false` when every voice is locked or no valid
+/// candidate came out; `current` is not touched.
+SelectionResult generatePatternAroundLocks(const StyleProfile& style, const GenerationRequest& request,
+                                           const Pattern& current);
+
 /// Replays a stored winner seed: exactly that candidate, without selection and without copy protection (D-88). The
 /// quality score is set as `generatePattern` does.
 Pattern replayWinner(const StyleProfile& style, const GenerationRequest& request, uint64_t winnerSeed);

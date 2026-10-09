@@ -155,6 +155,14 @@ struct Pattern {
     bool operator==(const Pattern&) const = default;
 };
 
+/// A voice is locked (SPEC 3.5) when all three dimensions are: generate, variation and refine leave it exactly as it
+/// is. A partial lock (v1.1, or an import) does not count as locked in v1.0.
+inline bool isVoiceLocked(const Track& track) {
+    return track.lock.pitch && track.lock.rhythm && track.lock.velocity;
+}
+/// True if at least one voice of the pattern is locked.
+bool hasLockedVoice(const Pattern& pattern);
+
 /// Ticks per bar in 4/4 at 960 PPQ.
 constexpr uint32_t kTicksPerBar = 4 * 960;
 

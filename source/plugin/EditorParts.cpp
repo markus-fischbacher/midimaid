@@ -52,6 +52,17 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     muteButton_.setButtonText(tr(mm::core::text::kButtonMute));
     addAndMakeVisible(muteButton_);
 
+    lockButton_.setComponentID("lock_" + juce::String(voice));
+    lockButton_.setButtonText(tr(mm::core::text::kButtonLock));
+    lockButton_.setEnabled(false);
+    lockButton_.onClick = [this] {
+        if (slotIndex_ >= 0) {
+            processor_.setVoiceLocked(static_cast<size_t>(slotIndex_), static_cast<size_t>(voice_ - 1),
+                                      lockButton_.getToggleState());
+        }
+    };
+    addAndMakeVisible(lockButton_);
+
     roll_.setComponentID("roll_" + juce::String(voice));
     addAndMakeVisible(roll_);
     drag_.setComponentID("drag_" + juce::String(voice));
@@ -66,8 +77,13 @@ void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String&
     if (view == nullptr || !view->hasPattern) {
         roll_.setContent(mm::core::layoutRoll({}, mm::core::kTicksPerQuarter * 4), {}, true);
     } else {
-        roll_.setContent(mm::core::layoutRoll(view->notes, view->lengthTicks), name, false);
+        roll_.setContent(mm::core::layoutRoll(view->notes, view->lengthTicks),
+                         view->locked ? name + tr(mm::core::text::kVoiceLockedSuffix) : name, false);
     }
+    const bool filled = view != nullptr && view->hasPattern;
+    slotIndex_ = filled ? view->slot - 1 : -1;
+    lockButton_.setEnabled(filled);
+    lockButton_.setToggleState(filled && view->locked, juce::dontSendNotification);
     updateMuted();
 }
 
@@ -81,6 +97,7 @@ void VoiceRow::resized() {
     auto left = area.removeFromLeft(130);
     nameLabel_.setBounds(left.removeFromTop(28));
     muteButton_.setBounds(left.removeFromTop(28));
+    lockButton_.setBounds(left.removeFromTop(28));
     drag_.setBounds(left.removeFromBottom(40));
     area.removeFromLeft(8);
     roll_.setBounds(area);

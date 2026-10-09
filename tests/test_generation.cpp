@@ -1,4 +1,6 @@
+#include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
+#include "core/PatternValidation.h"
 #include "core/PlaybackRender.h"
 #include "plugin/GenerationService.h"
 #include "plugin/ProcessorBase.h"
@@ -714,4 +716,126 @@ TEST_CASE("a generated result is an undo step: undo empties the slot again, redo
     REQUIRE(again.has_value());
     CHECK(again->voices == generated.voices);
     CHECK(processor.slotsSnapshot().slot(1)->history.size() == 1);
+}
+
+namespace {
+
+void generateAndWait(mm::plugin::ProcessorBase& processor) {
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() != mm::plugin::GenerationStatus::Generating; }));
+}
+
+} // namespace
+
+TEST_CASE("generating with a locked voice keeps it, the key and the length of the slot", "[generation][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    auto settings = processor.instanceSettings();
+    settings.generation.lengthBars = 2;
+    settings.generation.root = 9;
+    processor.setInstanceSettings(settings);
+    generateAndWait(processor);
+    REQUIRE(processor.generationStatus() == mm::plugin::GenerationStatus::Done);
+    const auto first = *processor.slotsSnapshot().slot(0)->pattern;
+
+    REQUIRE(processor.setVoiceLocked(0, 0, true));
+    settings.generation.lengthBars = 8; // would give another pattern without the lock
+    settings.generation.root = 2;
+    settings.generation.seed = 99;
+    processor.setInstanceSettings(settings);
+    generateAndWait(processor);
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::DoneLocked);
+    const auto bank = processor.slotsSnapshot();
+    const auto& next = *bank.slot(0)->pattern;
+    CHECK(next.voices[0].notes == bank.slot(0)->history[0].voices[0].notes);
+    CHECK(next.voices[0].notes == first.voices[0].notes);
+    CHECK(mm::core::isVoiceLocked(next.voices[0]));
+    CHECK(next.lengthBars == 2);
+    CHECK(next.context.root == first.context.root);
+    CHECK_FALSE(next.voices[1].notes == first.voices[1].notes);
+    CHECK(bank.slot(0)->history.size() == 2);
+}
+
+TEST_CASE("with every voice locked generate does nothing and says so", "[generation][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    generateAndWait(processor);
+    REQUIRE(processor.setVoiceLocked(0, 0, true));
+    REQUIRE(processor.setVoiceLocked(0, 1, true));
+    const auto before = processor.slotsSnapshot();
+    processor.generate();
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::AllLocked);
+    pumpFor(100);
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == before.slot(0)->history.size());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern == before.slot(0)->pattern);
+}
+
+TEST_CASE("a voice that is locked while the job runs is put back from the slot", "[generation][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    generateAndWait(processor);
+    const auto first = *processor.slotsSnapshot().slot(0)->pattern;
+    auto settings = processor.instanceSettings();
+    settings.generation.seed = 12345;
+    processor.setInstanceSettings(settings);
+    processor.generate(); // the slot has no lock yet: a new pattern
+    REQUIRE(processor.setVoiceLocked(0, 0, true));
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() != mm::plugin::GenerationStatus::Generating; }));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::DoneLocked);
+    const auto bank = processor.slotsSnapshot();
+    CHECK(bank.slot(0)->pattern->voices[0].notes == first.voices[0].notes);
+    CHECK(mm::core::validatePattern(*bank.slot(0)->pattern).empty());
+    CHECK(bank.slot(0)->history.size() == 2);
+}
+
+TEST_CASE("a result that does not fit the locked voice is dropped", "[generation][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    auto settings = processor.instanceSettings();
+    settings.generation.lengthBars = 4;
+    processor.setInstanceSettings(settings);
+    generateAndWait(processor);
+    const auto before = processor.slotsSnapshot();
+    settings.generation.lengthBars = 2; // another length than the slot
+    processor.setInstanceSettings(settings);
+    processor.generate();
+    REQUIRE(processor.setVoiceLocked(0, 0, true));
+    const auto locked = processor.slotsSnapshot();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() != mm::plugin::GenerationStatus::Generating; }));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::NoResult);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern == locked.slot(0)->pattern);
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == before.slot(0)->history.size());
+}
+
+TEST_CASE("locking is an undo step and the lock is part of the state", "[generation][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    generateAndWait(processor);
+    CHECK_FALSE(processor.setVoiceLocked(0, 0, false)); // already unlocked
+    REQUIRE(processor.setVoiceLocked(0, 1, true));
+    CHECK_FALSE(processor.setVoiceLocked(0, 1, true));
+    CHECK(processor.playingVoices()[1].locked);
+
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    mm::plugin::InstrumentProcessor loaded("Loaded");
+    loaded.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(mm::core::isVoiceLocked(loaded.slotsSnapshot().slot(0)->pattern->voices[1]));
+    CHECK_FALSE(mm::core::isVoiceLocked(loaded.slotsSnapshot().slot(0)->pattern->voices[0]));
+
+    REQUIRE(processor.undo());
+    CHECK_FALSE(processor.playingVoices()[1].locked);
+    REQUIRE(processor.redo());
+    CHECK(processor.playingVoices()[1].locked);
+}
+
+TEST_CASE("a voice cannot lock", "[generation][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Voice");
+    generateAndWait(processor);
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    CHECK_FALSE(processor.setVoiceLocked(0, 0, true));
+    CHECK_FALSE(mm::core::isVoiceLocked(processor.slotsSnapshot().slot(0)->pattern->voices[0]));
 }
