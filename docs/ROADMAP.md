@@ -129,7 +129,7 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
 
 ## Phase 2 – Bearbeitung und Variationen
 - [ ] Piano-Roll (eine Spur pro Stimme): Setzen, Löschen, Verschieben, Länge, Velocity-Spur, Slide, Akzent
-- [ ] Raster, Skalen-Einrasten, Undo/Redo
+- [ ] Raster, Skalen-Einrasten, Undo/Redo (Kern und Plugin-Anbindung fertig, D-153; die Bedienung folgt mit Piano-Roll und Schaltflächen)
 - [ ] Spurfokus (alle / einzelne Stimme)
 - [ ] Stimme sperren (SPEC §3.5)
 - [ ] Variations-Engine mit subtilen und strukturellen Operatoren und Stärke-Regler (SPEC §3.6)

@@ -1137,3 +1137,21 @@ TEST_CASE("loading a state clears the undo steps", "[plugin][edit]") {
     CHECK_FALSE(processor.canUndo());
     CHECK_FALSE(processor.canRedo());
 }
+
+TEST_CASE("slots taken over from a hub clear the undo steps", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, longNotePattern(45, 240));
+    REQUIRE(processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 50, 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    mm::core::SlotBank hubBank;
+    hubBank.setResult(0, longNotePattern(60, 240));
+    processor.adoptHubSlots(std::make_shared<const mm::core::SlotBank>(hubBank));
+    settings.role = mm::core::InstanceRole::Hub; // the voice takes the hub over
+    processor.setInstanceSettings(settings);
+    CHECK_FALSE(processor.canUndo());
+}

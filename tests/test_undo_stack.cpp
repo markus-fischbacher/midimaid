@@ -233,3 +233,18 @@ TEST_CASE("random series of edits and results go all the way back and forth", "[
         CHECK(stack.undoSteps() == undone);
     }
 }
+
+TEST_CASE("undoing a result puts the history cursor back where it was", "[undo]") {
+    SlotBank bank;
+    UndoStack stack;
+    addResult(bank, stack, 0, "a");
+    addResult(bank, stack, 0, "b");
+    REQUIRE(bank.historyBack(0)); // looking at "a", the cursor is 0
+    stack.discardSlot(0);         // what browsing does to the steps of the slot
+    addResult(bank, stack, 0, "c");
+    REQUIRE(bank.slot(0)->cursor == 2);
+    REQUIRE(stack.undo(bank));
+    CHECK(bank.slot(0)->cursor == 0);
+    CHECK(bank.slot(0)->pattern->styleId == "a");
+    CHECK(bank.slot(0)->history.size() == 2);
+}
