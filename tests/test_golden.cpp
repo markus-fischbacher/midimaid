@@ -1,6 +1,7 @@
 #include "core/ChordSymbol.h"
 #include "core/PatternGenerator.h"
 #include "core/PatternJson.h"
+#include "core/Variation.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -193,6 +194,31 @@ TEST_CASE("golden: one complete pattern per style as JSON for review", "[golden]
         const SelectionResult result = generatePattern(style, request);
         REQUIRE(result.success);
         compareWithGolden(name + "_2bars.json", patternToString(result.pattern) + "\n");
+    }
+}
+
+TEST_CASE("golden: variations of a generated pattern are bit-identical on every platform", "[golden][variation]") {
+    for (const std::string& name : kStyles) {
+        const StyleProfile style = loadShipped(name);
+        GenerationRequest request;
+        request.lengthBars = 4;
+        request.seed = 1;
+        const SelectionResult result = generatePattern(style, request);
+        REQUIRE(result.success);
+        std::string text = describe(result.pattern, request);
+        for (const uint64_t seed : {1ull, 2ull}) {
+            for (const int strength : {10, 50, 100}) {
+                Pattern varied = result.pattern;
+                VariationRequest variation;
+                variation.seed = seed;
+                variation.strengthPct = strength;
+                const size_t changed = applyVariation(varied, style, request.settings, variation);
+                REQUIRE(changed > 0);
+                text += "variation seed=" + std::to_string(seed) + " strength=" + std::to_string(strength) +
+                        " changed=" + std::to_string(changed) + "\n" + describe(varied, request);
+            }
+        }
+        compareWithGolden(name + "_variation.golden", text);
     }
 }
 

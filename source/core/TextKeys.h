@@ -35,6 +35,9 @@ namespace mm::core::text {
     X(kVoiceLockedSuffix, "voice.lockedSuffix")                                                                        \
     X(kStatusDoneLocked, "status.doneLocked")                                                                          \
     X(kStatusAllLocked, "status.allLocked")                                                                            \
+    X(kStatusVaried, "status.varied")                                                                                  \
+    X(kStatusNothingToVary, "status.nothingToVary")                                                                    \
+    X(kStatusVaryAllLocked, "status.varyAllLocked")                                                                    \
     X(kButtonMuteByHub, "button.muteByHub")                                                                            \
     X(kLabelEnergy, "label.energy")                                                                                    \
     X(kLabelCreativity, "label.creativity")                                                                            \

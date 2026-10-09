@@ -24,7 +24,19 @@ namespace mm::plugin {
 /// What the last "Generate" did, for the editor (message thread).
 /// `DoneLocked`: done, and locked voices, key and length of the slot were kept. `AllLocked`: every voice is locked,
 /// nothing was generated.
-enum class GenerationStatus { Idle, Generating, Done, DoneLocked, NoResult, UseHub, Forwarded, AllLocked };
+enum class GenerationStatus {
+    Idle,
+    Generating,
+    Done,
+    DoneLocked,
+    NoResult,
+    UseHub,
+    Forwarded,
+    AllLocked,
+    Varied,
+    NothingToVary,
+    VaryAllLocked
+};
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
 /// audio and a hard-coded one-bar pattern played in sync with the host transport.
@@ -157,6 +169,14 @@ public:
     /// host is real-time again. A new request replaces a running one.
     void generate();
     GenerationStatus generationStatus() const { return generationStatus_; }
+    /// Message thread: varies the pattern of the slot that is selected now (SPEC 3.6, D-155) with the subtle operators,
+    /// synchronously (it is purely algorithmic). `voice` limits it to one voice (0-based), `seed` makes it repeatable
+    /// (default: random). The result is a history entry and an undo step and plays at the next bar line. Locked
+    /// voices stay as they are. False, with the status telling why, for a voice instance, an empty slot, all voices
+    /// locked, strength 0 or when nothing could change.
+    bool vary(int strengthPct, std::optional<size_t> voice = std::nullopt, std::optional<uint64_t> seed = std::nullopt);
+    /// How many notes the last successful `vary` changed.
+    size_t lastVariationChanges() const { return lastVariationChanges_; }
     /// Group (SPEC 6.5, D-141): where this instance stands, how many voices a hub has, and the offer to take over a
     /// lost hub. Safe to read from any thread; `acceptHubOffer` is for the message thread.
     mm::core::GroupStatus groupStatus() const;
@@ -218,6 +238,7 @@ private:
     mm::engine::PatternHandover handover_;
     mm::engine::SlotPublisher publisher_;
     GenerationStatus generationStatus_ = GenerationStatus::Idle; // message thread
+    size_t lastVariationChanges_ = 0;                            // message thread
     struct ParkedResult {
         GenerationJob job;
         mm::core::Pattern pattern;
