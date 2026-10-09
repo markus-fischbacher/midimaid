@@ -1310,6 +1310,7 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
     Einsatzposition Legato, Wahrscheinlichkeits-Spur
   - Alle Experten-Werte haben stiltypische Standards; wer nur Basis nutzt, bekommt stimmige Ergebnisse
 - **Starttonart:** zuletzt verwendete Tonart, beim allerersten Start A-Moll
+  - Stand der Umsetzung (v1.0): Ebenen und Starttonart über die globale Einstellungsdatei (D-162); der Spurfokus wird nicht gespeichert.
 - Look: dunkel, minimalistisch, an Ableton angelehnt: flache Flächen, wenig Farbe, eine Akzentfarbe
   pro Stimme (Bass, Melodie), gut lesbare Sans-Serif-Schrift, keine Skeuomorphie
 - Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Knopf „Fokus“

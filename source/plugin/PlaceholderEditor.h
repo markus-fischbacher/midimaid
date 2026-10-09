@@ -23,6 +23,8 @@ public:
     /// The voice (1 to 8) that has the focus in the roll area of the hub UI, 0 when all are shown.
     int focusedVoice() const { return focusedVoice_; }
     /// The strength (0 to 100 %) that "Variation" uses; a value of the open editor, not saved (D-161).
+    /// True while the expert level is shown (SPEC 8.1); the basic level is the default.
+    bool expertLevel() const { return expert_; }
     int variationStrength() const { return static_cast<int>(strengthSlider_.getValue()); }
 
 private:
@@ -45,6 +47,11 @@ private:
     /// state of Undo, Redo and the history browser.
     void varyVoice(std::optional<size_t> voice, std::optional<size_t> slot);
     void updateActionButtons();
+    /// The levels of the hub UI (SPEC 8.1, D-162): shows or hides the expert controls.
+    void applyLevel();
+    /// Takes the values of the user's settings file once it is read (level, strength, grid, snapping).
+    void applyStoredSettings();
+    void saveEditSettings();
 
     ProcessorBase& processor_;
     juce::ComboBox roleBox_;
@@ -58,6 +65,7 @@ private:
     juce::ComboBox gridBox_; // hub: the edit grid of the piano rolls
     juce::ToggleButton tripletButton_;
     juce::ComboBox snapBox_;
+    juce::ToggleButton expertButton_;
     juce::TextButton varyAllButton_;
     juce::Label strengthLabel_;
     juce::Slider strengthSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
@@ -86,6 +94,8 @@ private:
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;
     int muteVoice_ = 0; // the voice the mute button is bound to
     int focusedVoice_ = 0;
+    bool expert_ = false;
+    bool settingsApplied_ = false;
     bool voiceLayout_ = false;
     ProcessorBase::VoiceView shown_; // what the roll shows now
     juce::Label statusLabel_;

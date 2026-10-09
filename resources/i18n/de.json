@@ -51,6 +51,7 @@
   "label.strength": "Stärke",
   "label.history": "Verlauf {n}/{m}",
   "label.historyNone": "Verlauf –",
+  "button.expert": "Experte",
   "button.renew": "Neu",
   "button.vary": "Variation",
   "button.varyAll": "Variation (alle)",

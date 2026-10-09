@@ -136,7 +136,7 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
   - Stand: Kern und Operatoren (D-155, D-156), `ProcessorBase::vary` mit Stärke-Parameter, Schaltflächen „Variation“ je Stimme und „Variation (alle)“ mit Stärke-Regler (D-161). Offen bleibt die Kalibrierung der Stärke im Hörtest (HOST-VERIFIKATION).
 - [x] Verlauf (20 Ergebnisse pro Slot) und Undo-Stapel nach SPEC §3.6 (Blättern und Anzeige „Verlauf n/m“, D-160 und D-161)
 - [x] Schaltflächen für alle Aktionen (Rückgängig, Wiederholen, Duplizieren, Generieren, Variation; dazu „Neu“ je Stimme und das Blättern im Verlauf, D-160 und D-161)
-- [ ] Oberfläche in zwei Ebenen: Basis und Experte (SPEC §8.1), Starttonart
+- [x] Oberfläche in zwei Ebenen: Basis und Experte (SPEC §8.1), Starttonart (D-162; globale Einstellungsdatei, Oktave/Archetyp/Swing folgen mit ihren Elementen)
 - [x] Übersetzungs-Infrastruktur mit deutscher Sprachdatei (D-152)
 
 **Abnahme:** Alle Edits sind rückgängig zu machen. Gesperrte Stimmen bleiben bei Variationen erhalten.

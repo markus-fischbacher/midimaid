@@ -1,4 +1,4 @@
-add_executable(mm_core_tests test_version.cpp test_midi_file.cpp test_random.cpp test_theory.cpp test_pattern.cpp test_constraints.cpp test_output_stage.cpp test_register.cpp test_chord_symbol.cpp test_style_profile.cpp test_velocity_contour.cpp test_voicing.cpp test_motif.cpp test_quality.cpp test_copy_protection.cpp test_archetype.cpp test_archetype_melody.cpp test_macros.cpp test_groove.cpp test_progression.cpp test_pattern_generator.cpp test_form_plan.cpp test_series.cpp test_golden.cpp test_slot_bank.cpp test_parameter_register.cpp test_instance_core.cpp test_group_registry.cpp test_translation.cpp test_pattern_edit.cpp test_undo_stack.cpp test_voice_lock.cpp test_variation.cpp test_variation_structural.cpp test_roll_edit.cpp)
+add_executable(mm_core_tests test_version.cpp test_midi_file.cpp test_random.cpp test_theory.cpp test_pattern.cpp test_constraints.cpp test_output_stage.cpp test_register.cpp test_chord_symbol.cpp test_style_profile.cpp test_velocity_contour.cpp test_voicing.cpp test_motif.cpp test_quality.cpp test_copy_protection.cpp test_archetype.cpp test_archetype_melody.cpp test_macros.cpp test_groove.cpp test_progression.cpp test_pattern_generator.cpp test_form_plan.cpp test_series.cpp test_golden.cpp test_slot_bank.cpp test_parameter_register.cpp test_instance_core.cpp test_group_registry.cpp test_translation.cpp test_pattern_edit.cpp test_undo_stack.cpp test_voice_lock.cpp test_variation.cpp test_variation_structural.cpp test_roll_edit.cpp test_global_settings.cpp)
 target_link_libraries(mm_core_tests PRIVATE mm_core Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources"
                                                   MIDIMAID_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
@@ -15,8 +15,8 @@ find_package(Threads REQUIRED)
 target_link_libraries(mm_engine_tests PRIVATE mm_engine Threads::Threads Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_engine_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
-add_executable(mm_plugin_glue_tests test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp)
-mm_warn_sources(test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp)
+add_executable(mm_plugin_glue_tests test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp glue_listener.cpp)
+mm_warn_sources(test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp glue_listener.cpp)
 # The generation tests pump the message loop (runDispatchLoopUntil needs modal loops).
 target_compile_definitions(mm_plugin_glue_tests PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catch2WithMain)
