@@ -245,12 +245,13 @@ Algorithmische Mutationen, deterministisch über einen Seed, in zwei Gruppen:
   Oktavsprünge, Dichte erhöhen oder verringern, Motiv umkehren oder spiegeln, Call & Response tauschen
 - Gesperrte Stimmen (und ab v1.1 gesperrte Dimensionen, §3.5) bleiben unverändert
 - Regler „Stärke“ (0–100 %)
-  - Stand der Umsetzung: Kern und Operatoren in `core/Variation` (D-155); strukturelle Operatoren ab 25 % Stärke (D-156).
+  - Stand der Umsetzung: Kern und Operatoren in `core/Variation` (D-155); strukturelle Operatoren ab 25 % Stärke (D-156); Schaltflächen und Regler im Hub-Fenster (D-161, Regler als Wert des offenen Fensters, Ablage mit den Einstellungen).
 - Variationen sind **rein algorithmisch** (schnell, offline, ohne Kosten). Für KI-Ergebnisse dient „Generieren“.
 - **Verlauf und Rückgängig:** Der Verlauf ist eine Liste der letzten 20 *Ergebnisse* pro Slot
   (Generieren, Variation, Verfeinern, ab v1.1 mit „Behalten“ übernommene Auto-Evolve-Stufen). Jede dieser Aktionen ist zugleich *ein* Schritt im
   Undo-Stapel. Notenbearbeitungen sind nur Undo-Schritte, keine Verlaufseinträge. Cmd+Z macht also immer
   den letzten Schritt rückgängig, Cmd+[ / Cmd+] blättert nur durch Ergebnisse.
+  - Stand der Umsetzung (v1.0): Schaltflächen „Rückgängig“, „Wiederholen“ und „◀ Verlauf n/m ▶“ (D-160, D-161); Blättern verwirft die Undo-Schritte des Slots; **keine Tasten** (D-126).
 
 ### 3.7 Patterns und Phrasen (bis 16 Takte)
 Patterns sind 1, 2, 4, 8 oder 16 Takte lang ([Backlog]: bis 64 Takte). Längere Abläufe entstehen in der

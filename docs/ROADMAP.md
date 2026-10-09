@@ -129,13 +129,13 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
 
 ## Phase 2 – Bearbeitung und Variationen
 - [x] Piano-Roll (eine Spur pro Stimme): Setzen, Löschen, Verschieben, Länge, Velocity-Spur, Slide, Akzent (D-157, D-158; Sichtprüfung im Host steht aus)
-- [ ] Raster, Skalen-Einrasten, Undo/Redo (Kern und Plugin-Anbindung fertig, D-153; Raster, Einrasten und Tasten in der Roll fertig, D-157; Schaltflächen für Rückgängig und Wiederholen folgen in P2-G)
+- [x] Raster, Skalen-Einrasten, Undo/Redo (Kern und Plugin-Anbindung D-153; Raster und Einrasten in der Roll D-157; Schaltflächen „Rückgängig“ und „Wiederholen“ D-161; keine festen Tasten, D-159)
 - [x] Spurfokus (alle / einzelne Stimme) (D-159; Kürzel ab v1.1)
 - [x] Stimme sperren (SPEC §3.5; D-154: Erzeugen um gesperrte Stimmen, Schalter je Stimmenzeile; Variation und Verfeinern folgen den Hilfsfunktionen)
-- [ ] Variations-Engine mit subtilen und strukturellen Operatoren und Stärke-Regler (SPEC §3.6)
-  - Stand: Kern und Operatoren fertig (D-155, D-156), `ProcessorBase::vary` mit Stärke-Parameter. Offen bis zum Abhaken: Schaltfläche und Stärke-Regler in der Oberfläche (P2-G), Kalibrierung der Stärke im Hörtest.
-- [ ] Verlauf (20 Ergebnisse pro Slot) und Undo-Stapel nach SPEC §3.6
-- [ ] Schaltflächen für alle Aktionen (Rückgängig, Wiederholen, Duplizieren, Generieren, Variation)
+- [x] Variations-Engine mit subtilen und strukturellen Operatoren und Stärke-Regler (SPEC §3.6)
+  - Stand: Kern und Operatoren (D-155, D-156), `ProcessorBase::vary` mit Stärke-Parameter, Schaltflächen „Variation“ je Stimme und „Variation (alle)“ mit Stärke-Regler (D-161). Offen bleibt die Kalibrierung der Stärke im Hörtest (HOST-VERIFIKATION).
+- [x] Verlauf (20 Ergebnisse pro Slot) und Undo-Stapel nach SPEC §3.6 (Blättern und Anzeige „Verlauf n/m“, D-160 und D-161)
+- [x] Schaltflächen für alle Aktionen (Rückgängig, Wiederholen, Duplizieren, Generieren, Variation; dazu „Neu“ je Stimme und das Blättern im Verlauf, D-160 und D-161)
 - [ ] Oberfläche in zwei Ebenen: Basis und Experte (SPEC §8.1), Starttonart
 - [x] Übersetzungs-Infrastruktur mit deutscher Sprachdatei (D-152)
 

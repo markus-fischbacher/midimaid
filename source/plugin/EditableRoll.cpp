@@ -531,6 +531,22 @@ void EditableRoll::deleteSelection() {
     removeIds(std::vector<uint32_t>(selection_.begin(), selection_.end()));
 }
 
+void EditableRoll::duplicateSelection() {
+    if (selection_.empty() || !haveView_) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    std::vector<uint32_t> added;
+    const bool ok = processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) {
+        return mm::core::duplicateNotes(pattern, voice, ids, grid_.ticks(), &added);
+    });
+    if (ok) {
+        selection_ = std::set<uint32_t>(added.begin(), added.end());
+        repaint();
+    }
+}
+
 void EditableRoll::zoomAt(double x, double factor) {
     if (!haveView_) {
         return;

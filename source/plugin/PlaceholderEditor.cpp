@@ -142,6 +142,51 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     snapBox_.onChange = [this] { applyEditSettings(); };
     addChildComponent(snapBox_);
 
+    varyAllButton_.setComponentID("vary_all");
+    varyAllButton_.setButtonText(tr(keys::kButtonVaryAll));
+    varyAllButton_.onClick = [this] { varyVoice(std::nullopt, std::nullopt); };
+    addChildComponent(varyAllButton_);
+    strengthLabel_.setText(tr(keys::kLabelStrength), juce::dontSendNotification);
+    strengthLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    addChildComponent(strengthLabel_);
+    strengthSlider_.setComponentID("strength");
+    strengthSlider_.setRange(0.0, 100.0, 1.0);
+    strengthSlider_.setValue(30.0, juce::dontSendNotification);
+    addChildComponent(strengthSlider_);
+
+    undoButton_.setComponentID("undo");
+    undoButton_.setButtonText(tr(keys::kButtonUndo));
+    undoButton_.onClick = [this] {
+        processor_.undo();
+        updateStatus();
+    };
+    addChildComponent(undoButton_);
+    redoButton_.setComponentID("redo");
+    redoButton_.setButtonText(tr(keys::kButtonRedo));
+    redoButton_.onClick = [this] {
+        processor_.redo();
+        updateStatus();
+    };
+    addChildComponent(redoButton_);
+    historyBackButton_.setComponentID("history_back");
+    historyBackButton_.setButtonText(tr(keys::kButtonHistoryBack));
+    historyBackButton_.onClick = [this] {
+        processor_.historyBack(static_cast<size_t>(std::max(shownInfo_.slot, 1) - 1));
+        updateStatus();
+    };
+    addChildComponent(historyBackButton_);
+    historyForwardButton_.setComponentID("history_forward");
+    historyForwardButton_.setButtonText(tr(keys::kButtonHistoryForward));
+    historyForwardButton_.onClick = [this] {
+        processor_.historyForward(static_cast<size_t>(std::max(shownInfo_.slot, 1) - 1));
+        updateStatus();
+    };
+    addChildComponent(historyForwardButton_);
+    historyLabel_.setComponentID("history_label");
+    historyLabel_.setJustificationType(juce::Justification::centred);
+    historyLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    addChildComponent(historyLabel_);
+
     scaleBox_.setComponentID("scale");
     scaleBox_.addItem(tr(keys::kScaleAuto), 1);
     {
@@ -369,8 +414,11 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     rollView_.setVisible(voiceLayout);
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
-             &keyBox_, &scaleBox_, &barsBox_, &seedEditor_, &randomButton_, &energySlider_, &creativitySlider_,
-             &energyLabel_, &creativityLabel_, &infoLabel_, &gridBox_, &tripletButton_, &snapBox_}) {
+             &keyBox_,         &scaleBox_,         &barsBox_,     &seedEditor_,        &randomButton_,
+             &energySlider_,   &creativitySlider_, &energyLabel_, &creativityLabel_,   &infoLabel_,
+             &gridBox_,        &tripletButton_,    &snapBox_,     &varyAllButton_,     &strengthLabel_,
+             &strengthSlider_, &undoButton_,       &redoButton_,  &historyBackButton_, &historyForwardButton_,
+             &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
     for (auto& button : slotButtons_) {
@@ -458,11 +506,40 @@ void PlaceholderEditor::applyFocus() {
     resized();
 }
 
+void PlaceholderEditor::varyVoice(std::optional<size_t> voice, std::optional<size_t> slot) {
+    processor_.vary(variationStrength(), voice, std::nullopt, slot);
+    updateStatus();
+}
+
+void PlaceholderEditor::updateActionButtons() {
+    undoButton_.setEnabled(processor_.canUndo());
+    redoButton_.setEnabled(processor_.canRedo());
+    const auto& info = shownInfo_;
+    historyBackButton_.setEnabled(info.historyIndex > 0 && info.historySize > 0);
+    historyForwardButton_.setEnabled(info.historyIndex + 1 < info.historySize);
+    historyLabel_.setText(info.historySize == 0 ? tr(keys::kLabelHistoryNone)
+                                                : tr(keys::kLabelHistory, {{"n", std::to_string(info.historyIndex + 1)},
+                                                                           {"m", std::to_string(info.historySize)}}),
+                          juce::dontSendNotification);
+    bool anyFilled = false;
+    for (auto& row : rows_) {
+        row->updateButtons();
+        anyFilled = anyFilled || row->slotIndex() >= 0;
+    }
+    varyAllButton_.setEnabled(anyFilled);
+}
+
 void PlaceholderEditor::rebuildRows(size_t count) {
     rows_.clear();
     for (size_t i = 0; i < count; ++i) {
         auto row = std::make_unique<VoiceRow>(processor_, static_cast<int>(i) + 1);
         row->onFocusClicked = [this](int voice) { setFocusedVoice(focusedVoice_ == voice ? 0 : voice); };
+        row->onVaryClicked = [this, rowPtr = row.get()](int voice) {
+            if (rowPtr->slotIndex() >= 0) {
+                varyVoice(static_cast<size_t>(voice - 1), static_cast<size_t>(rowPtr->slotIndex()));
+            }
+        };
+        row->onAction = [this] { updateStatus(); };
         addAndMakeVisible(*row);
         rows_.push_back(std::move(row));
     }
@@ -526,6 +603,7 @@ void PlaceholderEditor::updateFullView() {
                                juce::dontSendNotification);
         }
     }
+    updateActionButtons();
 }
 
 void PlaceholderEditor::updateVoiceView() {
@@ -627,7 +705,19 @@ void PlaceholderEditor::resized() {
 
     statusLabel_.setBounds(area.removeFromBottom(40).reduced(16, 0));
     infoLabel_.setBounds(area.removeFromBottom(28).reduced(16, 0));
+    auto historyBar = area.removeFromBottom(32).reduced(16, 2);
+    undoButton_.setBounds(historyBar.removeFromLeft(110));
+    historyBar.removeFromLeft(8);
+    redoButton_.setBounds(historyBar.removeFromLeft(110));
+    historyBar.removeFromLeft(32);
+    historyBackButton_.setBounds(historyBar.removeFromLeft(40));
+    historyLabel_.setBounds(historyBar.removeFromLeft(120));
+    historyForwardButton_.setBounds(historyBar.removeFromLeft(40));
     auto editBar = area.removeFromTop(32).reduced(16, 2);
+    varyAllButton_.setBounds(editBar.removeFromRight(140));
+    editBar.removeFromRight(8);
+    strengthSlider_.setBounds(editBar.removeFromRight(220));
+    strengthLabel_.setBounds(editBar.removeFromRight(60));
     gridBox_.setBounds(editBar.removeFromLeft(80));
     editBar.removeFromLeft(8);
     tripletButton_.setBounds(editBar.removeFromLeft(90));

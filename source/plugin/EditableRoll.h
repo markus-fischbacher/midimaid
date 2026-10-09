@@ -48,6 +48,9 @@ public:
     /// the user assigns call them). Each is one undo step.
     void selectAll();
     void deleteSelection();
+    /// Copies the selection right behind itself (`core/PatternEdit::duplicateNotes`, offset rounded up to the grid) and
+    /// selects the copies; one undo step. Nothing happens without selection or when no copy fits.
+    void duplicateSelection();
     /// Moves the selection as a block: `ticks` later (negative: earlier), and one pitch step up or down
     /// (`pitchDirection` +1 or -1, the next tone the snapping allows), or an octave with `octave`.
     void moveSelection(int64_t ticks, int pitchDirection = 0, bool octave = false);
