@@ -235,3 +235,19 @@ Nur `detectHostCapabilities` (`HostDetection.cpp`) liest JUCEs `wrapperType` und
 | Linux (nur auf Zuruf) | `ubuntu-24.04`, Image 20261004.327.1 (Ubuntu 24.04.5) | GCC 13.3.0, CMake 3.31.6, Ninja (apt) | grün: Build inklusive VST3 (Kompiliertest) und Standalone, alle Tests (550) unter `xvfb` |
 
 Gepinnte Actions: `actions/checkout` v7, `actions/cache` v6 (Tags), `ilammy/msvc-dev-cmd` per Commit-SHA.
+
+### D-152 – Übersetzungs-Infrastruktur (Phase 2, P2-A)
+- **Format:** `resources/i18n/de.json`, flaches JSON-Objekt `Schlüssel → Text`, als Binärdaten ins Plugin eingebettet (wie die
+  Stilprofile, D-139). `core/Translation` (ohne JUCE) lädt es; `tr(Schlüssel)` liefert den Text, bei fehlendem Eintrag den
+  Schlüssel selbst, damit Lücken sichtbar bleiben. Platzhalter `{name}` werden in einem Durchgang ersetzt (ein eingesetzter Wert wird
+  nicht erneut durchsucht, ein Platzhalter ohne Wert bleibt stehen). Zugriff im Plugin über `mm::plugin::tr(...)`.
+- **Schlüsselliste:** `core/TextKeys.h` (X-Makro) ist die einzige Quelle der Schlüssel im Code; Skalennamen haben `scale.<id>`. Tests prüfen,
+  dass `de.json` genau diese Schlüssel enthält (nichts fehlt, nichts ungenutzt, keine leeren Texte), dass alle Platzhalter bekannt sind
+  und dass künftige Sprachdateien (`en.json`, v1.1) dieselben Schlüssel haben.
+- **Nicht übersetzt:** Dateinamen und Spurnamen des MIDI-Exports (`MidiMaid_Slot1_Bass.mid`, `VoiceView::voiceName`), Tonartnamen (C, C# …),
+  Parameter-IDs. Die UI-Anzeige läuft über `VoiceView::displayName`; der Akzent der Melodie hängt an `VoiceView::melody`, nicht mehr am
+  Anzeigetext. Stilnamen kommen aus dem Profil (`nameDe`).
+- **Geänderte Tests (offengelegt):** Die Editor- und Gruppentests in `tests/test_group_wiring.cpp` verglichen englische Texte (Statuszeile, Tonart-/
+  Skalenfeld, Stimmennamen, Infozeile, Sandbox-Hinweis); sie prüfen dieselben Dinge und vergleichen jetzt die deutschen Texte. Neu: `tests/test_translation.cpp`,
+  zwei Tests zur eingebetteten Tabelle und zu den Editor-Texten.
+- **Grenzen:** Die Fehlertexte aus `core`/`ai` (kommen mit Phase 3) und die Sprachumschaltung (v1.1) fehlen noch.

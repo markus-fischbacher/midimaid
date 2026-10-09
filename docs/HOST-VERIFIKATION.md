@@ -123,8 +123,8 @@ inaktiven Parametern stehen jetzt in Teil H.
 Instanzen **derselben Variante** (D-141, O-28): in Logic alle als MIDI-FX `MidiMaid MIDI`, in Live alle als VST3. Einen
 Hub und zwei Voices anlegen, je auf einer eigenen Spur mit einem Synth mit hartem Klick-Sound (wie in Teil F). In jeder
 Instanz stellst du oben links die **Rolle** ein (Solo, Hub, Voice) und bei Voices daneben die **Stimme** (Voice 1 =
-Bass, Voice 2 = Melodie). Der Hub zeigt „Hub: 2 voices“, eine verbundene Voice „Connected to the hub“. Vor dem Test
-im Hub Slot 1 bis 3 mit **Generate** füllen (zwischen den Klicks in der Slot-Leiste die Slots 1, 2, 3 wählen; belegte Slots sind heller). Die Zahl
+Bass, Voice 2 = Melodie). Der Hub zeigt „Hub: 2 Stimmen“, eine verbundene Voice „Mit dem Hub verbunden“. Vor dem Test
+im Hub Slot 1 bis 3 mit **Erzeugen** füllen (zwischen den Klicks in der Slot-Leiste die Slots 1, 2, 3 wählen; belegte Slots sind heller). Die Zahl
 „(n late)“ in der Statuszeile einer Voice zählt Wechsel, die zu spät ankamen; sie soll in allen Tests 0 bleiben.
 
 **Was „taktgenau“ heißt:** Wie in Teil B: Hub und Voice schlagen im Bounce oder Mitschnitt sample-gleich an, und ein
@@ -132,28 +132,28 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 
 | Nr. | Prüfung | Erwartung | Live | Logic | Bemerkung |
 |---|---|---|---|---|---|
-| H1 | Zwei Instanzen mit Rolle Hub und Voice | Hub zeigt „1 voice“, Voice „Connected to the hub“ (Registry im Prozess geteilt) | | | |
+| H1 | Zwei Instanzen mit Rolle Hub und Voice | Hub zeigt „1 voice“, Voice „Mit dem Hub verbunden“ (Registry im Prozess geteilt) | | | |
 | H2 | Zweite Hub-Instanz anlegen | Zeigt „There is already a hub“, bleibt solo | | | |
 | H3 | Hub und zwei Voices spielen, Loop ein, Stop, Start | Alle im Takt, keine hängenden Noten, Voices folgen dem Hub-Slot | | | |
 | H4 | Slot-Parameter im Hub wechselt **weit vor** der Taktgrenze (z. B. auf Zählzeit 2) | Hub und Voices wechseln gemeinsam zum nächsten Takt | | | |
 | H5 | Slot-Parameter im Hub wechselt **etwa 50 ms vor** der Taktgrenze (Klick, nicht Automation) | Hub und Voices wechseln in demselben Takt (ein Takt später als bei H4 ist richtig); „(n late)“ bleibt 0. Fällt „n late“ größer 0 aus: Versatz notieren, Ergebnis in H12 | | | |
-| H6 | Im Hub **Generate** drücken, etwa 50 ms vor der Taktgrenze | Neues Pattern erscheint in Hub und Voices im selben Takt (D-144) | | | |
-| H7 | Slot-Automation im Hub, Start mitten im Arrangement (z. B. ab Takt 37) | Hub und Voices spielen sofort den dort automatisierten Slot; bei „Slot: follows hub“ keine Abweichung | | | |
-| H8 | Voice auf „Slot: own“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt | | | |
+| H6 | Im Hub **Erzeugen** drücken, etwa 50 ms vor der Taktgrenze | Neues Pattern erscheint in Hub und Voices im selben Takt (D-144) | | | |
+| H7 | Slot-Automation im Hub, Start mitten im Arrangement (z. B. ab Takt 37) | Hub und Voices spielen sofort den dort automatisierten Slot; bei „Slot: folgt dem Hub“ keine Abweichung | | | |
+| H8 | Voice auf „Slot: eigener“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt | | | |
 | H9 | Hub: `Mute 2` an | Voice 2 schweigt mit Note-Off, Voice 1 und der Hub spielen weiter; wieder aus: Voice 2 spielt ab der nächsten Note | | | |
 | H10 | Voice 1: eigenes `Mute 1` an | Nur Voice 1 schweigt | | | |
-| H11 | In einer Voice **Generate** drücken | Statuszeile „Asked the hub to generate“, der Hub erzeugt in seinen Slot, alle bekommen das Pattern zum selben Takt | | | |
+| H11 | In einer Voice **Erzeugen** drücken | Statuszeile „Hub zum Erzeugen aufgefordert“, der Hub erzeugt in seinen Slot, alle bekommen das Pattern zum selben Takt | | | |
 | H12 | Hub und Voice getrennt bouncen (Offline) und die Wellenformen vergleichen | Anschläge sample-gleich. Sonst: Versatz in Samples und Millisekunden notieren (Grundlage für den Mindestvorlauf, D-90) | | | |
-| H13 | Hub löschen | Voices spielen weiter, die älteste zeigt „Hub not found: you can take over“ und den Knopf „Become hub“; die zweite Voice „Hub not found“ | | | |
-| H14 | „Become hub“ drücken | Die Voice wird Hub („Hub: 1 voice“), die andere Voice verbindet sich, Slot-Wechsel laufen wieder gruppenweit | | | |
+| H13 | Hub löschen | Voices spielen weiter, die älteste zeigt „Hub not found: you can take over“ und den Knopf „Hub werden“; die zweite Voice „Hub not found“ | | | |
+| H14 | „Hub werden“ drücken | Die Voice wird Hub („Hub: 1 Stimme“), die andere Voice verbindet sich, Slot-Wechsel laufen wieder gruppenweit | | | |
 | H15 | Hub auf „Output: none“ | Der Hub schweigt, Voices spielen und folgen weiter | | | |
 | H16 | Projekt **mit** Hub speichern, schließen, öffnen | Rolle, Stimme, Slot-Satz stimmen, Gruppe verbindet sich, Slot-Satz der Voices entspricht dem Hub | | | |
 | H17 | Projekt speichern, **Hub vorher entfernen**, öffnen | Voice spielt ihre Stimme unverändert weiter und zeigt „Hub not found“ (SPEC §6.5) | | | |
 | H18 | Projekt von **vor** Hub & Voices öffnen (Instanz ohne Rolle im State) | Instanz ist Solo und spielt wie bisher | | | |
-| H19 | Einzelspur-Bounce und Freeze einer Voice mit Slot-Automation im Hub (O-22) | Notieren, ob der Slot stimmt; sonst „Slot: own“ mit eigener Automation (Ersatzweg D-131) | | | |
+| H19 | Einzelspur-Bounce und Freeze einer Voice mit Slot-Automation im Hub (O-22) | Notieren, ob der Slot stimmt; sonst „Slot: eigener“ mit eigener Automation (Ersatzweg D-131) | | | |
 | H20 | Freeze einer Synth-Spur, die nur über „MIDI From“ gespielt wird (Live) | Erwartung: still. Abweichung notieren | – | | |
 | H21 | Logic: „Record MIDI to Track Here“ auf der Voice-Spur; Live: Spur mit „MIDI From“ der Voice-Spur und Monitoring „In“ | Aufnahme enthält die Voice-Stimme | | | |
-| H22 | Nicht aktive Parameter (SPEC §3.13): Zeigen Live (VST3) und Logic (AU) die 15 nicht aktiven Parameter (u. a. „Transpose“, „Generate“, „Variation 1“ bis „Variation All“, „Evolve“, „Evolve Keep“, „Creativity“, „Energy“) in der Automationsliste, und lässt sich einer automatisieren? Lässt sich „Slot“ automatisieren, wechselt das Pattern zum Taktstart, und schaltet „Mute 1“ den Bass stumm? | Notieren je Host | | | |
+| H22 | Nicht aktive Parameter (SPEC §3.13): Zeigen Live (VST3) und Logic (AU) die 15 nicht aktiven Parameter (u. a. „Transpose“, „Erzeugen“, „Variation 1“ bis „Variation All“, „Evolve“, „Evolve Keep“, „Creativity“, „Energy“) in der Automationsliste, und lässt sich einer automatisieren? Lässt sich „Slot“ automatisieren, wechselt das Pattern zum Taktstart, und schaltet „Mute 1“ den Bass stumm? | Notieren je Host | | | |
 | H23 | **Nur Hosts mit Plugin-Sandbox** (z. B. Bitwig „Individually“): Hub und Voice laden | Voice zeigt „Hub not found (if the hub is in this project: the host may run plug-ins in separate processes)“. Mit „By plug-in“ verbinden sich die Instanzen. Live und Logic sind nicht betroffen | – | – | |
 
 **Messung für den Mindestvorlauf (H5, H6, H12):** Der Standard ist 150 ms (D-90). Kommen bei H5 oder H6 verspätete Wechsel
