@@ -133,6 +133,7 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
 - [ ] Spurfokus (alle / einzelne Stimme)
 - [x] Stimme sperren (SPEC §3.5; D-154: Erzeugen um gesperrte Stimmen, Schalter je Stimmenzeile; Variation und Verfeinern folgen den Hilfsfunktionen)
 - [ ] Variations-Engine mit subtilen und strukturellen Operatoren und Stärke-Regler (SPEC §3.6)
+  - Stand: subtile Operatoren und Kern fertig (D-155, P2-D1); strukturelle Operatoren (P2-D2) und Stärke-Regler in der Oberfläche (P2-G) offen
 - [ ] Verlauf (20 Ergebnisse pro Slot) und Undo-Stapel nach SPEC §3.6
 - [ ] Schaltflächen für alle Aktionen (Rückgängig, Wiederholen, Duplizieren, Generieren, Variation)
 - [ ] Oberfläche in zwei Ebenen: Basis und Experte (SPEC §8.1), Starttonart

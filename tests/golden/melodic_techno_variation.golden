@@ -1,0 +1,55 @@
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=77
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=400
+  voice melody archetype=pluck_seq notes=16 velocitySum=1600
+  hash 7e1f8ccedcfeec02
+variation seed=1 strength=10 changed=4
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=77
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=397
+  voice melody archetype=pluck_seq notes=16 velocitySum=1606
+  hash ce54611b54a6c799
+variation seed=1 strength=50 changed=4
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=77
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=390
+  voice melody archetype=pluck_seq notes=16 velocitySum=1616
+  hash 51851deb3d5cb983
+variation seed=1 strength=100 changed=7
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=72
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=381
+  voice melody archetype=pluck_seq notes=16 velocitySum=1645
+  hash d82f273d3f119edf
+variation seed=2 strength=10 changed=3
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=79
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=406
+  voice melody archetype=pluck_seq notes=16 velocitySum=1600
+  hash 0b0f3d571ffe5d95
+variation seed=2 strength=50 changed=5
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=79
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=416
+  voice melody archetype=pluck_seq notes=16 velocitySum=1600
+  hash ee07ede04b4d0ff8
+variation seed=2 strength=100 changed=7
+pattern melodic_techno bars=4 seed=1 winner=16184226688143867045 score=79
+  key root=6 scale=dorian kick=4otf
+  chords i@0+2 bVII@2+2 i@4+2 bVII@6+2
+  phrases 0+4:main
+  voice bass archetype=long_tied notes=4 velocitySum=430
+  voice melody archetype=pluck_seq notes=16 velocitySum=1600
+  hash 64e0047d372c7a28

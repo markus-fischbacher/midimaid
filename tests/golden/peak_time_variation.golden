@@ -1,0 +1,55 @@
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3600
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1600
+  hash 1b5cfc0d610f41c1
+variation seed=1 strength=10 changed=5
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3593
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1606
+  hash 8e6efcf9f7150e06
+variation seed=1 strength=50 changed=8
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3600
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1616
+  hash bc7742219b158a54
+variation seed=1 strength=100 changed=17
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3609
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1645
+  hash 9d2ffe539e40b747
+variation seed=2 strength=10 changed=3
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3606
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1600
+  hash d79d627d1cd6def4
+variation seed=2 strength=50 changed=9
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=98
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3590
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1600
+  hash e1259b62805cc60a
+variation seed=2 strength=100 changed=19
+pattern peak_time bars=4 seed=1 winner=8196980753821780235 score=94
+  key root=4 scale=minor_pentatonic kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=rolling16 notes=36 velocitySum=3630
+  voice melody archetype=hypnotic_motif notes=16 velocitySum=1650
+  hash d5b422db7124ea26

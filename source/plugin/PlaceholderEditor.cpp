@@ -303,6 +303,16 @@ void PlaceholderEditor::updateStatus() {
     case GenerationStatus::AllLocked:
         statusLabel_.setText(tr(keys::kStatusAllLocked), juce::dontSendNotification);
         break;
+    case GenerationStatus::Varied:
+        statusLabel_.setText(tr(keys::kStatusVaried, {{"n", std::to_string(processor_.lastVariationChanges())}}),
+                             juce::dontSendNotification);
+        break;
+    case GenerationStatus::NothingToVary:
+        statusLabel_.setText(tr(keys::kStatusNothingToVary), juce::dontSendNotification);
+        break;
+    case GenerationStatus::VaryAllLocked:
+        statusLabel_.setText(tr(keys::kStatusVaryAllLocked), juce::dontSendNotification);
+        break;
     case GenerationStatus::NoResult:
         statusLabel_.setText(tr(keys::kStatusNoResult), juce::dontSendNotification);
         break;

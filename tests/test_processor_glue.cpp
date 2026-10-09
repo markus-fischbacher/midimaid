@@ -1155,3 +1155,113 @@ TEST_CASE("slots taken over from a hub clear the undo steps", "[plugin][edit]") 
     processor.setInstanceSettings(settings);
     CHECK_FALSE(processor.canUndo());
 }
+
+namespace {
+
+mm::core::Pattern generatedFor(mm::plugin::ProcessorBase& processor, uint64_t seed) {
+    mm::core::GenerationRequest request;
+    request.lengthBars = 4;
+    request.seed = seed;
+    const auto result = mm::core::generatePattern(*processor.styles().findOrFallback("peak_time"), request);
+    REQUIRE(result.success);
+    return result.pattern;
+}
+
+} // namespace
+
+TEST_CASE("a variation is a history entry and one undo step", "[plugin][variation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 5));
+    const auto base = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE(processor.vary(40, std::nullopt, 7));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::Varied);
+    CHECK(processor.lastVariationChanges() > 0);
+    const auto after = processor.slotsSnapshot();
+    REQUIRE(after.slot(0)->history.size() == 2);
+    CHECK(after.slot(0)->pattern->info.source == "variation");
+    CHECK(*after.slot(0)->pattern != base);
+    CHECK(processor.canUndo());
+    REQUIRE(processor.undo());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices == base.voices);
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == 1);
+    REQUIRE(processor.redo());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices == after.slot(0)->pattern->voices);
+}
+
+TEST_CASE("a variation with the same seed repeats, without a seed it is random", "[plugin][variation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 5));
+    REQUIRE(processor.vary(40, std::nullopt, 3));
+    const auto first = processor.slotsSnapshot().slot(0)->pattern->voices;
+    REQUIRE(processor.undo());
+    REQUIRE(processor.vary(40, std::nullopt, 3));
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices == first);
+    REQUIRE(processor.undo());
+    std::vector<std::vector<mm::core::Note>> melodies;
+    for (int i = 0; i < 6; ++i) {
+        REQUIRE(processor.vary(40));
+        melodies.push_back(processor.slotsSnapshot().slot(0)->pattern->voices[1].notes);
+        REQUIRE(processor.undo());
+    }
+    CHECK(std::count(melodies.begin(), melodies.end(), melodies[0]) < 6); // not six times the same variation
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == 1);
+}
+
+TEST_CASE("a variation leaves locked voices alone and says so when all are locked", "[plugin][variation][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 8));
+    const auto bass = processor.slotsSnapshot().slot(0)->pattern->voices[0];
+    REQUIRE(processor.setVoiceLocked(0, 0, true));
+    REQUIRE(processor.vary(100, std::nullopt, 1));
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes == bass.notes);
+    // The explicitly requested voice is locked: nothing to vary.
+    CHECK_FALSE(processor.vary(100, size_t{0}, 1));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::VaryAllLocked);
+    REQUIRE(processor.setVoiceLocked(0, 1, true));
+    const auto steps = processor.slotsSnapshot().slot(0)->history.size();
+    CHECK_FALSE(processor.vary(100));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::VaryAllLocked);
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == steps);
+}
+
+TEST_CASE("a variation that cannot happen is no step", "[plugin][variation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    CHECK_FALSE(processor.vary(50)); // empty slot
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::NothingToVary);
+    putInSlot(processor, generatedFor(processor, 5));
+    CHECK_FALSE(processor.vary(0)); // strength 0
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::NothingToVary);
+    CHECK_FALSE(processor.vary(50, size_t{9})); // unknown voice
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::NothingToVary);
+    CHECK_FALSE(processor.canUndo());
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == 1);
+}
+
+TEST_CASE("a voice instance does not vary", "[plugin][variation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Voice");
+    putInSlot(processor, generatedFor(processor, 5));
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    const auto before = processor.slotsSnapshot();
+    CHECK_FALSE(processor.vary(50));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::UseHub);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern == before.slot(0)->pattern);
+}
+
+TEST_CASE("a variation reaches the engine at the next bar line", "[plugin][variation]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    putInSlot(processor, generatedFor(processor, 5));
+    rig.run(10);
+    const uint64_t version = processor.activePatternVersion();
+    REQUIRE(processor.vary(50, std::nullopt, 2));
+    rig.run(400); // past the next bar line
+    CHECK(processor.activePatternVersion() != version);
+}

@@ -4,6 +4,7 @@
 #include "core/PlaybackRender.h"
 #include "core/SlotBankJson.h"
 #include "core/TextKeys.h"
+#include "core/Variation.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/PlaceholderEditor.h"
@@ -359,6 +360,71 @@ void ProcessorBase::generate() {
     parkTimer_.reset();
     generationStatus_ = GenerationStatus::Generating;
     generator_.request(job);
+}
+
+bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::optional<uint64_t> seed) {
+    mm::core::ArchetypeSettings settings;
+    size_t slotIndex = 0;
+    bool isVoice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+        settings.energyPct = settings_.generation.energyPct;
+        settings.creativityPct = settings_.generation.creativityPct;
+    }
+    if (isVoice) {
+        generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
+        return false;
+    }
+    slotIndex = static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    const uint64_t useSeed = seed ? *seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
+    bool done = false;
+    bool allLocked = false;
+    size_t changes = 0;
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto* slot = bank.slot(slotIndex);
+        if (slot == nullptr || !slot->pattern) {
+            return;
+        }
+        const mm::core::Pattern& current = *slot->pattern;
+        const auto candidates = voice ? std::vector<size_t>{*voice} : [&] {
+            std::vector<size_t> all;
+            for (size_t i = 0; i < current.voices.size(); ++i) {
+                all.push_back(i);
+            }
+            return all;
+        }();
+        allLocked = std::all_of(candidates.begin(), candidates.end(), [&](size_t i) {
+            return i < current.voices.size() && mm::core::isVoiceLocked(current.voices[i]);
+        });
+        if (allLocked) {
+            return;
+        }
+        const auto* style = styles_.findOrFallback(current.styleId);
+        if (style == nullptr) {
+            return;
+        }
+        mm::core::Pattern varied = current;
+        mm::core::VariationRequest request;
+        request.seed = useSeed;
+        request.strengthPct = strengthPct;
+        request.voice = voice;
+        changes = mm::core::applyVariation(varied, *style, settings, request);
+        if (changes == 0) {
+            return;
+        }
+        std::optional<mm::core::Pattern> before = current;
+        const size_t cursor = slot->cursor;
+        if (bank.setResult(slotIndex, std::move(varied))) {
+            undo_.recordResult(slotIndex, std::move(before), cursor, *bank.slot(slotIndex)->pattern);
+            done = true;
+        }
+    });
+    lastVariationChanges_ = done ? changes : 0;
+    generationStatus_ = done        ? GenerationStatus::Varied
+                        : allLocked ? GenerationStatus::VaryAllLocked
+                                    : GenerationStatus::NothingToVary;
+    return done;
 }
 
 void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {

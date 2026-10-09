@@ -1,0 +1,55 @@
+pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=92
+  key root=7 scale=phrygian kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=roll16_aggressive notes=36 velocitySum=3960
+  voice melody archetype=sparse_hits notes=4 velocitySum=400
+  hash 967231a5809a6205
+variation seed=1 strength=10 changed=5
+pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=92
+  key root=7 scale=phrygian kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=roll16_aggressive notes=36 velocitySum=3953
+  voice melody archetype=sparse_hits notes=4 velocitySum=406
+  hash 4501d3fea1536b91
+variation seed=1 strength=50 changed=8
+pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=92
+  key root=7 scale=phrygian kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=roll16_aggressive notes=36 velocitySum=3960
+  voice melody archetype=sparse_hits notes=4 velocitySum=416
+  hash 491a00870431068a
+variation seed=1 strength=100 changed=14
+pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=92
+  key root=7 scale=phrygian kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=roll16_aggressive notes=36 velocitySum=3993
+  voice melody archetype=sparse_hits notes=4 velocitySum=430
+  hash 3237a154aa7b6079
+variation seed=2 strength=10 changed=3
+pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=83
+  key root=7 scale=phrygian kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=roll16_aggressive notes=36 velocitySum=3966
+  voice melody archetype=sparse_hits notes=4 velocitySum=400
+  hash e303144b1a55d88f
+variation seed=2 strength=50 changed=7
+pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=83
+  key root=7 scale=phrygian kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=roll16_aggressive notes=36 velocitySum=3950
+  voice melody archetype=sparse_hits notes=4 velocitySum=400
+  hash 5e320966c0860f9d
+variation seed=2 strength=100 changed=13
+pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=83
+  key root=7 scale=phrygian kick=4otf
+  chords i@0+8
+  phrases 0+4:main
+  voice bass archetype=roll16_aggressive notes=36 velocitySum=3984
+  voice melody archetype=sparse_hits notes=4 velocitySum=400
+  hash 584ef35f196ea51c
