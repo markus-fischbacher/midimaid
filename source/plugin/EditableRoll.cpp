@@ -655,7 +655,17 @@ void EditableRoll::mouseWheelMove(const juce::MouseEvent& event, const juce::Mou
         scrollBy(static_cast<int64_t>(std::llround(-amount * 300.0 * ticksPerPixel)), 0);
         return;
     }
-    scrollBy(0, static_cast<int>(std::lround(wheel.deltaY * 8.0)));
+    // A trackpad sends many small steps, each below one row: collect them (a change of direction starts again).
+    const double rows = static_cast<double>(wheel.deltaY) * 8.0;
+    if ((rows > 0.0) != (wheelRows_ > 0.0) && wheelRows_ != 0.0) {
+        wheelRows_ = 0.0;
+    }
+    wheelRows_ += rows;
+    const double whole = std::trunc(wheelRows_);
+    wheelRows_ -= whole;
+    if (whole != 0.0) {
+        scrollBy(0, static_cast<int>(whole));
+    }
 }
 
 void EditableRoll::paint(juce::Graphics& g) {
