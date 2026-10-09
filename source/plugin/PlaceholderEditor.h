@@ -20,6 +20,8 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    /// The voice (1 to 8) that has the focus in the roll area of the hub UI, 0 when all are shown.
+    int focusedVoice() const { return focusedVoice_; }
 
 private:
     void timerCallback() override;
@@ -34,6 +36,9 @@ private:
     void rebuildRows(size_t count);
     /// Hands the grid and the pitch snapping to every roll of the hub UI.
     void applyEditSettings();
+    /// Track focus (D-159): the voice that has the whole height, 0 for all.
+    void setFocusedVoice(int voice);
+    void applyFocus();
 
     ProcessorBase& processor_;
     juce::ComboBox roleBox_;
@@ -66,6 +71,7 @@ private:
     RollView rollView_;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;
     int muteVoice_ = 0; // the voice the mute button is bound to
+    int focusedVoice_ = 0;
     bool voiceLayout_ = false;
     ProcessorBase::VoiceView shown_; // what the roll shows now
     juce::Label statusLabel_;

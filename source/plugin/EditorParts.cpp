@@ -63,6 +63,15 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     };
     addAndMakeVisible(lockButton_);
 
+    focusButton_.setComponentID("focus_" + juce::String(voice));
+    focusButton_.setButtonText(tr(mm::core::text::kRollFocus));
+    focusButton_.onClick = [this] {
+        if (onFocusClicked) {
+            onFocusClicked(voice_);
+        }
+    };
+    addAndMakeVisible(focusButton_);
+
     roll_.setComponentID("roll_" + juce::String(voice));
     addAndMakeVisible(roll_);
     drag_.setComponentID("drag_" + juce::String(voice));
@@ -93,12 +102,36 @@ void VoiceRow::updateMuted() {
     roll_.setDimmed(raw != nullptr && raw->load() >= 0.5f);
 }
 
+void VoiceRow::setCollapsed(bool collapsed) {
+    if (collapsed_ == collapsed) {
+        return;
+    }
+    collapsed_ = collapsed;
+    roll_.setVisible(!collapsed);
+    resized();
+}
+
+void VoiceRow::setFocused(bool focused) {
+    focusButton_.setToggleState(focused, juce::dontSendNotification);
+}
+
 void VoiceRow::resized() {
     auto area = getLocalBounds().reduced(16, 4);
+    if (collapsed_) {
+        // A strip: everything but the roll, side by side.
+        nameLabel_.setBounds(area.removeFromLeft(110));
+        muteButton_.setBounds(area.removeFromLeft(90));
+        lockButton_.setBounds(area.removeFromLeft(100));
+        focusButton_.setBounds(area.removeFromLeft(80));
+        drag_.setBounds(area.removeFromLeft(60).withHeight(area.getHeight()));
+        roll_.setBounds({});
+        return;
+    }
     auto left = area.removeFromLeft(130);
     nameLabel_.setBounds(left.removeFromTop(28));
     muteButton_.setBounds(left.removeFromTop(28));
     lockButton_.setBounds(left.removeFromTop(28));
+    focusButton_.setBounds(left.removeFromTop(28));
     drag_.setBounds(left.removeFromBottom(40));
     area.removeFromLeft(8);
     roll_.setBounds(area);

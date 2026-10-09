@@ -5,6 +5,7 @@
 #include "plugin/ProcessorBase.h"
 #include "plugin/RollView.h"
 
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace mm::plugin {
@@ -41,6 +42,13 @@ public:
     /// Dim the roll while the voice is muted. Message thread.
     void updateMuted();
     EditableRoll& roll() { return roll_; }
+    /// Track focus (D-159): a collapsed row is a strip with name, mute, lock, focus switch and the grip, without the
+    /// roll. `setFocused` only sets the state of the switch.
+    void setCollapsed(bool collapsed);
+    bool collapsed() const { return collapsed_; }
+    void setFocused(bool focused);
+    /// Called with the voice number (1 to 8) when the focus switch is clicked.
+    std::function<void(int)> onFocusClicked;
 
     void resized() override;
 
@@ -50,6 +58,8 @@ private:
     juce::Label nameLabel_;
     juce::ToggleButton muteButton_;
     juce::ToggleButton lockButton_;
+    juce::ToggleButton focusButton_;
+    bool collapsed_ = false;
     int slotIndex_ = -1; // the slot the row shows (0-based), -1 while there is none
     EditableRoll roll_;
     DragHandle drag_;

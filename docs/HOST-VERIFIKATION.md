@@ -155,6 +155,9 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H21 | Logic: „Record MIDI to Track Here“ auf der Voice-Spur; Live: Spur mit „MIDI From“ der Voice-Spur und Monitoring „In“ | Aufnahme enthält die Voice-Stimme | | | |
 | H22 | Nicht aktive Parameter (SPEC §3.13): Zeigen Live (VST3) und Logic (AU) die 15 nicht aktiven Parameter (u. a. „Transpose“, „Erzeugen“, „Variation 1“ bis „Variation All“, „Evolve“, „Evolve Keep“, „Creativity“, „Energy“) in der Automationsliste, und lässt sich einer automatisieren? Lässt sich „Slot“ automatisieren, wechselt das Pattern zum Taktstart, und schaltet „Mute 1“ den Bass stumm? | Notieren je Host | | | |
 | H23 | **Nur Hosts mit Plugin-Sandbox** (z. B. Bitwig „Individually“): Hub und Voice laden | Voice zeigt „Hub not found (if the hub is in this project: the host may run plug-ins in separate processes)“. Mit „By plug-in“ verbinden sich die Instanzen. Live und Logic sind nicht betroffen | – | – | |
+| H24 | Piano-Roll im Hub-Fenster: Note per Doppelklick setzen, verschieben, Länge ziehen, Velocity-Balken ziehen, Auswahlrahmen, Zoom mit Cmd/Strg+Rad; Doppelklick auf eine Note löscht sie | Alles mit der Maus bedienbar; **während der Wiedergabe** kein Versatz und keine hängende Note | | | |
+| H25 | Rechtsklick auf eine Note im Hub-Fenster (Live, Logic) | Menü „Akzent / Slide / Löschen“ öffnet und wirkt (das Öffnen prüft kein automatischer Test) | | | |
+| H26 | Spurfokus: Schalter „Fokus“ einer Stimme, danach wieder aus; Mute, Sperren und Ziehfläche der zugeklappten Leiste | Roll füllt die Höhe, die andere Stimme bleibt als Leiste bedienbar | | | |
 
 **Messung für den Mindestvorlauf (H5, H6, H12):** Der Standard ist 150 ms (D-90). Kommen bei H5 oder H6 verspätete Wechsel
 vor oder ist H12 nicht sample-gleich, wiederholst du H5 mit Puffer 1024. Notiere Puffergröße, Samplerate und

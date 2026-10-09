@@ -432,14 +432,33 @@ void PlaceholderEditor::applyEditSettings() {
     }
 }
 
+void PlaceholderEditor::setFocusedVoice(int voice) {
+    focusedVoice_ = voice;
+    applyFocus();
+}
+
+void PlaceholderEditor::applyFocus() {
+    if (focusedVoice_ < 0 || focusedVoice_ > static_cast<int>(rows_.size())) {
+        focusedVoice_ = 0; // the focused voice is gone: back to all
+    }
+    for (size_t i = 0; i < rows_.size(); ++i) {
+        const int voice = static_cast<int>(i) + 1;
+        rows_[i]->setCollapsed(focusedVoice_ != 0 && focusedVoice_ != voice);
+        rows_[i]->setFocused(focusedVoice_ == voice);
+    }
+    resized();
+}
+
 void PlaceholderEditor::rebuildRows(size_t count) {
     rows_.clear();
     for (size_t i = 0; i < count; ++i) {
         auto row = std::make_unique<VoiceRow>(processor_, static_cast<int>(i) + 1);
+        row->onFocusClicked = [this](int voice) { setFocusedVoice(focusedVoice_ == voice ? 0 : voice); };
         addAndMakeVisible(*row);
         rows_.push_back(std::move(row));
     }
     applyEditSettings();
+    applyFocus();
     shownVoices_.clear();
     resized();
 }
@@ -606,9 +625,13 @@ void PlaceholderEditor::resized() {
     editBar.removeFromLeft(8);
     snapBox_.setBounds(editBar.removeFromLeft(190));
     if (!rows_.empty()) {
-        const int rowHeight = area.getHeight() / static_cast<int>(rows_.size());
+        constexpr int kStripHeight = 36; // a collapsed row (D-159)
+        const int collapsedCount = static_cast<int>(
+            std::count_if(rows_.begin(), rows_.end(), [](const auto& row) { return row->collapsed(); }));
+        const int open = static_cast<int>(rows_.size()) - collapsedCount;
+        const int rowHeight = open > 0 ? (area.getHeight() - collapsedCount * kStripHeight) / open : 0;
         for (auto& row : rows_) {
-            row->setBounds(area.removeFromTop(rowHeight));
+            row->setBounds(area.removeFromTop(row->collapsed() ? kStripHeight : rowHeight));
         }
     }
 }
