@@ -115,12 +115,10 @@ TEST_CASE("the layouts and roles of 8 and 16 bars follow the tables of the style
     // keys are length/role with the enum values Main 0, Variation 1, Build 2, Breakdown 3, Answer 4
     const std::map<std::string, std::set<std::string>> expectedOther{
         {"8", {"8/0 ", "4/0 4/1 "}},
-        {"16",
-         {"16/0 ", "8/0 8/1 ", "8/0 4/1 4/2 ", "4/0 4/1 8/0 ", "4/0 8/1 4/2 ", "4/0 4/1 4/0 4/2 "}}};
+        {"16", {"16/0 ", "8/0 8/1 ", "8/0 4/1 4/2 ", "4/0 4/1 8/0 ", "4/0 8/1 4/2 ", "4/0 4/1 4/0 4/2 "}}};
     const std::map<std::string, std::set<std::string>> expectedMelodic{
         {"8", {"8/0 ", "4/0 4/4 "}},
-        {"16",
-         {"16/0 ", "8/0 8/4 ", "8/0 4/4 4/3 ", "4/0 4/4 8/0 ", "4/0 8/4 4/3 ", "4/0 4/4 4/0 4/3 "}}};
+        {"16", {"16/0 ", "8/0 8/4 ", "8/0 4/4 4/3 ", "4/0 4/4 8/0 ", "4/0 8/4 4/3 ", "4/0 4/4 4/0 4/3 "}}};
     CHECK(static_cast<int>(R::Main) == 0);
     CHECK(static_cast<int>(R::Variation) == 1);
     CHECK(static_cast<int>(R::Build) == 2);
@@ -189,8 +187,8 @@ TEST_CASE("layouts are drawn by the weights of the style", "[formplan]") {
 TEST_CASE("isValidFormPlan applies the rules of the pattern validation", "[formplan]") {
     CHECK(isValidFormPlan(4, plan({{4, R::Main}})));
     CHECK(isValidFormPlan(16, plan({{4, R::Main}, {4, R::Variation}, {8, R::Build}})));
-    CHECK_FALSE(isValidFormPlan(4, plan({{4, R::Variation}})));        // short patterns have one main phrase
-    CHECK_FALSE(isValidFormPlan(8, plan({{4, R::Main}})));             // gap at the end
+    CHECK_FALSE(isValidFormPlan(4, plan({{4, R::Variation}}))); // short patterns have one main phrase
+    CHECK_FALSE(isValidFormPlan(8, plan({{4, R::Main}})));      // gap at the end
     CHECK_FALSE(isValidFormPlan(8, plan({{4, R::Main}, {2, R::Main}, {2, R::Main}}))); // phrase lengths 4, 8, 16
     CHECK_FALSE(isValidFormPlan(16, plan({{8, R::Main}, {4, R::Answer}})));
     CHECK_FALSE(isValidFormPlan(8, {}));

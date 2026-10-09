@@ -237,7 +237,7 @@ TEST_CASE("series: the checker finds every kind of violation it is written for",
     // a note that holds into a strong step and meets a new bass attack counts as well
     p = clean;
     p.voices[1].notes = {note(480, 1440, 57)}; // sounds at tick 960 (step 4)
-    p.voices[0].notes = {note(960, 240, 34)}; // A# attacks while the A sounds: major seventh class
+    p.voices[0].notes = {note(960, 240, 34)};  // A# attacks while the A sounds: major seventh class
     CHECK(has(p, "tense interval"));
     p.voices[0].notes = {note(960, 240, 36)}; // C against A: a minor third, clean
     CHECK_FALSE(has(p, "tense interval"));
@@ -284,9 +284,8 @@ TEST_CASE("series: automatic candidates survive the whole chain to the MIDI file
                                      note.velocity});
                 }
             }
-            std::sort(notes.begin(), notes.end(), [](const PatternNote& a, const PatternNote& b) {
-                return a.startTick < b.startTick;
-            });
+            std::sort(notes.begin(), notes.end(),
+                      [](const PatternNote& a, const PatternNote& b) { return a.startTick < b.startTick; });
             const PatternView view{notes.data(), notes.size(), out.lengthTicks};
             const std::vector<uint8_t> midi = writeMidiFile(view, MidiFileOptions{});
             REQUIRE(midi.size() > 22);
@@ -296,14 +295,14 @@ TEST_CASE("series: automatic candidates survive the whole chain to the MIDI file
 }
 
 TEST_CASE("series: the generator handles any number of voices", "[series][voices]") {
-    const std::vector<std::vector<VoiceRole>> layouts{
-        {VoiceRole::Bass},
-        {VoiceRole::Melody},
-        {VoiceRole::Bass, VoiceRole::Melody, VoiceRole::Melody},
-        {VoiceRole::Melody, VoiceRole::Bass, VoiceRole::Melody},
-        {VoiceRole::Bass, VoiceRole::Bass, VoiceRole::Melody},
-        {VoiceRole::Bass, VoiceRole::Melody, VoiceRole::Melody, VoiceRole::Melody, VoiceRole::Melody,
-         VoiceRole::Melody, VoiceRole::Melody, VoiceRole::Melody}};
+    const std::vector<std::vector<VoiceRole>> layouts{{VoiceRole::Bass},
+                                                      {VoiceRole::Melody},
+                                                      {VoiceRole::Bass, VoiceRole::Melody, VoiceRole::Melody},
+                                                      {VoiceRole::Melody, VoiceRole::Bass, VoiceRole::Melody},
+                                                      {VoiceRole::Bass, VoiceRole::Bass, VoiceRole::Melody},
+                                                      {VoiceRole::Bass, VoiceRole::Melody, VoiceRole::Melody,
+                                                       VoiceRole::Melody, VoiceRole::Melody, VoiceRole::Melody,
+                                                       VoiceRole::Melody, VoiceRole::Melody}};
     for (const std::string& name : kStyles) {
         const StyleProfile style = loadShipped(name);
         for (const auto& roles : layouts) {

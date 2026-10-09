@@ -1,3 +1,4 @@
+#include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
 #include "core/TextKeys.h"
@@ -1017,4 +1018,140 @@ TEST_CASE("the plug-in embeds the German table with every key the code asks for"
     for (const auto& scale : mm::core::allScales()) {
         CHECK(table.has(mm::core::text::scaleKey(scale.id)));
     }
+}
+
+namespace {
+
+/// A one-bar pattern (4 PPQ) with a bass note of `pitch` from tick 0 for `length` ticks.
+mm::core::Pattern longNotePattern(uint8_t pitch, uint32_t length) {
+    auto pattern = mm::core::makeEmptyPattern(1, "peak_time");
+    REQUIRE(mm::core::addNote(pattern, 0, pitch, 0, length, 100) != 0);
+    return pattern;
+}
+
+void putInSlot(mm::plugin::ProcessorBase& processor, mm::core::Pattern pattern) {
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, std::move(pattern))); });
+}
+
+int countOf(const std::vector<Rig::Note>& notes, int pitch, bool on) {
+    return static_cast<int>(
+        std::count_if(notes.begin(), notes.end(), [&](const Rig::Note& n) { return n.pitch == pitch && n.on == on; }));
+}
+
+} // namespace
+
+TEST_CASE("a note edit plays at once and a deleted sounding note gets its note-off", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    putInSlot(processor, longNotePattern(45, 3000));
+    auto notes = rig.run(10);
+    REQUIRE(countOf(notes, 45, true) == 1);
+    REQUIRE(countOf(notes, 45, false) == 0); // still sounding
+
+    const auto id = processor.slotsSnapshot().slot(0)->pattern->voices[0].notes[0].id;
+    REQUIRE(processor.editNotes(0, [&](mm::core::Pattern& pattern) {
+        const std::vector<uint32_t> ids = {id};
+        return mm::core::removeNotes(pattern, 0, ids);
+    }));
+    notes = rig.run(3);
+    CHECK(countOf(notes, 45, false) == 1); // note-off within a few blocks, not at the bar line
+    notes = rig.run(600);
+    CHECK(countOf(notes, 45, true) == 0); // the note is gone, also in the next loop
+}
+
+TEST_CASE("a note added during playback sounds in the same bar", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    putInSlot(processor, longNotePattern(45, 240));
+    rig.run(10); // PPQ 0.2
+    REQUIRE(processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 50, 2 * 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    const auto notes = rig.run(100); // up to PPQ 2.3
+    const auto it = std::find_if(notes.begin(), notes.end(), [](const auto& n) { return n.on && n.pitch == 50; });
+    REQUIRE(it != notes.end());
+    CHECK(std::abs(it->sample - 2 * 24000) <= 1); // PPQ 2.0: not postponed to the next bar line
+}
+
+TEST_CASE("undo and redo of a note edit reach the engine", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    putInSlot(processor, longNotePattern(45, 240));
+    rig.run(10);
+    CHECK_FALSE(processor.canUndo());
+    REQUIRE(processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 50, 2 * 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    CHECK(processor.canUndo());
+    CHECK_FALSE(processor.canRedo());
+    REQUIRE(processor.undo());
+    CHECK(processor.canRedo());
+    auto notes = rig.run(450); // PPQ 0.2 to 9.8: the note would sound at 2, 6 and 10
+    CHECK(countOf(notes, 50, true) == 0);
+    REQUIRE(processor.redo());
+    notes = rig.run(100);
+    CHECK(countOf(notes, 50, true) == 1);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes.size() == 2);
+}
+
+TEST_CASE("a voice neither edits nor undoes", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Voice");
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    putInSlot(processor, longNotePattern(45, 240));
+    const auto before = processor.slotsSnapshot();
+    CHECK_FALSE(processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 50, 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    CHECK_FALSE(processor.canUndo());
+    CHECK_FALSE(processor.undo());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern == before.slot(0)->pattern);
+}
+
+TEST_CASE("an edit that changes nothing, in an empty slot or in an unknown one is no step", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    CHECK_FALSE(processor.editNotes(0, [](mm::core::Pattern&) { return size_t{1}; })); // empty slot
+    putInSlot(processor, longNotePattern(45, 240));
+    CHECK_FALSE(processor.editNotes(0, [](mm::core::Pattern&) { return size_t{0}; }));
+    CHECK_FALSE(processor.editNotes(99, [](mm::core::Pattern&) { return size_t{1}; }));
+    CHECK_FALSE(processor.canUndo());
+}
+
+TEST_CASE("loading a state clears the undo steps", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, longNotePattern(45, 240));
+    REQUIRE(processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 50, 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    REQUIRE(processor.canUndo());
+    processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK_FALSE(processor.canUndo());
+    CHECK_FALSE(processor.canRedo());
+}
+
+TEST_CASE("slots taken over from a hub clear the undo steps", "[plugin][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, longNotePattern(45, 240));
+    REQUIRE(processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 50, 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    mm::core::SlotBank hubBank;
+    hubBank.setResult(0, longNotePattern(60, 240));
+    processor.adoptHubSlots(std::make_shared<const mm::core::SlotBank>(hubBank));
+    settings.role = mm::core::InstanceRole::Hub; // the voice takes the hub over
+    processor.setInstanceSettings(settings);
+    CHECK_FALSE(processor.canUndo());
 }

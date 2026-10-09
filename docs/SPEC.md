@@ -224,7 +224,7 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
 - Rasterung (1/4 bis 1/32, Triolen optional), Ausrichtung immer an Skala oder Chromatik umschaltbar.
   Triolen liegen als Ticks im Datenmodell (960 PPQ, 16tel-Triole = 160 Ticks); Groove und Swing
   verschieben sie nicht (§3.9).
-- Rückgängig und Wiederholen (`juce::UndoManager`)
+- Rückgängig und Wiederholen (eigener Undo-Stapel in `core`, D-153; statt `juce::UndoManager`, damit `core` ohne JUCE bleibt)
 - Velocity-Spur unter den Noten (Balken ziehen, mehrere gleichzeitig)
 - **Stimme sperren:** Eine gesperrte Stimme bleibt bei Generieren und Variieren unverändert
 - **[v1.1] Hilfen:** Velocity-Spur umschaltbar auf Wahrscheinlichkeit und Bedingung (§3.19), Scale-Fold

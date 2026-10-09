@@ -91,7 +91,8 @@ TEST_CASE("progressionsForMode: static is the minor tonic, unknown modes have no
 }
 
 TEST_CASE("progressionsForMode: exact matches win over derived progressions (O-25)", "[progression]") {
-    const HarmonyProfile h = harmony({chords({"i", "iv"}), chords({"i", "bVI", "bIII", "bVII"}), chords({"i", "V"})}, 1, 2);
+    const HarmonyProfile h =
+        harmony({chords({"i", "iv"}), chords({"i", "bVI", "bIII", "bVII"}), chords({"i", "V"})}, 1, 2);
     const auto two = progressionsForMode(h, "two_chord");
     REQUIRE(two.size() == 2);
     CHECK(two[0] == chords({"i", "iv"}));
@@ -387,8 +388,10 @@ TEST_CASE("the generated harmony drives bass and melody without constraint chang
                 Pcg32 rng = Pcg32::fromSeed(seed * 97 + bars);
                 applyHarmony(p, style, rng);
                 const ArchetypeSettings settings{60, 40};
-                const std::string bassId = resolveArchetype(p.voices[0], style, settings.energyPct, rng, settings.creativityPct);
-                const std::string melodyId = resolveArchetype(p.voices[1], style, settings.energyPct, rng, settings.creativityPct);
+                const std::string bassId =
+                    resolveArchetype(p.voices[0], style, settings.energyPct, rng, settings.creativityPct);
+                const std::string melodyId =
+                    resolveArchetype(p.voices[1], style, settings.energyPct, rng, settings.creativityPct);
                 REQUIRE(generateVoice(p, 0, bassId, style, settings, rng));
                 REQUIRE(generateVoice(p, 1, melodyId, style, settings, rng));
                 INFO(name << " bars " << bars << " seed " << seed << " " << bassId << " " << melodyId);

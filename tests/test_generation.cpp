@@ -694,3 +694,24 @@ TEST_CASE("key, scale and seed are saved, and a state from before them keeps dra
     const auto huge = load([](juce::XmlElement& element) { element.setAttribute("genSeed", "18446744073709551616"); });
     CHECK_FALSE(huge.seed.has_value());
 }
+
+TEST_CASE("a generated result is an undo step: undo empties the slot again, redo brings the result back",
+          "[generation][edit]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    processor.selectSlot(2);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() == mm::plugin::GenerationStatus::Done; }));
+    REQUIRE(processor.canUndo());
+    const auto generated = *processor.slotsSnapshot().slot(1)->pattern;
+
+    REQUIRE(processor.undo());
+    CHECK(processor.slotsSnapshot().isEmpty(1));
+    CHECK(processor.slotsSnapshot().slot(1)->history.empty());
+    CHECK_FALSE(processor.canUndo());
+    REQUIRE(processor.redo());
+    const auto again = processor.slotsSnapshot().slot(1)->pattern;
+    REQUIRE(again.has_value());
+    CHECK(again->voices == generated.voices);
+    CHECK(processor.slotsSnapshot().slot(1)->history.size() == 1);
+}

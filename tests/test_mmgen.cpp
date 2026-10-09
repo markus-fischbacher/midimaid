@@ -179,9 +179,14 @@ TEST_CASE("arguments: defaults of the commands", "[mmgen]") {
 }
 
 TEST_CASE("arguments: all values are read and checked", "[mmgen]") {
-    const auto r = parse({"series", "--style", "melodic_techno", "--archetype", "arp", "--seeds", "5", "--first-seed",
-                          "10", "--energies", "0,50,100", "--bars", "16", "--creativity", "75", "--bpm", "126.5",
-                          "--no-groove", "--out", "dir", "--styles", "sd"});
+    const auto r = parse({"series",      "--style",      "melodic_techno",
+                          "--archetype", "arp",          "--seeds",
+                          "5",           "--first-seed", "10",
+                          "--energies",  "0,50,100",     "--bars",
+                          "16",          "--creativity", "75",
+                          "--bpm",       "126.5",        "--no-groove",
+                          "--out",       "dir",          "--styles",
+                          "sd"});
     REQUIRE(r.ok);
     const Options& o = r.options;
     CHECK(o.style == "melodic_techno");
@@ -195,7 +200,8 @@ TEST_CASE("arguments: all values are read and checked", "[mmgen]") {
     CHECK_FALSE(o.groove);
     CHECK(o.out == "dir");
     CHECK(o.stylesDir == "sd");
-    const auto one = parse({"one", "--style", "x", "--energy", "70", "--seed", "42", "--bass", "gallop", "--melody", "arp"});
+    const auto one =
+        parse({"one", "--style", "x", "--energy", "70", "--seed", "42", "--bass", "gallop", "--melody", "arp"});
     REQUIRE(one.ok);
     CHECK(one.options.energies == std::vector<int>{70});
     CHECK(one.options.seed == 42);
@@ -275,8 +281,8 @@ TEST_CASE("a series covers every archetype, energy and seed in a fixed order", "
 
 TEST_CASE("a series can be narrowed to one archetype, seeds and energies", "[mmgen]") {
     const auto styles = allStyles();
-    Options options = parse({"series", "--style", "all", "--archetype", "acid_siren", "--seeds", "3", "--first-seed", "7",
-                             "--energies", "40", "--bars", "8", "--creativity", "10"})
+    Options options = parse({"series", "--style", "all", "--archetype", "acid_siren", "--seeds", "3", "--first-seed",
+                             "7", "--energies", "40", "--bars", "8", "--creativity", "10"})
                           .options;
     std::vector<Job> jobs;
     std::string error;
@@ -404,7 +410,8 @@ TEST_CASE("without groove the notes stay on the 16th grid, with groove the swing
 }
 
 TEST_CASE("the default tempo is the middle of the range of the style", "[mmgen]") {
-    CHECK(defaultBpm(loadShipped("peak_time")) == (loadShipped("peak_time").tempoMin + loadShipped("peak_time").tempoMax) / 2.0);
+    CHECK(defaultBpm(loadShipped("peak_time")) ==
+          (loadShipped("peak_time").tempoMin + loadShipped("peak_time").tempoMax) / 2.0);
     StyleProfile style;
     style.tempoMin = 120;
     style.tempoMax = 131;
@@ -418,7 +425,8 @@ TEST_CASE("csv fields are escaped and read back", "[mmgen]") {
     CHECK(csvEscape("say \"hi\"") == "\"say \"\"hi\"\"\"");
     CHECK(csvEscape("two\nlines") == "\"two\nlines\"");
     CHECK(csvEscape("") == "");
-    for (const std::string& text : {std::string("plain"), std::string("a,b"), std::string("say \"hi\""), std::string("")}) {
+    for (const std::string& text :
+         {std::string("plain"), std::string("a,b"), std::string("say \"hi\""), std::string("")}) {
         CHECK(splitCsvLine(csvEscape(text) + "," + csvEscape("x"))[0] == text);
     }
     CHECK(splitCsvLine("a,b,,d") == std::vector<std::string>{"a", "b", "", "d"});
@@ -457,9 +465,7 @@ TEST_CASE("a manifest row describes the pattern, a failed job has no file", "[mm
     CHECK(row.rating.empty());
     CHECK_FALSE(row.chords.empty());
     CHECK_FALSE(row.key.empty());
-    const auto count = [](const std::string& text) {
-        return splitCsvLine(text).size();
-    };
+    const auto count = [](const std::string& text) { return splitCsvLine(text).size(); };
     CHECK(count(manifestLine(row)) == count(manifestHeader()));
     const std::vector<std::string> columns = splitCsvLine(manifestLine(row));
     CHECK(columns.front() == "x/y_all.mid");
@@ -558,7 +564,7 @@ TEST_CASE("the summary counts ratings per archetype, energy and style", "[mmgen]
     CHECK(s.unknownRatings == 1);
     const std::string report = formatSummary(s);
     CHECK(report.find("peak_time / rolling16 / e30") != std::string::npos);
-    CHECK(report.find("BELOW TARGET") != std::string::npos); // peak time 60 % < 80 %
+    CHECK(report.find("BELOW TARGET") != std::string::npos);   // peak time 60 % < 80 %
     CHECK(report.find("target reached") != std::string::npos); // hard/industrial 100 %
     CHECK(report.find("failed generations: 1 of 10") != std::string::npos);
     CHECK(report.find("50.0 %") != std::string::npos);
@@ -614,9 +620,9 @@ TEST_CASE("run: one writes three files and prints the manifest row", "[mmgen]") 
     TempDir dir("one");
     std::string out;
     std::string err;
-    const int code = run({"one", "--style", "peak_time", "--seed", "3", "--bars", "2", "--out", dir.str(), "--styles",
-                          kStylesDir},
-                         out, err);
+    const int code =
+        run({"one", "--style", "peak_time", "--seed", "3", "--bars", "2", "--out", dir.str(), "--styles", kStylesDir},
+            out, err);
     REQUIRE(code == 0);
     CHECK(err.empty());
     for (const char* suffix : {"_bass.mid", "_melody.mid", "_all.mid"}) {
@@ -628,9 +634,9 @@ TEST_CASE("run: one writes three files and prints the manifest row", "[mmgen]") 
     CHECK(out.find("peak_time_auto_e030_s003_all.mid") != std::string::npos);
     // the same call writes the same bytes
     TempDir again("one_again");
-    REQUIRE(run({"one", "--style", "peak_time", "--seed", "3", "--bars", "2", "--out", again.str(), "--styles",
-                 kStylesDir},
-                out, err) == 0);
+    REQUIRE(
+        run({"one", "--style", "peak_time", "--seed", "3", "--bars", "2", "--out", again.str(), "--styles", kStylesDir},
+            out, err) == 0);
     for (const char* suffix : {"_bass.mid", "_melody.mid", "_all.mid"}) {
         const std::string name = std::string("peak_time_auto_e030_s003") + suffix;
         CHECK(readBytes(dir.path / name) == readBytes(again.path / name));
@@ -693,8 +699,8 @@ TEST_CASE("run: the ratings of a filled manifest are evaluated", "[mmgen]") {
     TempDir dir("rated");
     std::string out;
     std::string err;
-    REQUIRE(run({"series", "--style", "peak_time", "--archetype", "gallop", "--seeds", "5", "--energies", "60", "--bars",
-                 "1", "--out", dir.str(), "--styles", kStylesDir},
+    REQUIRE(run({"series", "--style", "peak_time", "--archetype", "gallop", "--seeds", "5", "--energies", "60",
+                 "--bars", "1", "--out", dir.str(), "--styles", kStylesDir},
                 out, err) == 0);
     // fill the rating column: 4 x ok, 1 x edit
     std::istringstream in(readText(dir.path / "manifest.csv"));
@@ -788,8 +794,8 @@ TEST_CASE("a style that never yields a valid candidate gives exit code 2 and fai
     CHECK(run({"one", "--style", "peak_time", "--styles", styles.str(), "--out", dir.str()}, out, err) == 2);
     CHECK(err.find("no valid candidate") != std::string::npos);
     CHECK(fs::is_empty(dir.path));
-    REQUIRE(run({"series", "--style", "peak_time", "--archetype", "gallop", "--seeds", "3", "--energies", "50", "--bars",
-                 "1", "--styles", styles.str(), "--out", dir.str()},
+    REQUIRE(run({"series", "--style", "peak_time", "--archetype", "gallop", "--seeds", "3", "--energies", "50",
+                 "--bars", "1", "--styles", styles.str(), "--out", dir.str()},
                 out, err) == 0);
     CHECK(out.find("generated 0 patterns (3 without a valid candidate)") != std::string::npos);
     std::istringstream lines(readText(dir.path / "manifest.csv"));
@@ -816,15 +822,16 @@ TEST_CASE("the bpm option sets the tempo of the files", "[mmgen]") {
     TempDir dir("bpm");
     std::string out;
     std::string err;
-    REQUIRE(run({"one", "--style", "peak_time", "--bars", "1", "--bpm", "140", "--out", dir.str(), "--styles", kStylesDir},
-                out, err) == 0);
+    REQUIRE(
+        run({"one", "--style", "peak_time", "--bars", "1", "--bpm", "140", "--out", dir.str(), "--styles", kStylesDir},
+            out, err) == 0);
     const MidiInfo info = readMidi(readBytes(dir.path / "peak_time_auto_e030_s001_all.mid"));
     REQUIRE(info.valid);
     CHECK(info.bpm > 139.9);
     CHECK(info.bpm < 140.1);
     TempDir other("bpm_default");
-    REQUIRE(run({"one", "--style", "peak_time", "--bars", "1", "--out", other.str(), "--styles", kStylesDir}, out, err) ==
-            0);
+    REQUIRE(run({"one", "--style", "peak_time", "--bars", "1", "--out", other.str(), "--styles", kStylesDir}, out,
+                err) == 0);
     const MidiInfo standard = readMidi(readBytes(other.path / "peak_time_auto_e030_s001_all.mid"));
     const StyleProfile style = loadShipped("peak_time");
     CHECK(standard.bpm > defaultBpm(style) - 0.1);
@@ -853,8 +860,8 @@ TEST_CASE("a slide on the last note does not reach beyond the end of the file", 
 TEST_CASE("a series uses only the bass archetypes of the bass list and the melody archetypes of the melody list",
           "[mmgen]") {
     StyleProfile style = loadShipped("peak_time");
-    style.bass.archetypes.push_back({"arp", 5});            // a melody archetype in the bass list
-    style.melody.archetypes.push_back({"rolling16", 5});    // a bass archetype in the melody list
+    style.bass.archetypes.push_back({"arp", 5});         // a melody archetype in the bass list
+    style.melody.archetypes.push_back({"rolling16", 5}); // a bass archetype in the melody list
     style.bass.archetypes.push_back({"no_such_archetype", 5});
     std::vector<Job> jobs;
     std::string error;
@@ -864,7 +871,7 @@ TEST_CASE("a series uses only the bass archetypes of the bass list and the melod
     for (const Job& job : jobs) {
         ++count[job.archetype];
     }
-    CHECK(count["arp"] == 1); // only from the melody list
+    CHECK(count["arp"] == 1);       // only from the melody list
     CHECK(count["rolling16"] == 1); // only from the bass list
     CHECK(count.count("no_such_archetype") == 0);
     CHECK(jobs.size() == 7);

@@ -4,6 +4,7 @@
 #include "core/ParameterRegister.h"
 #include "core/SlotBank.h"
 #include "core/StyleLibrary.h"
+#include "core/UndoStack.h"
 #include "engine/GroupChannel.h"
 #include "engine/GroupSync.h"
 #include "engine/PatternHandover.h"
@@ -126,6 +127,20 @@ public:
     /// Any thread: runs `change` on the slot bank under the instance lock, then hands every changed slot to the
     /// engine (quantized to the next bar). The audio thread never touches the bank.
     void editSlots(const std::function<void(mm::core::SlotBank&)>& change);
+    /// Message thread: edits the current pattern of the slot (0-based index, like `editSlots`) with `change`, which
+    /// returns how many notes it changed (the `core/PatternEdit` functions). Nothing changes and nothing is recorded
+    /// when it returns 0, the slot is empty or this instance is a voice (voices only show, SPEC 8.1). The change
+    /// plays at once, without waiting for the bar line, and is an undo step; `mergeWithPrevious` continues the
+    /// previous step (one mouse gesture). A hub hands the slots on to its voices, which take the change at their next
+    /// bar line. True when the pattern changed.
+    bool editNotes(size_t slotIndex, const std::function<size_t(mm::core::Pattern&)>& change,
+                   bool mergeWithPrevious = false);
+    /// Message thread: takes the last undo step back or does the undone one again (D-153). The result plays at once.
+    /// False when there is nothing to do or this instance is a voice.
+    bool undo();
+    bool redo();
+    bool canUndo() const;
+    bool canRedo() const;
     /// A copy of the slot bank.
     mm::core::SlotBank slotsSnapshot() const;
     /// Role, output mode and output voice (SPEC 6.5, 9.1). The voice also selects the mute parameter that applies.
@@ -157,6 +172,7 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
 private:
+    bool stepUndo(bool back);
     void writeEvents(juce::MidiBuffer& midi) const;
     // Under `slotsLock_`: the playing slot (also fills slot, origin and revision of `view`), and one voice of a
     // pattern.
@@ -188,6 +204,7 @@ private:
     std::array<std::atomic<float>*, mm::core::kMaxVoices> muteValues_{}; // raw values, read in the audio thread
     std::atomic<int> outputVoice_{1};                                    // the voice this instance plays (1 = first)
     const mm::core::StyleLibrary& styles_;
+    mm::core::UndoStack undo_;                // under `slotsLock_`
     mutable juce::CriticalSection slotsLock_; // message and state threads only, never the audio thread
     mm::core::SlotBank slots_;
     mm::core::InstanceSettings settings_;
