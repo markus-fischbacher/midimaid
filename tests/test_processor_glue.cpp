@@ -1,5 +1,9 @@
 #include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
+#include "core/TextKeys.h"
+#include "core/Theory.h"
+#include "plugin/EmbeddedTranslation.h"
+#include "plugin/GroupText.h"
 #include "plugin/ProcessorBase.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -1001,4 +1005,16 @@ TEST_CASE("unknown role text and out-of-range voice in a state fall back safely"
     CHECK(settings.role == mm::core::InstanceRole::Solo);
     CHECK(settings.outputMode == mm::core::OutputMode::OneVoice);
     CHECK(settings.outputVoice == mm::core::kMaxVoices);
+}
+
+TEST_CASE("the plug-in embeds the German table with every key the code asks for", "[plugin][i18n]") {
+    const auto& table = mm::plugin::embeddedTranslation();
+    CHECK(table.problems().empty());
+    for (const auto key : mm::core::text::kAllKeys) {
+        INFO(key);
+        CHECK(table.has(key));
+    }
+    for (const auto& scale : mm::core::allScales()) {
+        CHECK(table.has(mm::core::text::scaleKey(scale.id)));
+    }
 }

@@ -1,5 +1,8 @@
 #include "plugin/RollView.h"
 
+#include "core/TextKeys.h"
+#include "plugin/EmbeddedTranslation.h"
+
 namespace mm::plugin {
 
 void RollView::setContent(mm::core::RollLayout layout, juce::String title, bool empty) {
@@ -51,8 +54,8 @@ void RollView::paint(juce::Graphics& g) {
 
     g.setColour(juce::Colours::white.withAlpha(0.6f));
     g.setFont(juce::FontOptions(13.0f));
-    g.drawText(empty_ ? juce::String("Empty slot: the hub has not generated a pattern for it yet") : title_,
-               getLocalBounds().reduced(8, 4), juce::Justification::topLeft);
+    g.drawText(empty_ ? tr(mm::core::text::kRollEmpty) : title_, getLocalBounds().reduced(8, 4),
+               juce::Justification::topLeft);
 }
 
 } // namespace mm::plugin

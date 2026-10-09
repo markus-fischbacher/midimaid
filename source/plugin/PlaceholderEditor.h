@@ -12,8 +12,7 @@ namespace mm::plugin {
 /// role, output, style, key, scale, bars, seed, energy, creativity and Generate; the 16 slots; per voice of the playing
 /// slot a read-only roll with Mute and a grip that drags that voice's file into the host; an info line and the status
 /// line. A voice gets the compact voice UI instead (D-148): a read-only roll of the voice it plays, Mute, octave, the
-/// slot follow switch, "Open hub" and the drag handle. The texts are fixed English for now; they move to the
-/// translation table with the i18n infrastructure (phase 2).
+/// slot follow switch, "Open hub" and the drag handle. The texts come from the translation table (SPEC 8.2).
 class PlaceholderEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
     explicit PlaceholderEditor(ProcessorBase& processor);
@@ -44,9 +43,9 @@ private:
     juce::ComboBox scaleBox_;
     juce::ComboBox barsBox_;
     juce::TextEditor seedEditor_;
-    juce::TextButton randomButton_{"Random seed"};
-    juce::Label energyLabel_{{}, "Energy"};
-    juce::Label creativityLabel_{{}, "Creativity"};
+    juce::TextButton randomButton_;
+    juce::Label energyLabel_;
+    juce::Label creativityLabel_;
     juce::Slider energySlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
     juce::Slider creativitySlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
     std::array<juce::TextButton, mm::core::kSlotCount> slotButtons_;
@@ -54,10 +53,10 @@ private:
     std::vector<ProcessorBase::VoiceView> shownVoices_;
     ProcessorBase::SlotInfo shownInfo_;
     juce::Label infoLabel_;
-    juce::TextButton takeOverButton_{"Become hub"};
-    juce::TextButton generateButton_{"Generate"};
-    juce::TextButton openHubButton_{"Open hub"};
-    juce::ToggleButton muteButton_{"Mute"};
+    juce::TextButton takeOverButton_;
+    juce::TextButton generateButton_;
+    juce::TextButton openHubButton_;
+    juce::ToggleButton muteButton_;
     juce::ComboBox octaveBox_;
     RollView rollView_;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;

@@ -62,9 +62,11 @@ public:
         int slot = 1; ///< 1 to 16
         int voice = 1;
         int octave = 0;
-        uint64_t origin = 0;    ///< of the slot bank
-        uint64_t revision = 0;  ///< of the slot
-        juce::String voiceName; ///< Bass, Melody or Voice n
+        uint64_t origin = 0;      ///< of the slot bank
+        uint64_t revision = 0;    ///< of the slot
+        juce::String voiceName;   ///< Bass, Melody or Voice n: the names of the export files, never translated
+        juce::String displayName; ///< the same in the language of the UI
+        bool melody = false;      ///< the voice has the melody role (accent colour)
         /// True when `other` shows the same thing (no need to redraw or export again).
         bool sameSource(const VoiceView& other) const {
             return hasPattern == other.hasPattern && slot == other.slot && voice == other.voice &&

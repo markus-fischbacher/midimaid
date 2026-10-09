@@ -634,7 +634,7 @@ TEST_CASE("a voice's generate request is carried out by the hub with the hub's s
 TEST_CASE("only a voice that finds no hub gets the hint about separate plug-in processes", "[group-wiring]") {
     using mm::plugin::groupStatusText;
     const auto hint = [](GroupStatus status) {
-        return groupStatusText(status, 0).find("separate processes") != std::string::npos;
+        return groupStatusText(status, 0).find("getrennten Prozessen") != std::string::npos;
     };
     CHECK(hint(GroupStatus::HubMissing));
     CHECK(hint(GroupStatus::HubOffered));
@@ -642,10 +642,10 @@ TEST_CASE("only a voice that finds no hub gets the hint about separate plug-in p
     CHECK_FALSE(hint(GroupStatus::Hub));
     CHECK_FALSE(hint(GroupStatus::HubRefused));
     CHECK_FALSE(hint(GroupStatus::Solo));
-    CHECK(groupStatusText(GroupStatus::Hub, 1) == "Hub: 1 voice");
-    CHECK(groupStatusText(GroupStatus::Hub, 3) == "Hub: 3 voices");
+    CHECK(groupStatusText(GroupStatus::Hub, 1) == "Hub: 1 Stimme");
+    CHECK(groupStatusText(GroupStatus::Hub, 3) == "Hub: 3 Stimmen");
     CHECK(groupStatusText(GroupStatus::Solo, 0).empty());
-    CHECK(groupStatusText(GroupStatus::HubOffered, 0).find("you can take over") != std::string::npos);
+    CHECK(groupStatusText(GroupStatus::HubOffered, 0).find("du kannst ihn übernehmen") != std::string::npos);
 }
 
 TEST_CASE("a voice's octave is its own: it shifts that voice and nothing else", "[group-wiring]") {
@@ -938,8 +938,8 @@ TEST_CASE("the hub UI fields show the settings and change them", "[group-wiring]
     CHECK(key->isVisible());
 
     // A new instance: A minor, 4 bars, a random seed.
-    CHECK(key->getText() == "Key: A");
-    CHECK(scale->getText() == "Scale: Natural minor");
+    CHECK(key->getText() == "Tonart: A");
+    CHECK(scale->getText() == "Skala: Natürlich Moll");
     CHECK(bars->getSelectedId() == 4);
     CHECK(seed->getText().isEmpty());
     CHECK(energy->getValue() == 50.0);
@@ -999,8 +999,8 @@ TEST_CASE("settings changed from outside show up in the hub UI", "[group-wiring]
     settings.generation.energyPct = 90;
     solo.processor.setInstanceSettings(settings);
     REQUIRE(waitFor([&] { return child<juce::Slider>(*editor, "energy")->getValue() == 90.0; }));
-    CHECK(child<juce::ComboBox>(*editor, "key")->getText() == "Key: G");
-    CHECK(child<juce::ComboBox>(*editor, "scale")->getText() == "Scale: Dorian");
+    CHECK(child<juce::ComboBox>(*editor, "key")->getText() == "Tonart: G");
+    CHECK(child<juce::ComboBox>(*editor, "scale")->getText() == "Skala: Dorisch");
     CHECK(child<juce::ComboBox>(*editor, "bars")->getSelectedId() == 8);
     CHECK(child<juce::TextEditor>(*editor, "seed")->getText() == "123");
     CHECK(child<juce::Slider>(*editor, "energy")->getValue() == 90.0);
@@ -1051,7 +1051,7 @@ TEST_CASE("the hub UI has a row per voice of the playing slot", "[group-wiring][
     CHECK_FALSE(bass->layout().notes.empty());
     CHECK_FALSE(melody->layout().notes.empty());
     CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_1"))->getText() == "Bass");
-    CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_2"))->getText() == "Melody");
+    CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_2"))->getText() == "Melodie");
     CHECK(find(*editor, "row_1")->getBounds().getBottom() <= editor->getHeight());
     CHECK(find(*editor, "row_2")->getBounds().getBottom() <= editor->getHeight());
 
@@ -1066,7 +1066,7 @@ TEST_CASE("the hub UI has a row per voice of the playing slot", "[group-wiring][
     solo.setSlotParameter(2);
     runTo({&solo}, 4.1); // a slot change takes effect at the next bar line
     REQUIRE(waitFor([&] { return find(*editor, "row_3") != nullptr; }));
-    CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_3"))->getText() == "Voice 3");
+    CHECK(dynamic_cast<juce::Label*>(find(*editor, "name_3"))->getText() == "Stimme 3");
 
     // Back to a slot with two voices: two rows again.
     solo.setSlotParameter(1);
@@ -1107,18 +1107,18 @@ TEST_CASE("the info line names what the playing slot holds", "[group-wiring][edi
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
     auto* info = dynamic_cast<juce::Label*>(find(*editor, "info"));
     REQUIRE(info != nullptr);
-    CHECK(info->getText().contains("empty"));
+    CHECK(info->getText().contains("leer"));
     mm::core::Pattern pattern = marked(41);
     pattern.context.root = 2;
     pattern.context.scaleId = "dorian";
     pattern.info.seed = 777;
     pattern.info.winnerSeed = 888;
     solo.processor.editSlots([&](mm::core::SlotBank& bank) { bank.setResult(0, pattern); });
-    REQUIRE(waitFor([&] { return info->getText().contains("winner 888"); }));
+    REQUIRE(waitFor([&] { return info->getText().contains("Sieger 888"); }));
     CHECK(info->getText().contains("Slot 1"));
-    CHECK(info->getText().contains("D dorian"));
-    CHECK(info->getText().contains("seed 777"));
-    CHECK(info->getText().contains("winner 888"));
+    CHECK(info->getText().contains("D Dorisch"));
+    CHECK(info->getText().contains("Seed 777"));
+    CHECK(info->getText().contains("Sieger 888"));
 }
 
 TEST_CASE("Generate in the hub UI uses the key, scale, bars and seed of its fields", "[group-wiring][editor]") {
@@ -1141,5 +1141,18 @@ TEST_CASE("Generate in the hub UI uses the key, scale, bars and seed of its fiel
     CHECK(pattern.context.scaleId == std::string(scales[2].id));
     CHECK(pattern.lengthBars == 2);
     CHECK(pattern.info.seed == 77);
-    CHECK(waitFor([&] { return dynamic_cast<juce::Label*>(find(*editor, "info"))->getText().contains("seed 77"); }));
+    CHECK(waitFor([&] { return dynamic_cast<juce::Label*>(find(*editor, "info"))->getText().contains("Seed 77"); }));
+}
+
+TEST_CASE("the editor shows the German texts of the table", "[group-wiring][editor][i18n]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    CHECK(child<juce::ComboBox>(*editor, "key")->getItemText(0) == "Tonart: auto");
+    CHECK(child<juce::ComboBox>(*editor, "bars")->getItemText(0) == "1 Takt");
+    CHECK(child<juce::ComboBox>(*editor, "bars")->getItemText(1) == "2 Takte");
+    CHECK(child<juce::ComboBox>(*editor, "octave")->getItemText(3) == "Oktave +1");
+    CHECK(child<juce::TextEditor>(*editor, "seed")->getTextToShowWhenEmpty() == "Seed: zufällig");
+    CHECK(child<juce::Button>(*editor, "random")->getButtonText() == "Zufälliger Seed");
+    CHECK(child<juce::Button>(*editor, "mute_1")->getButtonText() == "Stumm");
 }

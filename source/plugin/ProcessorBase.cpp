@@ -2,7 +2,9 @@
 
 #include "core/PlaybackRender.h"
 #include "core/SlotBankJson.h"
+#include "core/TextKeys.h"
 #include "plugin/EmbeddedStyles.h"
+#include "plugin/EmbeddedTranslation.h"
 #include "plugin/PlaceholderEditor.h"
 
 #include <algorithm>
@@ -469,6 +471,11 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.notes = std::move(rendered.notes);
     view.lengthTicks = rendered.lengthTicks;
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
+    view.melody = view.voiceName == "Melody";
+    view.displayName = view.melody ? tr(mm::core::text::kVoiceMelody)
+                       : view.voiceName == "Bass"
+                           ? tr(mm::core::text::kVoiceBass)
+                           : tr(mm::core::text::kVoiceN, {{"n", std::to_string(voiceIndex + 1)}});
 }
 
 std::array<bool, mm::core::kSlotCount> ProcessorBase::slotUsage() const {
