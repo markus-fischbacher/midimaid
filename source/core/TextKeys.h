@@ -38,12 +38,23 @@ namespace mm::core::text {
     X(kStatusVaried, "status.varied")                                                                                  \
     X(kStatusNothingToVary, "status.nothingToVary")                                                                    \
     X(kStatusVaryAllLocked, "status.varyAllLocked")                                                                    \
-    X(kStatusRenewed, "status.renewed")                                                                                 \
-    X(kStatusNothingToRenew, "status.nothingToRenew")                                                                   \
-    X(kStatusRenewLocked, "status.renewLocked")                                                                         \
+    X(kStatusRenewed, "status.renewed")                                                                                \
+    X(kStatusNothingToRenew, "status.nothingToRenew")                                                                  \
+    X(kStatusRenewLocked, "status.renewLocked")                                                                        \
     X(kButtonMuteByHub, "button.muteByHub")                                                                            \
     X(kLabelEnergy, "label.energy")                                                                                    \
     X(kLabelCreativity, "label.creativity")                                                                            \
+    X(kButtonRenew, "button.renew")                                                                                    \
+    X(kButtonVary, "button.vary")                                                                                      \
+    X(kButtonVaryAll, "button.varyAll")                                                                                \
+    X(kButtonDuplicate, "button.duplicate")                                                                            \
+    X(kButtonUndo, "button.undo")                                                                                      \
+    X(kButtonRedo, "button.redo")                                                                                      \
+    X(kButtonHistoryBack, "button.historyBack")                                                                        \
+    X(kButtonHistoryForward, "button.historyForward")                                                                  \
+    X(kLabelStrength, "label.strength")                                                                                \
+    X(kLabelHistory, "label.history")                                                                                  \
+    X(kLabelHistoryNone, "label.historyNone")                                                                          \
     X(kOctaveItem, "octave.item")                                                                                      \
     X(kStatusGenerating, "status.generating")                                                                          \
     X(kStatusDone, "status.done")                                                                                      \

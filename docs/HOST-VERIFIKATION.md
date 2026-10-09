@@ -158,6 +158,9 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H24 | Piano-Roll im Hub-Fenster: Note per Doppelklick setzen, verschieben, Länge ziehen, Velocity-Balken ziehen, Auswahlrahmen, Zoom mit Cmd/Strg+Rad; Doppelklick auf eine Note löscht sie | Alles mit der Maus bedienbar; **während der Wiedergabe** kein Versatz und keine hängende Note | | | |
 | H25 | Rechtsklick auf eine Note im Hub-Fenster (Live, Logic) | Menü „Akzent / Slide / Löschen“ öffnet und wirkt (das Öffnen prüft kein automatischer Test) | | | |
 | H26 | Spurfokus: Schalter „Fokus“ einer Stimme, danach wieder aus; Mute, Sperren und Ziehfläche der zugeklappten Leiste | Roll füllt die Höhe, die andere Stimme bleibt als Leiste bedienbar | | | |
+| H27 | Schaltflächen je Stimme im Hub-Fenster (Live, Logic): „Neu“, „Variation“ (Stärke-Regler), „Duplizieren“ bei gewählten Noten; „Variation (alle)“ | Wirkt zum nächsten Takt, ohne Klick oder hängende Note, auch bei laufender Wiedergabe; Sperre einer Stimme schützt sie | | | |
+| H28 | „Rückgängig“, „Wiederholen“ und „◀ Verlauf n/m ▶“ im Hub-Fenster nach mehreren Ergebnissen und Notenänderungen | Rückgängig macht den letzten Schritt rückgängig, das Blättern wechselt zum nächsten Takt das Pattern; nach dem Blättern ist Rückgängig leer | | | |
+| H29 | Stärke der Variation im Hörtest: 10 %, 30 %, 60 %, 100 % an einem Techno-Pattern | Niedrig = hypnotisch (kleine Änderungen), hoch = hörbar anderes Pattern; Skalierung passt (Kalibrierung offen) | | | |
 
 **Messung für den Mindestvorlauf (H5, H6, H12):** Der Standard ist 150 ms (D-90). Kommen bei H5 oder H6 verspätete Wechsel
 vor oder ist H12 nicht sample-gleich, wiederholst du H5 mit Puffer 1024. Notiere Puffergröße, Samplerate und

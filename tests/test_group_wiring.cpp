@@ -2270,3 +2270,325 @@ TEST_CASE("the strip of a folded row still mutes and locks its voice", "[focus][
     mute->triggerClick();
     REQUIRE(waitFor([&] { return mute->getToggleState(); }));
 }
+
+// --- Buttons for the actions and the history (P2-G2, D-161) ---------------------------------------------------------
+
+namespace {
+
+mm::core::Pattern generatedPattern(const mm::plugin::ProcessorBase& processor, uint64_t seed) {
+    mm::core::GenerationRequest request;
+    request.lengthBars = 4;
+    request.seed = seed;
+    const auto result = mm::core::generatePattern(*processor.styles().findOrFallback("peak_time"), request);
+    REQUIRE(result.success);
+    return result.pattern;
+}
+
+/// A solo instance with its editor and a pattern in slot 1: two marked notes, or a generated pattern.
+struct ActionRig {
+    explicit ActionRig(bool generated = false) : editor(solo.processor.createEditor()) {
+        panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+        REQUIRE(panel != nullptr);
+        const auto pattern = generated ? generatedPattern(solo.processor, 5) : markedTwoVoices(41, 42);
+        solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, pattern)); });
+        roll1 = dynamic_cast<mm::plugin::EditableRoll*>(find(*editor, "roll_1"));
+        roll2 = dynamic_cast<mm::plugin::EditableRoll*>(find(*editor, "roll_2"));
+        REQUIRE((roll1 != nullptr && roll2 != nullptr));
+        REQUIRE(waitFor([&] { return roll2->source().size() == pattern.voices[1].notes.size(); }));
+    }
+    juce::Button& button(const juce::String& id) {
+        auto* found = dynamic_cast<juce::Button*>(find(*editor, id));
+        REQUIRE(found != nullptr);
+        return *found;
+    }
+    juce::Slider& strength() {
+        auto* found = dynamic_cast<juce::Slider*>(find(*editor, "strength"));
+        REQUIRE(found != nullptr);
+        return *found;
+    }
+    juce::String historyText() {
+        auto* label = dynamic_cast<juce::Label*>(find(*editor, "history_label"));
+        REQUIRE(label != nullptr);
+        return label->getText();
+    }
+    mm::core::Pattern pattern(size_t slot = 0) const { return *solo.processor.slotsSnapshot().slot(slot)->pattern; }
+    size_t historySize(size_t slot = 0) const { return solo.processor.slotsSnapshot().slot(slot)->history.size(); }
+    /// Clicks are posted to the message queue: wait for `done` after each.
+    void click(const juce::String& id, const std::function<bool()>& done) {
+        button(id).triggerClick();
+        REQUIRE(waitFor(done));
+    }
+    bool enabled(const juce::String& id) { return button(id).isEnabled(); }
+
+    Quiet quiet;
+    Instance solo{"Solo"};
+    std::unique_ptr<juce::AudioProcessorEditor> editor;
+    mm::plugin::PlaceholderEditor* panel = nullptr;
+    mm::plugin::EditableRoll* roll1 = nullptr;
+    mm::plugin::EditableRoll* roll2 = nullptr;
+};
+
+} // namespace
+
+TEST_CASE("an empty slot leaves every action button disabled", "[buttons][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    for (const char* id : {"renew_1", "vary_1", "duplicate_1", "renew_2", "vary_2", "vary_all", "undo", "redo",
+                           "history_back", "history_forward"}) {
+        auto* button = dynamic_cast<juce::Button*>(find(*editor, id));
+        REQUIRE(button != nullptr);
+        INFO(id);
+        CHECK_FALSE(button->isEnabled());
+    }
+    auto* label = dynamic_cast<juce::Label*>(find(*editor, "history_label"));
+    REQUIRE(label != nullptr);
+    CHECK(label->getText() == "Verlauf –");
+}
+
+TEST_CASE("the action buttons carry their texts and the strength starts at 30 percent", "[buttons][editor]") {
+    ActionRig rig(true);
+    CHECK(rig.button("renew_1").getButtonText() == "Neu");
+    CHECK(rig.button("vary_1").getButtonText() == "Variation");
+    CHECK(rig.button("duplicate_1").getButtonText() == "Duplizieren");
+    CHECK(rig.button("vary_all").getButtonText() == "Variation (alle)");
+    CHECK(rig.button("undo").getButtonText() == "Rückgängig");
+    CHECK(rig.button("redo").getButtonText() == "Wiederholen");
+    CHECK(rig.panel->variationStrength() == 30);
+    CHECK(rig.strength().getMinimum() == 0.0);
+    CHECK(rig.strength().getMaximum() == 100.0);
+    REQUIRE(waitFor([&] { return rig.enabled("renew_1"); }));
+    CHECK(rig.enabled("vary_1"));
+    CHECK(rig.enabled("vary_all"));
+    CHECK_FALSE(rig.enabled("duplicate_1")); // nothing selected
+    CHECK_FALSE(rig.enabled("undo"));
+    CHECK_FALSE(rig.enabled("redo"));
+    CHECK_FALSE(rig.enabled("history_back"));
+    CHECK_FALSE(rig.enabled("history_forward"));
+    CHECK(rig.historyText() == "Verlauf 1/1");
+}
+
+TEST_CASE("Neu renews that voice only, as one history entry", "[buttons][editor]") {
+    ActionRig rig(true);
+    REQUIRE(waitFor([&] { return rig.enabled("renew_2"); }));
+    const auto before = rig.pattern();
+    rig.click("renew_2", [&] { return rig.historySize() == 2; });
+    const auto after = rig.pattern();
+    CHECK(after.voices[0].notes == before.voices[0].notes);
+    CHECK(after.voices[1].notes != before.voices[1].notes);
+    CHECK(rig.solo.processor.generationStatus() == mm::plugin::GenerationStatus::Renewed);
+    REQUIRE(waitFor([&] { return rig.enabled("undo"); }));
+    CHECK(rig.historyText() == "Verlauf 2/2");
+    // the first voice has its own button
+    rig.click("renew_1", [&] { return rig.historySize() == 3; });
+    CHECK(rig.pattern().voices[1].notes == after.voices[1].notes);
+    CHECK(rig.pattern().voices[0].notes != before.voices[0].notes);
+}
+
+TEST_CASE("a locked voice has neither Neu nor Variation", "[buttons][editor][lock]") {
+    ActionRig rig(true);
+    REQUIRE(waitFor([&] { return rig.enabled("lock_1") && rig.enabled("renew_1"); }));
+    rig.click("lock_1", [&] { return rig.solo.processor.playingVoices()[0].locked; });
+    REQUIRE(waitFor([&] { return !rig.enabled("renew_1"); }));
+    CHECK_FALSE(rig.enabled("vary_1"));
+    CHECK(rig.enabled("renew_2"));
+    CHECK(rig.enabled("vary_2"));
+    CHECK(rig.enabled("vary_all")); // one voice is still free
+    rig.click("lock_2", [&] { return rig.solo.processor.playingVoices()[1].locked; });
+    REQUIRE(waitFor([&] { return !rig.enabled("vary_all") || !rig.enabled("renew_2"); }));
+    rig.click("lock_1", [&] { return !rig.solo.processor.playingVoices()[0].locked; }); // unlock again
+    REQUIRE(waitFor([&] { return rig.enabled("renew_1"); }));
+    CHECK(rig.enabled("vary_1"));
+}
+
+TEST_CASE("Variation uses the strength of the slider and varies that voice only", "[buttons][editor]") {
+    ActionRig rig(true);
+    REQUIRE(waitFor([&] { return rig.enabled("vary_1"); }));
+    const auto before = rig.pattern();
+    rig.strength().setValue(0.0, juce::sendNotificationSync);
+    rig.button("vary_2").triggerClick();
+    REQUIRE(
+        waitFor([&] { return rig.solo.processor.generationStatus() == mm::plugin::GenerationStatus::NothingToVary; }));
+    CHECK(rig.historySize() == 1); // strength 0 changes nothing
+    rig.strength().setValue(70.0, juce::sendNotificationSync);
+    CHECK(rig.panel->variationStrength() == 70);
+    rig.click("vary_2", [&] { return rig.historySize() == 2; });
+    CHECK(rig.solo.processor.generationStatus() == mm::plugin::GenerationStatus::Varied);
+    CHECK(rig.pattern().voices[0].notes == before.voices[0].notes);
+    CHECK(rig.pattern().voices[1].notes != before.voices[1].notes);
+    CHECK(rig.pattern().info.source == "variation");
+}
+
+TEST_CASE("Variation (alle) varies the free voices and spares the locked one", "[buttons][editor][lock]") {
+    ActionRig rig(true);
+    REQUIRE(waitFor([&] { return rig.enabled("lock_1") && rig.enabled("vary_all"); }));
+    rig.click("lock_1", [&] { return rig.solo.processor.playingVoices()[0].locked; });
+    const auto before = rig.pattern();
+    rig.strength().setValue(100.0, juce::sendNotificationSync);
+    const auto steps = rig.historySize();
+    rig.click("vary_all", [&] { return rig.historySize() == steps + 1; });
+    CHECK(rig.pattern().voices[0].notes == before.voices[0].notes);
+    CHECK(rig.pattern().voices[1].notes != before.voices[1].notes);
+}
+
+TEST_CASE("Variation (alle) without a lock varies the whole pattern", "[buttons][editor]") {
+    ActionRig rig(true);
+    REQUIRE(waitFor([&] { return rig.enabled("vary_all"); }));
+    const auto before = rig.pattern();
+    rig.strength().setValue(100.0, juce::sendNotificationSync);
+    rig.click("vary_all", [&] { return rig.historySize() == 2; });
+    CHECK(rig.pattern().voices != before.voices);
+}
+
+TEST_CASE("Rückgängig and Wiederholen step through the undo stack", "[buttons][editor]") {
+    ActionRig rig(true);
+    REQUIRE(waitFor([&] { return rig.enabled("renew_2"); }));
+    const auto before = rig.pattern();
+    rig.click("renew_2", [&] { return rig.historySize() == 2; });
+    const auto renewed = rig.pattern();
+    REQUIRE(waitFor([&] { return rig.enabled("undo"); }));
+    CHECK_FALSE(rig.enabled("redo"));
+    rig.click("undo", [&] { return rig.historySize() == 1; });
+    CHECK(rig.pattern().voices == before.voices);
+    REQUIRE(waitFor([&] { return rig.enabled("redo") && !rig.enabled("undo"); }));
+    rig.click("redo", [&] { return rig.historySize() == 2; });
+    CHECK(rig.pattern().voices == renewed.voices);
+    REQUIRE(waitFor([&] { return rig.enabled("undo") && !rig.enabled("redo"); }));
+}
+
+TEST_CASE("the history buttons browse the results and show the position", "[buttons][editor][history]") {
+    ActionRig rig(true);
+    REQUIRE(waitFor([&] { return rig.enabled("renew_2"); }));
+    rig.click("renew_2", [&] { return rig.historySize() == 2; });
+    rig.strength().setValue(100.0, juce::sendNotificationSync);
+    rig.click("vary_all", [&] { return rig.historySize() == 3; });
+    const auto history = rig.solo.processor.slotsSnapshot().slot(0)->history;
+    REQUIRE(waitFor([&] { return rig.historyText() == "Verlauf 3/3"; }));
+    CHECK(rig.enabled("history_back"));
+    CHECK_FALSE(rig.enabled("history_forward"));
+    CHECK(rig.enabled("undo"));
+
+    rig.click("history_back", [&] { return rig.solo.processor.slotsSnapshot().slot(0)->cursor == 1; });
+    CHECK(rig.pattern() == history[1]);
+    CHECK(rig.historyText() == "Verlauf 2/3");
+    CHECK(rig.enabled("history_forward"));
+    CHECK_FALSE(rig.enabled("undo")); // browsing drops the undo steps of the slot
+    rig.click("history_back", [&] { return rig.solo.processor.slotsSnapshot().slot(0)->cursor == 0; });
+    CHECK(rig.pattern() == history[0]);
+    CHECK(rig.historyText() == "Verlauf 1/3");
+    CHECK_FALSE(rig.enabled("history_back"));
+    rig.click("history_forward", [&] { return rig.solo.processor.slotsSnapshot().slot(0)->cursor == 1; });
+    rig.click("history_forward", [&] { return rig.solo.processor.slotsSnapshot().slot(0)->cursor == 2; });
+    CHECK(rig.pattern() == history[2]);
+    CHECK(rig.historyText() == "Verlauf 3/3");
+    CHECK_FALSE(rig.enabled("history_forward"));
+    CHECK(rig.historySize() == 3);
+}
+
+TEST_CASE("Duplizieren copies the selection of the roll and selects the copy", "[buttons][editor][duplicate]") {
+    ActionRig rig;
+    CHECK_FALSE(rig.enabled("duplicate_1"));
+    rig.roll1->selectAll();
+    REQUIRE(waitFor([&] { return rig.enabled("duplicate_1"); }));
+    CHECK_FALSE(rig.enabled("duplicate_2")); // the other roll has no selection
+    rig.click("duplicate_1", [&] { return rig.pattern().voices[0].notes.size() == 2; });
+    const auto notes = rig.pattern().voices[0].notes;
+    CHECK(notes[1].startTick == notes[0].startTick + 240); // one grid step (1/16) behind the note
+    CHECK(notes[1].pitch == notes[0].pitch);
+    CHECK(rig.pattern().info.source == "edit");
+    CHECK(rig.pattern().voices[1].notes.size() == 1);
+    REQUIRE(waitFor([&] { return rig.roll1->source().size() == 2 && rig.roll1->selection().size() == 1; }));
+    CHECK(*rig.roll1->selection().begin() == notes[1].id);
+    // the copy is selected: another press goes on behind it
+    rig.click("duplicate_1", [&] { return rig.pattern().voices[0].notes.size() == 3; });
+    CHECK(rig.pattern().voices[0].notes[2].startTick == 480);
+    // one undo step each
+    REQUIRE(waitFor([&] { return rig.enabled("undo"); }));
+    rig.click("undo", [&] { return rig.pattern().voices[0].notes.size() == 2; });
+    rig.click("undo", [&] { return rig.pattern().voices[0].notes.size() == 1; });
+}
+
+TEST_CASE("Duplizieren rounds the offset up to the grid of the roll", "[buttons][editor][duplicate]") {
+    ActionRig rig;
+    rig.roll1->setEditSettings(mm::core::EditGrid{4, false}, mm::core::PitchSnap::Scale); // 1/4: 960 ticks
+    rig.roll1->selectAll();
+    REQUIRE(waitFor([&] { return rig.enabled("duplicate_1"); }));
+    rig.click("duplicate_1", [&] { return rig.pattern().voices[0].notes.size() == 2; });
+    CHECK(rig.pattern().voices[0].notes[1].startTick == 960);
+}
+
+TEST_CASE("the strip of a folded row keeps its action buttons", "[buttons][editor][focus]") {
+    ActionRig rig;
+    rig.button("focus_1").triggerClick();
+    REQUIRE(waitFor([&] { return rig.panel->focusedVoice() == 1; }));
+    auto& row = *find(*rig.editor, "row_2");
+    REQUIRE(row.getHeight() == 36);
+    for (const char* id : {"renew_2", "vary_2", "duplicate_2", "mute_2", "lock_2", "focus_2", "drag_2"}) {
+        auto* component = find(*rig.editor, id);
+        REQUIRE(component != nullptr);
+        INFO(id);
+        CHECK(component->isVisible());
+        CHECK(component->getWidth() > 0);
+        CHECK(component->getHeight() > 0);
+        CHECK(row.getLocalBounds().contains(component->getBounds()));
+    }
+    // the buttons of the strip work
+    REQUIRE(waitFor([&] { return rig.enabled("renew_2"); }));
+    rig.click("renew_2", [&] { return rig.historySize() == 2; });
+}
+
+TEST_CASE("the buttons of a row act on the slot the row shows", "[buttons][editor]") {
+    ActionRig rig;
+    rig.solo.processor.editSlots(
+        [&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(2, generatedPattern(rig.solo.processor, 6))); });
+    rig.solo.processor.selectSlot(3);
+    REQUIRE(waitFor([&] { return rig.roll1->source().size() > 1; })); // the generated pattern of slot 3
+    REQUIRE(waitFor([&] { return rig.enabled("renew_1"); }));
+    rig.click("renew_1", [&] { return rig.historySize(2) == 2; });
+    CHECK(rig.historySize(0) == 1);
+    rig.strength().setValue(80.0, juce::sendNotificationSync);
+    rig.click("vary_2", [&] { return rig.historySize(2) == 3; });
+    CHECK(rig.historySize(0) == 1);
+    REQUIRE(waitFor([&] { return rig.historyText() == "Verlauf 3/3"; }));
+    rig.click("history_back", [&] { return rig.solo.processor.slotsSnapshot().slot(2)->cursor == 1; });
+    CHECK(rig.solo.processor.slotsSnapshot().slot(0)->cursor == 0);
+}
+
+TEST_CASE("until the bar line the rows act on the slot that plays, not on the one just selected", "[buttons][editor]") {
+    ActionRig rig(true);
+    rig.solo.processor.editSlots(
+        [&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(2, generatedPattern(rig.solo.processor, 6))); });
+    runTo({&rig.solo}, 1.0);
+    rig.solo.processor.selectSlot(3); // takes effect at PPQ 4
+    CHECK(rig.solo.processor.playingSlotInfo().slot == 1);
+    REQUIRE(waitFor([&] { return rig.enabled("renew_1"); }));
+    rig.click("renew_1", [&] { return rig.historySize(0) == 2; });
+    rig.strength().setValue(80.0, juce::sendNotificationSync);
+    rig.click("vary_2", [&] { return rig.historySize(0) == 3; });
+    CHECK(rig.historySize(2) == 1);
+    REQUIRE(waitFor([&] { return rig.historyText() == "Verlauf 3/3"; }));
+    rig.click("history_back", [&] { return rig.solo.processor.slotsSnapshot().slot(0)->cursor == 1; });
+    CHECK(rig.historySize(2) == 1);
+}
+
+TEST_CASE("a voice instance has no action buttons", "[buttons][editor]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    auto settings = voice.processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    voice.processor.setInstanceSettings(settings);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    REQUIRE(waitFor([&] { return editor->getHeight() == 320; }));
+    for (const char* id :
+         {"vary_all", "undo", "redo", "history_back", "history_forward", "history_label", "strength"}) {
+        auto* component = find(*editor, id);
+        REQUIRE(component != nullptr);
+        INFO(id);
+        CHECK_FALSE(component->isVisible());
+    }
+    for (const char* id : {"row_1", "row_2"}) {
+        if (auto* row = find(*editor, id)) {
+            CHECK_FALSE(row->isVisible());
+        }
+    }
+}

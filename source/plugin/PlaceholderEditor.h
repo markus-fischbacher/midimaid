@@ -22,6 +22,8 @@ public:
     void resized() override;
     /// The voice (1 to 8) that has the focus in the roll area of the hub UI, 0 when all are shown.
     int focusedVoice() const { return focusedVoice_; }
+    /// The strength (0 to 100 %) that "Variation" uses; a value of the open editor, not saved (D-161).
+    int variationStrength() const { return static_cast<int>(strengthSlider_.getValue()); }
 
 private:
     void timerCallback() override;
@@ -39,6 +41,10 @@ private:
     /// Track focus (D-159): the voice that has the whole height, 0 for all.
     void setFocusedVoice(int voice);
     void applyFocus();
+    /// Buttons for the actions (D-161): variation of one voice or of all with the strength of the slider, and the
+    /// state of Undo, Redo and the history browser.
+    void varyVoice(std::optional<size_t> voice, std::optional<size_t> slot);
+    void updateActionButtons();
 
     ProcessorBase& processor_;
     juce::ComboBox roleBox_;
@@ -52,6 +58,14 @@ private:
     juce::ComboBox gridBox_; // hub: the edit grid of the piano rolls
     juce::ToggleButton tripletButton_;
     juce::ComboBox snapBox_;
+    juce::TextButton varyAllButton_;
+    juce::Label strengthLabel_;
+    juce::Slider strengthSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
+    juce::TextButton undoButton_;
+    juce::TextButton redoButton_;
+    juce::TextButton historyBackButton_;
+    juce::TextButton historyForwardButton_;
+    juce::Label historyLabel_;
     juce::TextEditor seedEditor_;
     juce::TextButton randomButton_;
     juce::Label energyLabel_;

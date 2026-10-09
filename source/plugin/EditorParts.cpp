@@ -72,6 +72,38 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     };
     addAndMakeVisible(focusButton_);
 
+    renewButton_.setComponentID("renew_" + juce::String(voice));
+    renewButton_.setButtonText(tr(mm::core::text::kButtonRenew));
+    renewButton_.onClick = [this] {
+        if (slotIndex_ >= 0) {
+            processor_.renewVoice(static_cast<size_t>(voice_ - 1), std::nullopt, static_cast<size_t>(slotIndex_));
+        }
+        if (onAction) {
+            onAction();
+        }
+    };
+    addAndMakeVisible(renewButton_);
+
+    varyButton_.setComponentID("vary_" + juce::String(voice));
+    varyButton_.setButtonText(tr(mm::core::text::kButtonVary));
+    varyButton_.onClick = [this] {
+        if (onVaryClicked) {
+            onVaryClicked(voice_);
+        }
+    };
+    addAndMakeVisible(varyButton_);
+
+    duplicateButton_.setComponentID("duplicate_" + juce::String(voice));
+    duplicateButton_.setButtonText(tr(mm::core::text::kButtonDuplicate));
+    duplicateButton_.onClick = [this] {
+        roll_.duplicateSelection();
+        if (onAction) {
+            onAction();
+        }
+    };
+    addAndMakeVisible(duplicateButton_);
+    updateButtons();
+
     roll_.setComponentID("roll_" + juce::String(voice));
     addAndMakeVisible(roll_);
     drag_.setComponentID("drag_" + juce::String(voice));
@@ -95,6 +127,14 @@ void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String&
     lockButton_.setEnabled(filled);
     lockButton_.setToggleState(filled && view->locked, juce::dontSendNotification);
     updateMuted();
+    updateButtons();
+}
+
+void VoiceRow::updateButtons() {
+    const bool usable = slotIndex_ >= 0 && !lockButton_.getToggleState();
+    renewButton_.setEnabled(usable);
+    varyButton_.setEnabled(usable);
+    duplicateButton_.setEnabled(slotIndex_ >= 0 && !roll_.selection().empty());
 }
 
 void VoiceRow::updateMuted() {
@@ -119,19 +159,31 @@ void VoiceRow::resized() {
     auto area = getLocalBounds().reduced(16, 4);
     if (collapsed_) {
         // A strip: everything but the roll, side by side.
-        nameLabel_.setBounds(area.removeFromLeft(110));
-        muteButton_.setBounds(area.removeFromLeft(90));
-        lockButton_.setBounds(area.removeFromLeft(100));
-        focusButton_.setBounds(area.removeFromLeft(80));
+        nameLabel_.setBounds(area.removeFromLeft(100));
+        muteButton_.setBounds(area.removeFromLeft(80));
+        lockButton_.setBounds(area.removeFromLeft(90));
+        focusButton_.setBounds(area.removeFromLeft(70));
+        renewButton_.setBounds(area.removeFromLeft(56).reduced(0, 2));
+        area.removeFromLeft(6);
+        varyButton_.setBounds(area.removeFromLeft(90).reduced(0, 2));
+        area.removeFromLeft(6);
+        duplicateButton_.setBounds(area.removeFromLeft(100).reduced(0, 2));
+        area.removeFromLeft(10);
         drag_.setBounds(area.removeFromLeft(60).withHeight(area.getHeight()));
         roll_.setBounds({});
         return;
     }
-    auto left = area.removeFromLeft(130);
+    auto left = area.removeFromLeft(160);
     nameLabel_.setBounds(left.removeFromTop(28));
-    muteButton_.setBounds(left.removeFromTop(28));
-    lockButton_.setBounds(left.removeFromTop(28));
-    focusButton_.setBounds(left.removeFromTop(28));
+    // Two buttons side by side per line: Stumm | Sperren, Neu | Variation, Fokus | Duplizieren.
+    const auto pair = [&left](juce::Component& first, juce::Component& second) {
+        auto line = left.removeFromTop(28);
+        first.setBounds(line.removeFromLeft(line.getWidth() / 2).reduced(0, 1));
+        second.setBounds(line.reduced(2, 1));
+    };
+    pair(muteButton_, lockButton_);
+    pair(renewButton_, varyButton_);
+    pair(focusButton_, duplicateButton_);
     drag_.setBounds(left.removeFromBottom(40));
     area.removeFromLeft(8);
     roll_.setBounds(area);
