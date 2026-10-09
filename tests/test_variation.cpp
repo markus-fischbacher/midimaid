@@ -29,6 +29,9 @@ StyleProfile loadShipped(const std::string& name) {
     return *result.profile;
 }
 
+// The strongest variation that still uses the subtle operators only (D-156).
+constexpr int kLastSubtlePct = kStructuralFromPct - 1;
+
 const char* const kStyles[] = {"peak_time", "melodic_techno", "hard_industrial"};
 
 Pattern source(const StyleProfile& style, uint32_t bars, uint64_t seed) {
@@ -136,7 +139,13 @@ TEST_CASE("variation series: valid, constraint-clean, ids stable, strength 1-100
                         for (const Note& note : p.voices[v].notes) {
                             CHECK(ids.insert(note.id).second);
                         }
-                        CHECK(p.voices[v].notes.size() <= base.voices[v].notes.size()); // D1 never adds notes
+                        // Below the structural threshold no note is added or removed; above it at most two per
+                        // operator, and a voice keeps two notes.
+                        const size_t baseSize = base.voices[v].notes.size();
+                        const size_t room = 2 * structuralEditCount(strength);
+                        CHECK(p.voices[v].notes.size() <= baseSize + room);
+                        CHECK(p.voices[v].notes.size() + room >= baseSize);
+                        CHECK(p.voices[v].notes.size() >= std::min<size_t>(baseSize, 2));
                     }
                 }
             }
@@ -154,14 +163,15 @@ TEST_CASE("a subtle variation keeps most of the notes and changes more at a high
         Pattern weak = base;
         Pattern strong = base;
         applyVariation(weak, style, {}, requestOf(seed, 10));
-        applyVariation(strong, style, {}, requestOf(seed, 100));
+        applyVariation(strong, style, {}, requestOf(seed, kLastSubtlePct));
         for (size_t v = 0; v < base.voices.size(); ++v) {
             low += differing(base.voices[v], weak.voices[v]);
             high += differing(base.voices[v], strong.voices[v]);
             total += base.voices[v].notes.size();
             // The cap, an overshoot of the velocity contour and what the constraint layer repairs.
             const size_t size = base.voices[v].notes.size();
-            CHECK(differing(base.voices[v], strong.voices[v]) <= variationEditCount(size, 100) + 3 + size / 10);
+            CHECK(differing(base.voices[v], strong.voices[v]) <=
+                  variationEditCount(size, kLastSubtlePct) + 3 + size / 10);
         }
     }
     CHECK(low < high);
@@ -243,8 +253,15 @@ TEST_CASE("locks on single notes are respected per dimension", "[variation][voic
         Pattern q = pitchLocked;
         applyVariation(q, style, {}, requestOf(seed, 100));
         for (size_t v = 0; v < q.voices.size(); ++v) {
-            for (size_t i = 0; i < q.voices[v].notes.size(); ++i) {
-                CHECK(q.voices[v].notes[i].pitch == pitchBefore.voices[v].notes[i].pitch);
+            std::map<uint32_t, uint8_t> pitches;
+            for (const Note& note : pitchBefore.voices[v].notes) {
+                pitches[note.id] = note.pitch;
+            }
+            for (const Note& note : q.voices[v].notes) {
+                const auto it = pitches.find(note.id);
+                if (it != pitches.end()) {
+                    CHECK(note.pitch == it->second); // notes may move or go (rhythm is free), pitches do not change
+                }
             }
         }
     }
@@ -268,7 +285,7 @@ TEST_CASE("the accent operator keeps the number of accents", "[variation]") {
     bool moved = false;
     for (uint64_t seed = 1; seed <= 30; ++seed) {
         Pattern p = base;
-        applyVariation(p, style, {}, requestOf(seed, 60, 1));
+        applyVariation(p, style, {}, requestOf(seed, kLastSubtlePct, 1));
         size_t now = 0;
         for (const Note& note : p.voices[1].notes) {
             now += note.accent ? 1 : 0;
@@ -286,7 +303,7 @@ TEST_CASE("replaced notes stay in the scale or the chord and inside the range", 
     for (uint64_t seed = 1; seed <= 30; ++seed) {
         const Pattern base = source(style, 4, seed);
         Pattern p = base;
-        applyVariation(p, style, {}, requestOf(seed, 100, 1));
+        applyVariation(p, style, {}, requestOf(seed, kLastSubtlePct, 1));
         const Scale* scale = findScale(base.context.scaleId);
         REQUIRE(scale != nullptr);
         std::map<uint32_t, uint8_t> pitches;
@@ -410,7 +427,7 @@ TEST_CASE("a replacement never leaves the range of the voice", "[variation]") {
             const Pattern source = p;
             for (uint64_t seed = 1; seed <= 25; ++seed) {
                 Pattern q = source;
-                applyVariation(q, style, {}, requestOf(seed, 100, v));
+                applyVariation(q, style, {}, requestOf(seed, kLastSubtlePct, v));
                 for (size_t i = 0; i < q.voices[v].notes.size(); ++i) {
                     const int now = q.voices[v].notes[i].pitch;
                     CHECK(now >= low);
@@ -496,4 +513,30 @@ TEST_CASE("replacing prefers weak steps", "[variation]") {
     }
     REQUIRE(total > 200);
     CHECK(weak * 100 > total * 65); // three to one by weight: 75 % expected, a uniform choice would give 50 %
+}
+
+TEST_CASE("structural operators join from the threshold on and never below it", "[variation][series]") {
+    const StyleProfile style = loadShipped("peak_time");
+    size_t structuralBelow = 0;
+    size_t structuralAbove = 0;
+    for (uint64_t seed = 1; seed <= 40; ++seed) {
+        const Pattern base = source(style, 4, 400 + seed);
+        const auto starts = [](const Track& track) {
+            std::vector<uint32_t> result;
+            for (const Note& note : track.notes) {
+                result.push_back(note.startTick);
+            }
+            return result;
+        };
+        Pattern below = base;
+        Pattern above = base;
+        applyVariation(below, style, {}, requestOf(seed, kLastSubtlePct));
+        applyVariation(above, style, {}, requestOf(seed, 100));
+        for (size_t v = 0; v < base.voices.size(); ++v) {
+            structuralBelow += starts(below.voices[v]) != starts(base.voices[v]) ? 1 : 0;
+            structuralAbove += starts(above.voices[v]) != starts(base.voices[v]) ? 1 : 0;
+        }
+    }
+    CHECK(structuralBelow == 0);
+    CHECK(structuralAbove > 30); // of 80 voices, with up to three operators each
 }
