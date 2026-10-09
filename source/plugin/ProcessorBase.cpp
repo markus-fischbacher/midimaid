@@ -8,6 +8,7 @@
 #include "core/Variation.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "plugin/GlobalSettingsStore.h"
 #include "plugin/PlaceholderEditor.h"
 
 #include <algorithm>
@@ -81,6 +82,36 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     player_.attach(&handover_);
     groupLink_ = GroupLink::create(*this);
     groupLink_->setRole(settings_.role, settings_.outputVoice);
+    applyStartKey();
+}
+
+void ProcessorBase::applyStartKey() {
+    auto& store = globalSettings();
+    if (!startKeyPending_ || !store.enabled()) {
+        startKeyPending_ = false;
+        return;
+    }
+    if (!store.ready()) {
+        // The file is read in the background: ask again until it is there.
+        if (startKeyTimer_ == nullptr) {
+            startKeyTimer_ = std::make_unique<ParkTimer>([this] { applyStartKey(); });
+        }
+        return;
+    }
+    startKeyPending_ = false;
+    // Only an instance that still has the built-in key takes the last one the user chose (D-162); a loaded state or a
+    // choice made in the meantime stays.
+    auto next = instanceSettings();
+    const mm::core::GenerationSettings builtIn;
+    if (next.generation.root == builtIn.root && next.generation.scaleId == builtIn.scaleId) {
+        const auto global = store.get();
+        next.generation.root = global.startRoot;
+        next.generation.scaleId = global.startScaleId;
+        if (!(next == instanceSettings())) {
+            setInstanceSettings(next);
+        }
+    }
+    startKeyTimer_.reset(); // may destroy the timer that is calling: nothing runs after this line
 }
 
 ProcessorBase::~ProcessorBase() {
@@ -955,6 +986,8 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     if (root == nullptr || !root->hasTagName("MidiMaid") || root->getIntAttribute("stateVersion", 0) < 1) {
         return;
     }
+    startKeyPending_ = false; // the project has its own key
+    startKeyTimer_.reset();
     if (const auto* parameters = root->getChildByName(parameters_.state.getType())) {
         parameters_.replaceState(juce::ValueTree::fromXml(*parameters));
     }

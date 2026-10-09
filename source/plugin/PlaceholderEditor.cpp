@@ -3,6 +3,7 @@
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
 
 namespace mm::plugin {
@@ -119,6 +120,8 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
             next.generation.root.reset();
         } else {
             next.generation.root = static_cast<mm::core::PitchClass>(id - 2);
+            globalSettings().update(
+                [&](mm::core::GlobalSettings& global) { global.startRoot = *next.generation.root; });
         }
         processor_.setInstanceSettings(next);
     };
@@ -129,19 +132,36 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         gridBox_.addItem("1/" + juce::String(division), division);
     }
     gridBox_.setSelectedId(16, juce::dontSendNotification);
-    gridBox_.onChange = [this] { applyEditSettings(); };
+    gridBox_.onChange = [this] {
+        applyEditSettings();
+        saveEditSettings();
+    };
     addChildComponent(gridBox_);
     tripletButton_.setComponentID("triplet");
     tripletButton_.setButtonText(tr(keys::kRollTriplet));
-    tripletButton_.onClick = [this] { applyEditSettings(); };
+    tripletButton_.onClick = [this] {
+        applyEditSettings();
+        saveEditSettings();
+    };
     addChildComponent(tripletButton_);
     snapBox_.setComponentID("snap_box");
     snapBox_.addItem(tr(keys::kRollSnapScale), 1);
     snapBox_.addItem(tr(keys::kRollSnapChromatic), 2);
     snapBox_.setSelectedId(1, juce::dontSendNotification);
-    snapBox_.onChange = [this] { applyEditSettings(); };
+    snapBox_.onChange = [this] {
+        applyEditSettings();
+        saveEditSettings();
+    };
     addChildComponent(snapBox_);
 
+    expertButton_.setComponentID("expert");
+    expertButton_.setButtonText(tr(keys::kButtonExpert));
+    expertButton_.onClick = [this] {
+        expert_ = expertButton_.getToggleState();
+        globalSettings().update([this](mm::core::GlobalSettings& global) { global.expert = expert_; });
+        applyLevel();
+    };
+    addChildComponent(expertButton_);
     varyAllButton_.setComponentID("vary_all");
     varyAllButton_.setButtonText(tr(keys::kButtonVaryAll));
     varyAllButton_.onClick = [this] { varyVoice(std::nullopt, std::nullopt); };
@@ -152,6 +172,10 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     strengthSlider_.setComponentID("strength");
     strengthSlider_.setRange(0.0, 100.0, 1.0);
     strengthSlider_.setValue(30.0, juce::dontSendNotification);
+    strengthSlider_.onValueChange = [this] {
+        globalSettings().update(
+            [this](mm::core::GlobalSettings& global) { global.variationStrength = variationStrength(); });
+    };
     addChildComponent(strengthSlider_);
 
     undoButton_.setComponentID("undo");
@@ -203,6 +227,8 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
             next.generation.scaleId.reset();
         } else {
             next.generation.scaleId = std::string(scales[index].id);
+            globalSettings().update(
+                [&](mm::core::GlobalSettings& global) { global.startScaleId = *next.generation.scaleId; });
         }
         processor_.setInstanceSettings(next);
     };
@@ -317,6 +343,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addAndMakeVisible(statusLabel_);
 
     processor_.updateExport();
+    applyStoredSettings();
     updateStatus();  // chooses the layout and the size
     startTimerHz(4); // keep the exported tempo equal to the DAW tempo and the status line current
 }
@@ -336,6 +363,7 @@ void PlaceholderEditor::updateStatus() {
         roleBox_.setSelectedId(roleId, juce::dontSendNotification); // e.g. a voice that took over the hub
     }
     const bool isVoice = role == mm::core::InstanceRole::Voice;
+    applyStoredSettings(); // until the file is read
     if (isVoice != voiceLayout_ || getWidth() == 0) {
         applyLayout(isVoice);
     }
@@ -414,13 +442,12 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     rollView_.setVisible(voiceLayout);
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
-             &keyBox_,         &scaleBox_,         &barsBox_,     &seedEditor_,        &randomButton_,
-             &energySlider_,   &creativitySlider_, &energyLabel_, &creativityLabel_,   &infoLabel_,
-             &gridBox_,        &tripletButton_,    &snapBox_,     &varyAllButton_,     &strengthLabel_,
-             &strengthSlider_, &undoButton_,       &redoButton_,  &historyBackButton_, &historyForwardButton_,
+             &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
+             &infoLabel_, &expertButton_, &undoButton_, &redoButton_, &historyBackButton_, &historyForwardButton_,
              &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
+    applyLevel();
     for (auto& button : slotButtons_) {
         button.setVisible(!voiceLayout);
     }
@@ -504,6 +531,41 @@ void PlaceholderEditor::applyFocus() {
         rows_[i]->setFocused(focusedVoice_ == voice);
     }
     resized();
+}
+
+void PlaceholderEditor::applyLevel() {
+    // The expert controls: seed, edit grid, snapping, strength of the variation (SPEC 8.1).
+    const bool show = expert_ && !voiceLayout_;
+    for (auto* component :
+         std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
+                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_}) {
+        component->setVisible(show);
+    }
+    expertButton_.setToggleState(expert_, juce::dontSendNotification);
+    resized();
+}
+
+void PlaceholderEditor::applyStoredSettings() {
+    auto& store = globalSettings();
+    if (settingsApplied_ || !store.ready()) {
+        return;
+    }
+    settingsApplied_ = true;
+    const auto stored = store.get();
+    expert_ = stored.expert;
+    strengthSlider_.setValue(stored.variationStrength, juce::dontSendNotification);
+    gridBox_.setSelectedId(static_cast<int>(stored.grid.division), juce::dontSendNotification);
+    tripletButton_.setToggleState(stored.grid.triplet, juce::dontSendNotification);
+    snapBox_.setSelectedId(stored.snapChromatic ? 2 : 1, juce::dontSendNotification);
+    applyEditSettings();
+    applyLevel();
+}
+
+void PlaceholderEditor::saveEditSettings() {
+    globalSettings().update([this](mm::core::GlobalSettings& global) {
+        global.grid = {static_cast<uint32_t>(std::max(gridBox_.getSelectedId(), 4)), tripletButton_.getToggleState()};
+        global.snapChromatic = snapBox_.getSelectedId() == 2;
+    });
 }
 
 void PlaceholderEditor::varyVoice(std::optional<size_t> voice, std::optional<size_t> slot) {
@@ -676,10 +738,12 @@ void PlaceholderEditor::resized() {
     }
 
     // Hub UI: the settings of "Generate" in one row, then energy and creativity, the slot strip, the voices.
-    randomButton_.setBounds(top.removeFromRight(110));
-    top.removeFromRight(8);
-    seedEditor_.setBounds(top.removeFromRight(150));
-    top.removeFromRight(8);
+    if (expert_) {
+        randomButton_.setBounds(top.removeFromRight(110));
+        top.removeFromRight(8);
+        seedEditor_.setBounds(top.removeFromRight(150));
+        top.removeFromRight(8);
+    }
     barsBox_.setBounds(top.removeFromRight(90));
     top.removeFromRight(8);
     scaleBox_.setBounds(top.removeFromRight(190));
@@ -714,6 +778,8 @@ void PlaceholderEditor::resized() {
     historyLabel_.setBounds(historyBar.removeFromLeft(120));
     historyForwardButton_.setBounds(historyBar.removeFromLeft(40));
     auto editBar = area.removeFromTop(32).reduced(16, 2);
+    expertButton_.setBounds(editBar.removeFromLeft(120));
+    editBar.removeFromLeft(8);
     varyAllButton_.setBounds(editBar.removeFromRight(140));
     editBar.removeFromRight(8);
     strengthSlider_.setBounds(editBar.removeFromRight(220));

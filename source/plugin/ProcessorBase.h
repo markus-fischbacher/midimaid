@@ -232,6 +232,8 @@ private:
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
     void updateSlotMode(); // message thread
+    /// A new instance takes the key the user chose last (global settings, D-162) once the file is read.
+    void applyStartKey();
 
     /// Empties the handover's return queue on the message thread (SPEC 6.3: patterns are freed there only).
     class ReturnCollector : private juce::Timer {
@@ -270,6 +272,8 @@ private:
     std::optional<ParkedResult> parked_; // a result that arrived during an offline render (message thread)
     class ParkTimer;
     std::unique_ptr<ParkTimer> parkTimer_;
+    bool startKeyPending_ = true;              // message thread
+    std::unique_ptr<ParkTimer> startKeyTimer_; // message thread
     mm::engine::PatternPlayer player_;
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;

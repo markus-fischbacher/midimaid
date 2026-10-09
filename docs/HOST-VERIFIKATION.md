@@ -161,6 +161,8 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H27 | Schaltflächen je Stimme im Hub-Fenster (Live, Logic): „Neu“, „Variation“ (Stärke-Regler), „Duplizieren“ bei gewählten Noten; „Variation (alle)“ | Wirkt zum nächsten Takt, ohne Klick oder hängende Note, auch bei laufender Wiedergabe; Sperre einer Stimme schützt sie | | | |
 | H28 | „Rückgängig“, „Wiederholen“ und „◀ Verlauf n/m ▶“ im Hub-Fenster nach mehreren Ergebnissen und Notenänderungen | Rückgängig macht den letzten Schritt rückgängig, das Blättern wechselt zum nächsten Takt das Pattern; nach dem Blättern ist Rückgängig leer | | | |
 | H29 | Stärke der Variation im Hörtest: 10 %, 30 %, 60 %, 100 % an einem Techno-Pattern | Niedrig = hypnotisch (kleine Änderungen), hoch = hörbar anderes Pattern; Skalierung passt (Kalibrierung offen) | | | |
+| H30 | Schalter „Experte“ im Hub-Fenster (Live, Logic): ein, Fenster schließen und öffnen, Host neu starten | Seed, Raster, Triolen, Einrasten, Stärke und „Variation (alle)“ erscheinen; der Zustand bleibt (auch in einer zweiten Instanz) | | | |
+| H31 | Starttonart: Tonart und Skala wählen, neue Instanz anlegen; ein altes Projekt öffnen | Die neue Instanz startet mit der zuletzt gewählten Tonart, das alte Projekt behält seine; Datei `settings.json` liegt im Benutzerordner (macOS Application Support, Windows %APPDATA%), auch in den Hosts beschreibbar | | | |
 
 **Messung für den Mindestvorlauf (H5, H6, H12):** Der Standard ist 150 ms (D-90). Kommen bei H5 oder H6 verspätete Wechsel
 vor oder ist H12 nicht sample-gleich, wiederholst du H5 mit Puffer 1024. Notiere Puffergröße, Samplerate und

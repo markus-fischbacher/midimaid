@@ -1,8 +1,10 @@
+#include "NoUserSettings.h"
 #include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "engine/GroupChannel.h"
 #include "plugin/EditableRoll.h"
 #include "plugin/EditorParts.h"
+#include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ProcessorBase.h"
@@ -1673,7 +1675,10 @@ TEST_CASE("the hub UI hands grid, triplets and snapping to the rolls and shows t
     auto* triplet = dynamic_cast<juce::Button*>(find(*editor, "triplet"));
     auto* snapBox = dynamic_cast<juce::ComboBox*>(find(*editor, "snap_box"));
     REQUIRE((grid != nullptr && triplet != nullptr && snapBox != nullptr));
-    CHECK(grid->isVisible());
+    // the edit settings belong to the expert level (D-162): switch it on first
+    CHECK_FALSE(grid->isVisible());
+    dynamic_cast<juce::Button*>(find(*editor, "expert"))->triggerClick();
+    REQUIRE(waitFor([&] { return grid->isVisible(); }));
     CHECK(triplet->getButtonText() == "Triolen");
     CHECK(snapBox->getText() == "Einrasten: Skala");
 
@@ -2590,5 +2595,379 @@ TEST_CASE("a voice instance has no action buttons", "[buttons][editor]") {
         if (auto* row = find(*editor, id)) {
             CHECK_FALSE(row->isVisible());
         }
+    }
+}
+
+// --- Levels and the user's settings file (P2-H, D-162) --------------------------------------------------------------
+
+namespace {
+
+/// A settings store on a file in a fresh temporary folder, installed as the store of the process while it lives. It
+/// must outlive every instance and editor that is created while it is installed.
+struct TempSettings {
+    TempSettings()
+        : folder(juce::File::getSpecialLocation(juce::File::tempDirectory)
+                     .getChildFile("mm_settings_" +
+                                   juce::String::toHexString(juce::Random::getSystemRandom().nextInt64()))),
+          file(folder.getChildFile("sub").getChildFile("settings.json")) {}
+    ~TempSettings() {
+        mm::plugin::overrideGlobalSettings(&mmtest::disabledSettings());
+        store.reset();
+        folder.deleteRecursively();
+    }
+    /// Starts reading the file (it may not exist) and installs the store.
+    mm::plugin::GlobalSettingsStore& open(bool readNow = true) {
+        store = std::make_unique<mm::plugin::GlobalSettingsStore>(file, readNow);
+        mm::plugin::overrideGlobalSettings(store.get());
+        return *store;
+    }
+    void writeFile(const juce::String& text) {
+        REQUIRE(file.getParentDirectory().createDirectory());
+        REQUIRE(file.replaceWithText(text));
+    }
+    juce::File folder;
+    juce::File file;
+    std::unique_ptr<mm::plugin::GlobalSettingsStore> store;
+};
+
+} // namespace
+
+TEST_CASE("the settings store reads a missing file as the defaults and creates the file on the first change",
+          "[settings][store]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    CHECK(store.get() == mm::core::GlobalSettings{});
+    CHECK_FALSE(temp.file.existsAsFile());
+    store.update([](mm::core::GlobalSettings& settings) {
+        settings.expert = true;
+        settings.startRoot = 2;
+        settings.variationStrength = 61;
+    });
+    store.waitForWrites();
+    REQUIRE(temp.file.existsAsFile()); // the folder was created, too
+    CHECK_FALSE(temp.file.getSiblingFile("settings.json.tmp").exists());
+    const auto written = mm::core::parseGlobalSettings(temp.file.loadFileAsString().toStdString());
+    CHECK(written.expert);
+    CHECK(written.startRoot == 2);
+    CHECK(written.variationStrength == 61);
+    CHECK(written == store.get());
+}
+
+TEST_CASE("another store on the same file reads what was written", "[settings][store]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    {
+        auto& first = temp.open();
+        REQUIRE(waitFor([&] { return first.ready(); }));
+        first.update([](mm::core::GlobalSettings& settings) {
+            settings.startRoot = 7;
+            settings.startScaleId = "dorian";
+            settings.grid = mm::core::EditGrid{8, true};
+            settings.snapChromatic = true;
+        });
+        first.waitForWrites();
+    }
+    auto& second = temp.open();
+    REQUIRE(waitFor([&] { return second.ready(); }));
+    CHECK(second.get().startRoot == 7);
+    CHECK(second.get().startScaleId == "dorian");
+    CHECK(second.get().grid == mm::core::EditGrid{8, true});
+    CHECK(second.get().snapChromatic);
+}
+
+TEST_CASE("a change before the file is read wins for its field and keeps the rest of the file", "[settings][store]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    const juce::String original = R"({"version": 1, "startRoot": 2, "startScale": "dorian", "variationStrength": 55})";
+    temp.writeFile(original);
+    auto& store = temp.open(false);
+    store.update([](mm::core::GlobalSettings& settings) {
+        settings.expert = true;
+        settings.startRoot = 7;
+        settings.grid = mm::core::EditGrid{8, true};
+        settings.snapChromatic = true;
+    });
+    CHECK(store.get().expert); // visible at once
+    store.waitForWrites();
+    CHECK(temp.file.loadFileAsString() == original); // nothing is written before the file was read
+    store.beginRead();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.waitForWrites();
+    const auto now = store.get();
+    CHECK(now.expert);
+    CHECK(now.startRoot == 7);
+    CHECK(now.grid == mm::core::EditGrid{8, true});
+    CHECK(now.snapChromatic);
+    CHECK(now.startScaleId == "dorian");
+    CHECK(now.variationStrength == 55);
+    CHECK(mm::core::parseGlobalSettings(temp.file.loadFileAsString().toStdString()) == now); // and the file says so
+}
+
+TEST_CASE("a bad settings file is read as the defaults", "[settings][store]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    temp.writeFile("{ this is not json");
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    CHECK(store.get() == mm::core::GlobalSettings{});
+}
+
+TEST_CASE("the settings store sanitizes what it is given", "[settings][store]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.update([](mm::core::GlobalSettings& settings) {
+        settings.variationStrength = 500;
+        settings.startScaleId = "nope";
+    });
+    CHECK(store.get().variationStrength == 100);
+    CHECK(store.get().startScaleId == "natural_minor");
+}
+
+TEST_CASE("a store without file reads and writes nothing", "[settings][store]") {
+    mm::plugin::GlobalSettingsStore store{juce::File()};
+    CHECK_FALSE(store.enabled());
+    CHECK(store.ready());
+    store.update([](mm::core::GlobalSettings& settings) { settings.expert = true; });
+    CHECK_FALSE(store.get().expert);
+    store.waitForWrites();
+}
+
+TEST_CASE("the default settings file lies in the user's data folder under Klirrwerk", "[settings][store]") {
+    const auto file = mm::plugin::GlobalSettingsStore::defaultFile();
+    if (juce::SystemStats::getEnvironmentVariable("MIDIMAID_SETTINGS_FILE", {}).isEmpty()) {
+        CHECK(file.getFileName() == "settings.json");
+        CHECK(file.getParentDirectory().getFileName() == "MidiMaid");
+        CHECK(file.getParentDirectory().getParentDirectory().getFileName() == "Klirrwerk");
+        if ((juce::SystemStats::getOperatingSystemType() & juce::SystemStats::MacOSX) != 0) {
+            CHECK(file.getFullPathName().contains("/Library/Application Support/Klirrwerk/MidiMaid/"));
+        }
+    }
+}
+
+TEST_CASE("a new instance starts with the key the user chose last", "[settings][startkey]") {
+    TempSettings temp;
+    temp.writeFile(R"({"version": 1, "startRoot": 2, "startScale": "dorian"})");
+    auto& store = temp.open(false);
+    Quiet quiet;
+    Instance instance("Solo"); // created before the file is read: the key arrives when it is there
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(200);
+    CHECK(instance.processor.instanceSettings().generation.root == 9);
+    store.beginRead();
+    REQUIRE(waitFor([&] { return instance.processor.instanceSettings().generation.root == 2; }));
+    CHECK(instance.processor.instanceSettings().generation.scaleId == "dorian");
+    CHECK(store.ready());
+}
+
+TEST_CASE("the very first start keeps A minor", "[settings][startkey]") {
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Quiet quiet;
+    Instance instance("Solo");
+    const auto generation = instance.processor.instanceSettings().generation;
+    CHECK(generation.root == 9);
+    CHECK(generation.scaleId == "natural_minor");
+}
+
+TEST_CASE("a project keeps its own key, whatever the user chose last", "[settings][startkey]") {
+    // also a project that saved the built-in A minor: it must not turn into the key chosen last
+    const std::vector<std::pair<int, std::string>> keys = {{5, "phrygian"}, {9, "natural_minor"}};
+    for (const auto& [root, scale] : keys) {
+        INFO(root << " " << scale);
+        juce::MemoryBlock saved;
+        {
+            Quiet quiet;
+            Instance first("Solo");
+            auto settings = first.processor.instanceSettings();
+            settings.generation.root = static_cast<mm::core::PitchClass>(root);
+            settings.generation.scaleId = scale;
+            first.processor.setInstanceSettings(settings);
+            first.processor.getStateInformation(saved);
+        }
+        TempSettings temp;
+        temp.writeFile(R"({"version": 1, "startRoot": 2, "startScale": "dorian"})");
+        auto& store = temp.open(false);
+        Quiet quiet;
+        Instance loaded("Solo"); // created before the file is read
+        loaded.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        store.beginRead();
+        REQUIRE(waitFor([&] { return store.ready(); }));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
+        CHECK(loaded.processor.instanceSettings().generation.root == root);
+        CHECK(loaded.processor.instanceSettings().generation.scaleId == scale);
+    }
+}
+
+TEST_CASE("a key chosen before the file is read stays", "[settings][startkey]") {
+    TempSettings temp;
+    temp.writeFile(R"({"version": 1, "startRoot": 2, "startScale": "dorian"})");
+    auto& store = temp.open(false);
+    Quiet quiet;
+    Instance instance("Solo");
+    auto settings = instance.processor.instanceSettings();
+    settings.generation.root = 5;
+    settings.generation.scaleId = "phrygian";
+    instance.processor.setInstanceSettings(settings);
+    store.beginRead();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
+    CHECK(instance.processor.instanceSettings().generation.root == 5);
+    CHECK(instance.processor.instanceSettings().generation.scaleId == "phrygian");
+}
+
+TEST_CASE("a key chosen in the window becomes the start key of the next instance", "[settings][startkey][editor]") {
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Quiet quiet;
+    Instance instance("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+    auto* keys = dynamic_cast<juce::ComboBox*>(find(*editor, "key"));
+    auto* scales = dynamic_cast<juce::ComboBox*>(find(*editor, "scale"));
+    REQUIRE((keys != nullptr && scales != nullptr));
+    keys->setSelectedId(2 + 4, juce::sendNotificationSync); // E
+    scales->setSelectedId(3, juce::sendNotificationSync);   // the second scale of the list
+    const auto chosen = store.get();
+    CHECK(chosen.startRoot == 4);
+    CHECK(chosen.startScaleId == instance.processor.instanceSettings().generation.scaleId);
+    keys->setSelectedId(1, juce::sendNotificationSync); // "auto" is no key to remember
+    scales->setSelectedId(1, juce::sendNotificationSync);
+    CHECK(store.get().startRoot == 4);
+    CHECK(store.get().startScaleId == chosen.startScaleId);
+    store.waitForWrites();
+    editor.reset();
+    Instance next("Solo");
+    CHECK(next.processor.instanceSettings().generation.root == 4);
+    CHECK(next.processor.instanceSettings().generation.scaleId == chosen.startScaleId);
+}
+
+TEST_CASE("the basic level hides the expert controls, the switch shows them and the file remembers it",
+          "[settings][level][editor]") {
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Quiet quiet;
+    Instance instance("Solo");
+    const std::vector<const char*> expertIds = {"seed",     "random",   "grid_box", "triplet",
+                                                "snap_box", "vary_all", "strength"};
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+        REQUIRE(panel != nullptr);
+        auto* toggle = dynamic_cast<juce::Button*>(find(*editor, "expert"));
+        REQUIRE(toggle != nullptr);
+        CHECK(toggle->getButtonText() == "Experte");
+        CHECK(toggle->isVisible());
+        CHECK_FALSE(panel->expertLevel());
+        CHECK_FALSE(toggle->getToggleState());
+        for (const char* id : expertIds) {
+            INFO(id);
+            REQUIRE(find(*editor, id) != nullptr);
+            CHECK_FALSE(find(*editor, id)->isVisible());
+        }
+        // what belongs to the basic level stays
+        for (const char* id : {"style", "key", "scale", "bars", "energy", "creativity", "undo", "redo", "slot1"}) {
+            INFO(id);
+            REQUIRE(find(*editor, id) != nullptr);
+            CHECK(find(*editor, id)->isVisible());
+        }
+        CHECK(find(*editor, "renew_1")->isVisible()); // the buttons of the rows are basic
+
+        toggle->triggerClick();
+        REQUIRE(waitFor([&] { return panel->expertLevel(); }));
+        for (const char* id : expertIds) {
+            INFO(id);
+            CHECK(find(*editor, id)->isVisible());
+            CHECK(find(*editor, id)->getWidth() > 0);
+        }
+        CHECK(store.get().expert);
+        store.waitForWrites();
+        CHECK(mm::core::parseGlobalSettings(temp.file.loadFileAsString().toStdString()).expert);
+    }
+    // a new window opens at the level the user left
+    std::unique_ptr<juce::AudioProcessorEditor> again(instance.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(again.get());
+    CHECK(panel->expertLevel());
+    CHECK(find(*again, "seed")->isVisible());
+    CHECK(dynamic_cast<juce::Button*>(find(*again, "expert"))->getToggleState());
+    dynamic_cast<juce::Button*>(find(*again, "expert"))->triggerClick();
+    REQUIRE(waitFor([&] { return !panel->expertLevel(); }));
+    CHECK_FALSE(find(*again, "seed")->isVisible());
+    CHECK_FALSE(store.get().expert);
+}
+
+TEST_CASE("strength, grid and snapping are remembered across windows", "[settings][level][editor]") {
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Quiet quiet;
+    Instance instance("Solo");
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        auto* strength = dynamic_cast<juce::Slider*>(find(*editor, "strength"));
+        auto* grid = dynamic_cast<juce::ComboBox*>(find(*editor, "grid_box"));
+        auto* triplet = dynamic_cast<juce::Button*>(find(*editor, "triplet"));
+        auto* snap = dynamic_cast<juce::ComboBox*>(find(*editor, "snap_box"));
+        REQUIRE((strength != nullptr && grid != nullptr && triplet != nullptr && snap != nullptr));
+        strength->setValue(64.0, juce::sendNotificationSync);
+        grid->setSelectedId(8, juce::sendNotificationSync);
+        triplet->setToggleState(true, juce::sendNotificationSync);
+        snap->setSelectedId(2, juce::sendNotificationSync);
+        const auto saved = store.get();
+        CHECK(saved.variationStrength == 64);
+        CHECK(saved.grid == mm::core::EditGrid{8, true});
+        CHECK(saved.snapChromatic);
+    }
+    store.waitForWrites();
+    std::unique_ptr<juce::AudioProcessorEditor> again(instance.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(again.get());
+    CHECK(panel->variationStrength() == 64);
+    CHECK(dynamic_cast<juce::ComboBox*>(find(*again, "grid_box"))->getSelectedId() == 8);
+    CHECK(dynamic_cast<juce::Button*>(find(*again, "triplet"))->getToggleState());
+    CHECK(dynamic_cast<juce::ComboBox*>(find(*again, "snap_box"))->getSelectedId() == 2);
+    // the roll works with the remembered grid: 1/8 triplet = 2/3 of 480 ticks
+    instance.processor.editSlots(
+        [&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+    auto* roll = dynamic_cast<mm::plugin::EditableRoll*>(find(*again, "roll_1"));
+    REQUIRE(roll != nullptr);
+    CHECK(roll->snap().grid == mm::core::EditGrid{8, true});
+}
+
+TEST_CASE("the values of a settings file that is read late reach the open window", "[settings][level][editor]") {
+    TempSettings temp;
+    temp.writeFile(R"({"version": 1, "expert": true, "variationStrength": 77, "gridDivision": 4})");
+    auto& store = temp.open(false);
+    Quiet quiet;
+    Instance instance("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
+    CHECK_FALSE(panel->expertLevel()); // nothing read yet
+    store.beginRead();
+    REQUIRE(waitFor([&] { return panel->expertLevel() && panel->variationStrength() == 77; }));
+    CHECK(dynamic_cast<juce::ComboBox*>(find(*editor, "grid_box"))->getSelectedId() == 4);
+    CHECK(store.ready());
+}
+
+TEST_CASE("a voice window has no level switch", "[settings][level][editor]") {
+    TempSettings temp;
+    temp.writeFile(R"({"version": 1, "expert": true})");
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Quiet quiet;
+    Instance voice("Voice");
+    auto settings = voice.processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    voice.processor.setInstanceSettings(settings);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    REQUIRE(waitFor([&] { return editor->getHeight() == 320; }));
+    for (const char* id : {"expert", "seed", "random", "grid_box", "triplet", "snap_box", "vary_all", "strength"}) {
+        INFO(id);
+        REQUIRE(find(*editor, id) != nullptr);
+        CHECK_FALSE(find(*editor, id)->isVisible());
     }
 }
