@@ -4,7 +4,7 @@ target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJEC
                                                   MIDIMAID_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
 
 find_package(Threads REQUIRED)
-add_executable(mm_ai_tests test_ai_schema.cpp test_ai_mock.cpp)
+add_executable(mm_ai_tests test_ai_schema.cpp test_ai_mock.cpp test_ai_prompt.cpp test_ai_compact.cpp)
 target_link_libraries(mm_ai_tests PRIVATE mm_ai Threads::Threads Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_ai_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
