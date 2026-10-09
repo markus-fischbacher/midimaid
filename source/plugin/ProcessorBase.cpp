@@ -1,6 +1,7 @@
 #include "plugin/ProcessorBase.h"
 
 #include "core/PatternEdit.h"
+#include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
 #include "core/SlotBankJson.h"
 #include "core/TextKeys.h"
@@ -362,7 +363,8 @@ void ProcessorBase::generate() {
     generator_.request(job);
 }
 
-bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::optional<uint64_t> seed) {
+bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::optional<uint64_t> seed,
+                         std::optional<size_t> slotChoice) {
     mm::core::ArchetypeSettings settings;
     size_t slotIndex = 0;
     bool isVoice;
@@ -376,7 +378,8 @@ bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::opti
         generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
         return false;
     }
-    slotIndex = static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    slotIndex = slotChoice ? *slotChoice
+                           : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
     const uint64_t useSeed = seed ? *seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     bool done = false;
     bool allLocked = false;
@@ -425,6 +428,85 @@ bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::opti
                         : allLocked ? GenerationStatus::VaryAllLocked
                                     : GenerationStatus::NothingToVary;
     return done;
+}
+
+bool ProcessorBase::renewVoice(size_t voice, std::optional<uint64_t> seed, std::optional<size_t> slotChoice) {
+    mm::core::GenerationRequest request;
+    bool isVoice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+        request.settings.energyPct = settings_.generation.energyPct;
+        request.settings.creativityPct = settings_.generation.creativityPct;
+    }
+    if (isVoice) {
+        generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
+        return false;
+    }
+    const size_t slotIndex =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    const uint64_t useSeed = seed ? *seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
+    bool done = false;
+    bool locked = false;
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto* slot = bank.slot(slotIndex);
+        if (slot == nullptr || !slot->pattern || voice >= slot->pattern->voices.size()) {
+            return;
+        }
+        const mm::core::Pattern& current = *slot->pattern;
+        if (mm::core::isVoiceLocked(current.voices[voice])) {
+            locked = true;
+            return;
+        }
+        const auto* style = styles_.findOrFallback(current.styleId);
+        if (style == nullptr) {
+            return;
+        }
+        mm::core::Pattern renewed = current;
+        if (!mm::core::regenerateVoice(renewed, voice, *style, request, useSeed)) {
+            return;
+        }
+        renewed.info.source = "algorithm";
+        std::optional<mm::core::Pattern> before = current;
+        const size_t cursor = slot->cursor;
+        if (bank.setResult(slotIndex, std::move(renewed))) {
+            undo_.recordResult(slotIndex, std::move(before), cursor, *bank.slot(slotIndex)->pattern);
+            done = true;
+        }
+    });
+    generationStatus_ = done     ? GenerationStatus::Renewed
+                        : locked ? GenerationStatus::RenewLocked
+                                 : GenerationStatus::NothingToRenew;
+    return done;
+}
+
+bool ProcessorBase::historyBack(std::optional<size_t> slot) {
+    return browseHistory(true, slot);
+}
+
+bool ProcessorBase::historyForward(std::optional<size_t> slot) {
+    return browseHistory(false, slot);
+}
+
+bool ProcessorBase::browseHistory(bool back, std::optional<size_t> slotChoice) {
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (settings_.role == mm::core::InstanceRole::Voice) {
+            return false;
+        }
+    }
+    const size_t slotIndex =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    bool moved = false;
+    editSlots([&](mm::core::SlotBank& bank) {
+        moved = back ? bank.historyBack(slotIndex) : bank.historyForward(slotIndex);
+        if (moved) {
+            undo_.discardSlot(slotIndex);
+        }
+    });
+    return moved;
 }
 
 void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
@@ -716,6 +798,8 @@ ProcessorBase::SlotInfo ProcessorBase::playingSlotInfo() const {
     info.lengthBars = pattern.lengthBars;
     info.seed = pattern.info.seed;
     info.winnerSeed = pattern.info.winnerSeed;
+    info.historySize = slot->history.size();
+    info.historyIndex = slot->cursor;
     return info;
 }
 

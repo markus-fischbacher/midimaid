@@ -1254,6 +1254,144 @@ TEST_CASE("a voice instance does not vary", "[plugin][variation]") {
     CHECK(processor.slotsSnapshot().slot(0)->pattern == before.slot(0)->pattern);
 }
 
+TEST_CASE("renewing a voice is a history entry and one undo step, the other voice stays", "[plugin][renew]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 5));
+    const auto base = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE(processor.renewVoice(1, 11));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::Renewed);
+    const auto after = processor.slotsSnapshot();
+    REQUIRE(after.slot(0)->history.size() == 2);
+    CHECK(after.slot(0)->pattern->info.source == "algorithm");
+    CHECK(after.slot(0)->pattern->voices[1].notes != base.voices[1].notes);
+    CHECK(after.slot(0)->pattern->voices[0].notes.size() == base.voices[0].notes.size());
+    CHECK(after.slot(0)->pattern->context == base.context);
+    REQUIRE(processor.canUndo());
+    REQUIRE(processor.undo());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices == base.voices);
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == 1);
+    REQUIRE(processor.redo());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices == after.slot(0)->pattern->voices);
+}
+
+TEST_CASE("renewing with the same seed repeats, without a seed it is random", "[plugin][renew]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 5));
+    REQUIRE(processor.renewVoice(0, 3));
+    const auto first = processor.slotsSnapshot().slot(0)->pattern->voices[0].notes;
+    REQUIRE(processor.undo());
+    REQUIRE(processor.renewVoice(0, 3));
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes == first);
+    REQUIRE(processor.undo());
+    std::vector<std::vector<mm::core::Note>> basses;
+    for (int i = 0; i < 6; ++i) {
+        REQUIRE(processor.renewVoice(0));
+        basses.push_back(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes);
+        REQUIRE(processor.undo());
+    }
+    CHECK(std::count(basses.begin(), basses.end(), basses[0]) < 6);
+}
+
+TEST_CASE("renewing leaves a locked voice alone and says why nothing happened", "[plugin][renew][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    CHECK_FALSE(processor.renewVoice(0)); // empty slot
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::NothingToRenew);
+    putInSlot(processor, generatedFor(processor, 8));
+    CHECK_FALSE(processor.renewVoice(9)); // unknown voice
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::NothingToRenew);
+    REQUIRE(processor.setVoiceLocked(0, 0, true));
+    const auto steps = processor.slotsSnapshot().slot(0)->history.size();
+    const auto bass = processor.slotsSnapshot().slot(0)->pattern->voices[0].notes;
+    CHECK_FALSE(processor.renewVoice(0, 1));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::RenewLocked);
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == steps);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes == bass);
+    REQUIRE(processor.renewVoice(1, 1)); // the other voice is free
+}
+
+TEST_CASE("a voice instance neither renews nor browses", "[plugin][renew]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Voice");
+    putInSlot(processor, generatedFor(processor, 5));
+    REQUIRE(processor.vary(40, std::nullopt, 7)); // two results, while this is still a hub
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    const auto before = processor.slotsSnapshot();
+    CHECK_FALSE(processor.renewVoice(0));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::UseHub);
+    CHECK_FALSE(processor.historyBack());
+    CHECK_FALSE(processor.historyForward());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern == before.slot(0)->pattern);
+    CHECK(processor.slotsSnapshot().slot(0)->cursor == before.slot(0)->cursor);
+}
+
+TEST_CASE("browsing the history makes an entry current and drops the undo steps of the slot", "[plugin][history]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 5));
+    CHECK_FALSE(processor.historyBack()); // one entry only
+    CHECK_FALSE(processor.historyForward());
+    REQUIRE(processor.vary(40, std::nullopt, 7));
+    REQUIRE(processor.renewVoice(0, 9));
+    const auto bank = processor.slotsSnapshot();
+    const auto& history = bank.slot(0)->history;
+    REQUIRE(history.size() == 3);
+    CHECK(processor.playingSlotInfo().historySize == 3);
+    CHECK(processor.playingSlotInfo().historyIndex == 2);
+    REQUIRE(processor.canUndo());
+    REQUIRE(processor.historyBack());
+    CHECK(processor.playingSlotInfo().historyIndex == 1);
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == history[1]);
+    CHECK_FALSE(processor.canUndo());
+    CHECK_FALSE(processor.canRedo());
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == 3); // browsing keeps the results
+    REQUIRE(processor.historyBack());
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == history[0]);
+    CHECK_FALSE(processor.historyBack()); // at the start
+    REQUIRE(processor.historyForward());
+    REQUIRE(processor.historyForward());
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == history[2]);
+    CHECK_FALSE(processor.historyForward()); // at the end
+    CHECK(processor.playingSlotInfo().historyIndex == 2);
+}
+
+TEST_CASE("browsing the history reaches the engine at the next bar line", "[plugin][history]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    Rig rig(processor);
+    putInSlot(processor, longNotePattern(45, 240));
+    auto second = longNotePattern(52, 240);
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, second)); });
+    rig.run(10);
+    REQUIRE(processor.historyBack());
+    auto notes = rig.run(1200); // past the bar line at PPQ 4
+    CHECK(countOf(notes, 45, true) >= 1);
+}
+
+TEST_CASE("variation, renewing and browsing work on the slot they are given", "[plugin][history]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    processor.editSlots([&](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(0, generatedFor(processor, 5)));
+        REQUIRE(bank.setResult(2, generatedFor(processor, 6)));
+    });
+    const auto first = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE(processor.activeSlot() == 1);
+    REQUIRE(processor.vary(60, std::nullopt, 4, size_t{2}));
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == first);
+    CHECK(processor.slotsSnapshot().slot(2)->history.size() == 2);
+    REQUIRE(processor.renewVoice(0, 4, size_t{2}));
+    CHECK(processor.slotsSnapshot().slot(2)->history.size() == 3);
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == 1);
+    REQUIRE(processor.historyBack(size_t{2}));
+    CHECK(processor.slotsSnapshot().slot(2)->cursor == 1);
+    CHECK(processor.slotsSnapshot().slot(0)->cursor == 0);
+}
+
 TEST_CASE("a variation reaches the engine at the next bar line", "[plugin][variation]") {
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor processor("Test");
