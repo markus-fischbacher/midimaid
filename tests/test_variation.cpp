@@ -285,7 +285,7 @@ TEST_CASE("the accent operator keeps the number of accents", "[variation]") {
     bool moved = false;
     for (uint64_t seed = 1; seed <= 30; ++seed) {
         Pattern p = base;
-        applyVariation(p, style, {}, requestOf(seed, 60, 1));
+        applyVariation(p, style, {}, requestOf(seed, kLastSubtlePct, 1));
         size_t now = 0;
         for (const Note& note : p.voices[1].notes) {
             now += note.accent ? 1 : 0;
