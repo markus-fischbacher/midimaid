@@ -1770,3 +1770,329 @@ TEST_CASE("the mouse handlers of the roll translate into gestures with the key g
     CHECK(rig.roll.keyPressed(juce::KeyPress('A', juce::ModifierKeys::commandModifier, 0)));
     CHECK(rig.roll.selection().size() == 3);
 }
+
+namespace {
+
+constexpr double kLane = mm::plugin::EditableRoll::kLaneHeight;
+
+/// The lane height that stands for `velocity`: the inverse of what the lane reads from the mouse.
+double laneY(int velocity) {
+    return kLane * (1.0 - static_cast<double>(velocity) / 127.0);
+}
+
+/// Sets the velocities of the melody notes (by index) through the processor, like an earlier edit would.
+void setMelodyVelocities(RollRig& rig, const std::vector<std::pair<size_t, uint8_t>>& values) {
+    std::vector<mm::core::VelocityChange> changes;
+    for (const auto& [index, velocity] : values) {
+        changes.push_back({rig.idAt(index), velocity});
+    }
+    REQUIRE(
+        rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) { return mm::core::setVelocities(p, 1, changes); }));
+    rig.refresh();
+}
+
+} // namespace
+
+TEST_CASE("dragging a velocity bar sets that velocity and is one undo step", "[roll][lane][editor]") {
+    RollRig rig;
+    const auto before = rig.melody();
+    const juce::Point<double> from{rig.xOf(960, 2.0), laneY(100)};
+    rig.roll.pressLane(from, {});
+    for (const double target : {90.0, 70.0, 50.0}) {
+        rig.roll.drag({from.x, laneY(static_cast<int>(target))});
+        rig.refresh();
+    }
+    CHECK(rig.roll.velocityHint() == 50);
+    rig.roll.release({from.x, laneY(50)});
+    rig.refresh();
+    CHECK(rig.melody()[1].velocity == 50);
+    CHECK(rig.melody()[0].velocity == before[0].velocity);
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)}); // the bar selected its note
+    CHECK(rig.roll.velocityHint() == 0);                            // the number goes with the gesture
+    REQUIRE(rig.solo.processor.undo());
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+}
+
+TEST_CASE("a click on a bar only selects, a small shake does not change the velocity", "[roll][lane][editor]") {
+    RollRig rig;
+    const auto before = rig.melody();
+    const juce::Point<double> from{rig.xOf(960, 2.0), laneY(40)};
+    rig.roll.pressLane(from, {});
+    rig.roll.drag({from.x, from.y + 2.0});
+    rig.roll.release(from);
+    CHECK(rig.melody() == before);
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
+    CHECK_FALSE(rig.solo.processor.canUndo());
+}
+
+TEST_CASE("a selection moves by the same velocity delta and stays inside 1 to 127", "[roll][lane][editor]") {
+    RollRig rig;
+    setMelodyVelocities(rig, {{0, 100}, {1, 60}});
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    rig.roll.press(rig.at(960, 64), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(960, 64));
+    REQUIRE(rig.roll.selection().size() == 2);
+
+    // 100 -> 80: the other one follows by -20
+    const juce::Point<double> from{rig.xOf(0, 2.0), laneY(100)};
+    rig.roll.pressLane(from, {});
+    rig.roll.drag({from.x, laneY(80)});
+    rig.refresh();
+    CHECK(rig.melody()[0].velocity == 80);
+    CHECK(rig.melody()[1].velocity == 40);
+    CHECK(rig.melody()[2].velocity == 100); // not selected
+    // further down than the lower one can follow: it stops at 1, the order of the two stays
+    rig.roll.drag({from.x, laneY(10)});
+    rig.refresh();
+    CHECK(rig.melody()[0].velocity == 10);
+    CHECK(rig.melody()[1].velocity == 1);
+    // and back up: each starts from its own value at the beginning of the gesture
+    rig.roll.drag({from.x, laneY(120)});
+    rig.refresh();
+    CHECK(rig.melody()[0].velocity == 120);
+    CHECK(rig.melody()[1].velocity == 80);
+    rig.roll.drag({from.x, laneY(127)});
+    rig.refresh();
+    CHECK(rig.melody()[1].velocity == 87);
+    rig.roll.release({from.x, laneY(127)});
+    REQUIRE(rig.solo.processor.undo()); // the whole drag is one step
+    CHECK(rig.melody()[0].velocity == 100);
+    CHECK(rig.melody()[1].velocity == 60);
+}
+
+TEST_CASE("an Alt stroke across the empty lane sets every bar it crosses", "[roll][lane][editor]") {
+    RollRig rig;
+    const auto before = rig.melody();
+    juce::Point<double> from{rig.xOf(500, 0.0), laneY(20)}; // no bar here
+    rig.roll.pressLane(from, juce::ModifierKeys::altModifier);
+    CHECK(rig.roll.gestureActive());
+    const juce::Point<double> end{rig.xOf(4000, 0.0), laneY(120)};
+    for (const double share : {0.4, 0.7, 1.0}) {
+        rig.roll.drag({from.x + (end.x - from.x) * share, from.y + (end.y - from.y) * share});
+        rig.refresh();
+    }
+    rig.roll.release(end);
+    const auto notes = rig.melody();
+    CHECK(notes[0].velocity == before[0].velocity); // the stroke began after it
+    CHECK(notes[1].velocity > 20);
+    CHECK(notes[1].velocity < notes[2].velocity);
+    CHECK(notes[2].velocity < notes[3].velocity);
+    CHECK(notes[3].velocity < 120);
+    REQUIRE(rig.solo.processor.undo());
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+
+    // without Alt an empty lane does nothing
+    rig.refresh();
+    rig.roll.pressLane(from, {});
+    CHECK_FALSE(rig.roll.gestureActive());
+    rig.roll.drag(end);
+    CHECK(rig.melody() == before);
+}
+
+TEST_CASE("a velocity drag is cancelled when somebody else changes the velocity", "[roll][lane][editor]") {
+    RollRig rig;
+    const juce::Point<double> from{rig.xOf(960, 2.0), laneY(100)};
+    rig.roll.pressLane(from, {});
+    rig.roll.drag({from.x, laneY(60)});
+    rig.refresh();
+    REQUIRE(rig.melody()[1].velocity == 60);
+    setMelodyVelocities(rig, {{1, 30}});
+    rig.roll.drag({from.x, laneY(90)});
+    CHECK_FALSE(rig.roll.gestureActive());
+    CHECK(rig.melody()[1].velocity == 30); // the drag did not overwrite it
+    rig.roll.release(from);
+}
+
+TEST_CASE("a with several bars covering each other the topmost is grabbed", "[roll][lane][editor]") {
+    RollRig rig;
+    // two notes on the same start: the later one is in front
+    REQUIRE(rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) {
+        return mm::core::addNote(p, 1, 62, 960, 240, 90) != 0 ? size_t{1} : size_t{0};
+    }));
+    rig.refresh();
+    const uint32_t front = rig.roll.source()[2].id; // sorted by start, stable: after the older note
+    REQUIRE(rig.roll.source()[1].startTick == 960);
+    rig.roll.pressLane({rig.xOf(960, 2.0), laneY(90)}, {});
+    CHECK(rig.roll.selection() == std::set<uint32_t>{front});
+    rig.roll.release({rig.xOf(960, 2.0), laneY(90)});
+}
+
+TEST_CASE("A and S toggle accent and slide of the selection, mixed selections get it first", "[roll][editor]") {
+    RollRig rig;
+    const auto key = [](int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); };
+    const auto rendered = [&](size_t index) { return rig.solo.processor.playingVoices()[1].notes.at(index); };
+    REQUIRE(rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) {
+        const std::vector<uint32_t> ids{rig.idAt(0)};
+        return mm::core::setAccent(p, 1, ids, true);
+    }));
+    rig.refresh();
+    const auto baseVelocity = rendered(1).velocity;
+    CHECK(rendered(0).velocity > baseVelocity); // the accent plays louder
+
+    rig.roll.handleKey(key('A', juce::ModifierKeys::commandModifier)); // select all
+    CHECK(rig.roll.handleKey(key('A')));
+    for (const auto& note : rig.melody()) {
+        CHECK(note.accent); // one of four had it: now all have it
+    }
+    CHECK(rendered(1).velocity > baseVelocity);
+    rig.refresh();
+    CHECK(rig.roll.handleKey(key('a')));
+    for (const auto& note : rig.melody()) {
+        CHECK_FALSE(note.accent); // all had it: now none
+    }
+    CHECK(rendered(0).velocity == baseVelocity);
+    REQUIRE(rig.solo.processor.undo()); // one step each
+    for (const auto& note : rig.melody()) {
+        CHECK(note.accent);
+    }
+
+    rig.refresh();
+    const auto lengthBefore = rendered(0).lengthTicks;
+    CHECK(rig.roll.handleKey(key('S')));
+    for (const auto& note : rig.melody()) {
+        CHECK(note.slide);
+    }
+    CHECK(rendered(0).lengthTicks > lengthBefore); // the slide reaches over the next note
+    rig.refresh();
+    CHECK(rig.roll.handleKey(key('s')));
+    for (const auto& note : rig.melody()) {
+        CHECK_FALSE(note.slide);
+    }
+    CHECK(rendered(0).lengthTicks == lengthBefore);
+}
+
+TEST_CASE("accent and slide do nothing without a selection and do not steal the shortcuts", "[roll][editor]") {
+    RollRig rig;
+    const auto before = rig.melody();
+    CHECK(rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys(), 0)));
+    CHECK(rig.roll.handleKey(juce::KeyPress('S', juce::ModifierKeys(), 0)));
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+    // Cmd+A still selects all, Alt+A and Cmd+S are not ours
+    CHECK(rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys::commandModifier, 0)));
+    CHECK(rig.roll.selection().size() == 4);
+    CHECK_FALSE(rig.roll.handleKey(juce::KeyPress('S', juce::ModifierKeys::commandModifier, 0)));
+    CHECK_FALSE(rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys::altModifier, 0)));
+    CHECK(rig.melody() == before);
+}
+
+TEST_CASE("Alt with the arrow keys changes the velocity of the selection", "[roll][editor]") {
+    RollRig rig;
+    const auto key = [](int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); };
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier)));
+    CHECK(rig.melody()[1].velocity == 99);
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey, juce::ModifierKeys::altModifier)));
+    CHECK(rig.melody()[1].velocity == 100);
+    CHECK(rig.roll.handleKey(
+        key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier)));
+    CHECK(rig.melody()[1].velocity == 90);
+    for (int i = 0; i < 6; ++i) {
+        rig.roll.handleKey(
+            key(juce::KeyPress::upKey, juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier));
+    }
+    CHECK(rig.melody()[1].velocity == 127);
+    for (int i = 0; i < 20; ++i) {
+        rig.roll.handleKey(
+            key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier));
+    }
+    CHECK(rig.melody()[1].velocity == 1);
+    // the plain arrows still move the pitch
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey)));
+    CHECK(rig.melody()[1].pitch == 65);
+    CHECK(rig.melody()[1].velocity == 1);
+}
+
+TEST_CASE("the context menu shows the state of the selection and runs its items", "[roll][editor]") {
+    using Roll = mm::plugin::EditableRoll;
+    RollRig rig;
+    const auto items = [&] {
+        std::vector<std::tuple<int, juce::String, bool, bool>> found;
+        juce::PopupMenu menu = rig.roll.contextMenu();
+        for (juce::PopupMenu::MenuItemIterator it(menu); it.next();) {
+            if (it.getItem().itemID != 0) {
+                found.emplace_back(it.getItem().itemID, it.getItem().text, it.getItem().isEnabled,
+                                   it.getItem().isTicked);
+            }
+        }
+        return found;
+    };
+    auto shown = items();
+    REQUIRE(shown.size() == 3);
+    CHECK(std::get<1>(shown[0]) == "Akzent");
+    CHECK(std::get<1>(shown[1]) == "Slide");
+    CHECK(std::get<1>(shown[2]) == "Löschen");
+    for (const auto& item : shown) {
+        CHECK_FALSE(std::get<2>(item)); // nothing selected: nothing to do
+    }
+
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    shown = items();
+    for (const auto& item : shown) {
+        CHECK(std::get<2>(item));
+        CHECK_FALSE(std::get<3>(item));
+    }
+    rig.roll.runMenuAction(Roll::kMenuAccent);
+    CHECK(rig.melody()[1].accent);
+    rig.refresh();
+    CHECK(std::get<3>(items()[0])); // ticked now
+    CHECK_FALSE(std::get<3>(items()[1]));
+    rig.roll.runMenuAction(Roll::kMenuSlide);
+    CHECK(rig.melody()[1].slide);
+    rig.refresh();
+    CHECK(std::get<3>(items()[1]));
+    rig.roll.runMenuAction(Roll::kMenuDelete);
+    CHECK(rig.melody().size() == 3);
+    rig.roll.runMenuAction(99); // an unknown item does nothing
+    CHECK(rig.melody().size() == 3);
+}
+
+TEST_CASE("the mouse handlers reach the velocity lane below the notes", "[roll][lane][editor]") {
+    RollRig rig;
+    const auto gutter = static_cast<float>(mm::plugin::EditableRoll::kGutter);
+    const float laneTop = static_cast<float>(rig.roll.getHeight() - static_cast<int>(kLane));
+    const juce::Point<float> from(static_cast<float>(rig.xOf(960, 2.0)) + gutter,
+                                  laneTop + static_cast<float>(laneY(100)));
+    const juce::Point<float> to(from.x, laneTop + static_cast<float>(laneY(50)));
+    rig.roll.mouseDown(mouseEventAt(rig.roll, from));
+    CHECK(rig.roll.gestureActive());
+    rig.roll.mouseDrag(mouseEventAt(rig.roll, to));
+    CHECK(rig.roll.velocityHint() == 50);
+    rig.roll.mouseUp(mouseEventAt(rig.roll, to));
+    CHECK(rig.melody()[1].velocity == 50);
+    CHECK_FALSE(rig.roll.gestureActive());
+    rig.roll.mouseMove(mouseEventAt(rig.roll, from)); // the cursor change must not crash
+    // the field above the lane still selects notes
+    rig.refresh();
+    const auto onNote = rig.at(0, 60);
+    const juce::Point<float> inField(static_cast<float>(onNote.x) + gutter, static_cast<float>(onNote.y));
+    rig.roll.mouseDown(mouseEventAt(rig.roll, inField));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, inField));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(0)});
+}
+
+TEST_CASE("the velocity lane does nothing in a voice instance or an empty slot", "[roll][lane][editor]") {
+    RollRig rig;
+    auto settings = rig.solo.processor.instanceSettings();
+    settings.role = InstanceRole::Voice;
+    rig.solo.processor.setInstanceSettings(settings);
+    const auto before = rig.melody();
+    rig.roll.pressLane({rig.xOf(960, 2.0), laneY(100)}, {});
+    rig.roll.drag({rig.xOf(960, 2.0), laneY(10)});
+    rig.roll.release({rig.xOf(960, 2.0), laneY(10)});
+    rig.roll.handleKey(juce::KeyPress('A', juce::ModifierKeys(), 0));
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+
+    settings.role = InstanceRole::Solo;
+    rig.solo.processor.setInstanceSettings(settings);
+    rig.solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.clear(0); });
+    rig.roll.setSource(nullptr);
+    rig.roll.pressLane({100.0, 10.0}, juce::ModifierKeys::altModifier);
+    CHECK_FALSE(rig.roll.gestureActive());
+}

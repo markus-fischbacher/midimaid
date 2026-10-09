@@ -137,6 +137,29 @@ MoveDelta dragMoveDelta(const RollGeometry& geometry, const RollSnap& snap, cons
 /// one grid step.
 uint32_t dragLength(const RollGeometry& geometry, const RollSnap& snap, const RollNote& anchor, double dx);
 
+/// The velocity lane under the notes (SPEC 3.5): one bar per note at the start of the note, as high as its velocity.
+/// `laneHeight` is the pixel height of the lane, positions are field x and lane y (0 at the top of the lane).
+
+/// The bar of a note: 3 to 10 pixels wide (the note width less a pixel in between), from the height of the velocity
+/// down to the bottom of the lane.
+RollBox velocityBarBox(const RollGeometry& geometry, const RollNote& note, double laneHeight);
+
+/// The velocity that a mouse height stands for: 127 at the top of the lane or above, 1 at the bottom or below, linear
+/// in between and rounded.
+uint8_t velocityAtY(double laneHeight, double y);
+
+/// The topmost bar under field position `x` (a later note covers an earlier one); a bar narrower than 8 pixels is still
+/// 8 pixels wide for the hit. 0 when there is none.
+uint32_t hitVelocityBar(const RollGeometry& geometry, std::span<const RollNote> notes, double x);
+
+/// The notes whose bar lies between the field positions `x0` and `x1` (any order, both ends included; by the middle of
+/// the bar): what a freehand stroke across the lane touches.
+std::vector<uint32_t> velocityBarsBetween(const RollGeometry& geometry, std::span<const RollNote> notes, double x0,
+                                          double x1);
+
+/// A velocity moved by `delta`, cut to 1-127.
+uint8_t shiftVelocity(uint8_t velocity, int delta);
+
 /// The next pitch above (`direction` > 0) or below the pitch that the snapping allows; an arrow key steps by this.
 /// Chromatic steps by one semitone, scale by one scale tone. Stays inside 0-127 (the pitch itself at the ends).
 int stepPitch(int pitch, int direction, const RollSnap& snap);

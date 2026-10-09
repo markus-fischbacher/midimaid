@@ -281,3 +281,76 @@ TEST_CASE("an arrow key steps to the next allowed pitch", "[roll-edit]") {
     noScale.scale = nullptr;
     CHECK(stepPitch(60, 1, noScale) == 61); // without a scale it is chromatic
 }
+
+TEST_CASE("a velocity bar is as high as the velocity and sits at the start of its note", "[roll-edit][lane]") {
+    const auto g = geometryOf(kTicksPerBar, 0, kTicksPerBar, 48, 24, 384.0, 240.0); // 10 ticks per pixel
+    auto n = note(1, 60, 960, 480);
+    n.velocity = 127;
+    auto box = velocityBarBox(g, n, 40.0);
+    CHECK(box.x == 96.0);
+    CHECK(box.y == 0.0);
+    CHECK(box.height == 40.0);
+    n.velocity = 64;
+    box = velocityBarBox(g, n, 40.0);
+    CHECK(std::abs(box.height - 40.0 * 64.0 / 127.0) < 1e-9);
+    CHECK(std::abs(box.y + box.height - 40.0) < 1e-9); // the bar stands on the bottom of the lane
+    n.velocity = 1;
+    CHECK(velocityBarBox(g, n, 40.0).height >= 1.0);
+    // the width follows the note between 3 and 10 pixels
+    n.lengthTicks = 20;
+    CHECK(velocityBarBox(g, n, 40.0).width == 3.0);
+    n.lengthTicks = 480; // 48 px
+    CHECK(velocityBarBox(g, n, 40.0).width == 10.0);
+    n.lengthTicks = 80; // 8 px, less one
+    CHECK(velocityBarBox(g, n, 40.0).width == 7.0);
+}
+
+TEST_CASE("a mouse height stands for a velocity from 1 to 127", "[roll-edit][lane]") {
+    CHECK(velocityAtY(40.0, 0.0) == 127);
+    CHECK(velocityAtY(40.0, -10.0) == 127);
+    CHECK(velocityAtY(40.0, 40.0) == 1);
+    CHECK(velocityAtY(40.0, 100.0) == 1);
+    CHECK(velocityAtY(40.0, 20.0) == 64); // the middle: 63.5 rounds up
+    for (double y = 0.0; y < 40.0; y += 0.5) {
+        CHECK(velocityAtY(40.0, y) >= velocityAtY(40.0, y + 0.5)); // higher up is never lower
+    }
+    // a bar of that height reaches the mouse
+    const auto g = geometryOf(kTicksPerBar, 0, kTicksPerBar, 48, 24, 384.0, 240.0);
+    auto n = note(1, 60, 0, 240);
+    n.velocity = velocityAtY(40.0, 10.0);
+    CHECK(std::abs(velocityBarBox(g, n, 40.0).y - 10.0) < 0.2);
+}
+
+TEST_CASE("the bar hit is topmost and at least eight pixels wide", "[roll-edit][lane]") {
+    const auto g = geometryOf(kTicksPerBar, 0, kTicksPerBar, 48, 24, 384.0, 240.0);
+    std::vector<RollNote> notes{note(1, 60, 960, 20), note(2, 62, 960, 20), note(3, 64, 1920, 480)};
+    CHECK(hitVelocityBar(g, notes, 97.0) == 2);  // the later note covers the earlier one
+    CHECK(hitVelocityBar(g, notes, 103.0) == 2); // beyond the 3 px bar, inside the 8 px hit area
+    CHECK(hitVelocityBar(g, notes, 104.5) == 0);
+    CHECK(hitVelocityBar(g, notes, 95.0) == 0);
+    CHECK(hitVelocityBar(g, notes, 193.0) == 3);
+    CHECK(hitVelocityBar(g, notes, 205.0) == 0); // a wide bar is only 10 px wide, not as wide as its note
+    CHECK(hitVelocityBar(g, {}, 100.0) == 0);
+}
+
+TEST_CASE("a stroke across the lane touches the bars between its ends", "[roll-edit][lane]") {
+    const auto g = geometryOf(kTicksPerBar, 0, kTicksPerBar, 48, 24, 384.0, 240.0);
+    std::vector<RollNote> notes{note(1, 60, 0, 240), note(2, 62, 960, 240), note(3, 64, 1920, 240),
+                                note(4, 65, 2880, 240)};
+    CHECK(velocityBarsBetween(g, notes, g.tickToX(900.0), g.tickToX(2000.0)) == std::vector<uint32_t>{2, 3});
+    CHECK(velocityBarsBetween(g, notes, g.tickToX(2000.0), g.tickToX(900.0)) ==
+          std::vector<uint32_t>{2, 3}); // any order
+    CHECK(velocityBarsBetween(g, notes, g.tickToX(960.0) + 5.0, g.tickToX(960.0) + 5.0) == std::vector<uint32_t>{2});
+    CHECK(velocityBarsBetween(g, notes, g.tickToX(1200.0), g.tickToX(1700.0)).empty());
+    CHECK(velocityBarsBetween(g, notes, -1000.0, 1000.0).size() == 4);
+}
+
+TEST_CASE("a velocity moves by a delta and stays inside 1 to 127", "[roll-edit][lane]") {
+    CHECK(shiftVelocity(100, 10) == 110);
+    CHECK(shiftVelocity(100, -10) == 90);
+    CHECK(shiftVelocity(120, 50) == 127);
+    CHECK(shiftVelocity(10, -50) == 1);
+    CHECK(shiftVelocity(1, -1) == 1);
+    CHECK(shiftVelocity(127, 1) == 127);
+    CHECK(shiftVelocity(64, 0) == 64);
+}
