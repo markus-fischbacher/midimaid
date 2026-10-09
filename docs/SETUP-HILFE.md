@@ -18,7 +18,7 @@ aus. Nur Instanzen im selben Prozess finden sich.
 3. **Pro Stimme eine Instanz als Voice.** Rolle „Voice“, daneben die Stimme wählen (Voice 1 = Bass, Voice 2 = Melodie).
    Die Voice zeigt „Mit dem Hub verbunden“ und übernimmt den Slot-Satz des Hubs.
 4. **Pro Spur ein Instrument** für die Ausgabe der Voice. Der Hub spielt selbst eine Stimme; soll er schweigen, stellst
-   du bei ihm „Output: none“ ein.
+   du bei ihm „Ausgabe: keine“ ein.
 5. **Erzeugen im Hub** (Knopf „Erzeugen“). In einer Voice leitet derselbe Knopf die Anfrage an den Hub weiter.
 
 ## Slot-Wechsel und Automation

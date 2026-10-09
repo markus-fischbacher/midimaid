@@ -146,7 +146,7 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H12 | Hub und Voice getrennt bouncen (Offline) und die Wellenformen vergleichen | Anschläge sample-gleich. Sonst: Versatz in Samples und Millisekunden notieren (Grundlage für den Mindestvorlauf, D-90) | | | |
 | H13 | Hub löschen | Voices spielen weiter, die älteste zeigt „Hub not found: you can take over“ und den Knopf „Hub werden“; die zweite Voice „Hub not found“ | | | |
 | H14 | „Hub werden“ drücken | Die Voice wird Hub („Hub: 1 Stimme“), die andere Voice verbindet sich, Slot-Wechsel laufen wieder gruppenweit | | | |
-| H15 | Hub auf „Output: none“ | Der Hub schweigt, Voices spielen und folgen weiter | | | |
+| H15 | Hub auf „Ausgabe: keine“ | Der Hub schweigt, Voices spielen und folgen weiter | | | |
 | H16 | Projekt **mit** Hub speichern, schließen, öffnen | Rolle, Stimme, Slot-Satz stimmen, Gruppe verbindet sich, Slot-Satz der Voices entspricht dem Hub | | | |
 | H17 | Projekt speichern, **Hub vorher entfernen**, öffnen | Voice spielt ihre Stimme unverändert weiter und zeigt „Hub not found“ (SPEC §6.5) | | | |
 | H18 | Projekt von **vor** Hub & Voices öffnen (Instanz ohne Rolle im State) | Instanz ist Solo und spielt wie bisher | | | |
