@@ -1,6 +1,8 @@
 #include "plugin/PlaceholderEditor.h"
 
 #include "core/ParameterRegister.h"
+#include "core/TextKeys.h"
+#include "plugin/EmbeddedTranslation.h"
 #include "plugin/GroupText.h"
 
 namespace mm::plugin {
@@ -9,10 +11,15 @@ namespace {
 
 constexpr const char* kKeyNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
-/// "natural_minor" -> "Natural minor"
+namespace keys = mm::core::text;
+
+/// The name of a scale in the language of the UI; an id without a translation shows as it is.
 juce::String scaleLabel(std::string_view id) {
-    auto text = juce::String(id.data(), id.size()).replace("_", " ");
-    return text.substring(0, 1).toUpperCase() + text.substring(1);
+    return tr(keys::scaleKey(id));
+}
+
+juce::String barsText(uint32_t bars) {
+    return tr(bars == 1 ? keys::kBarsOne : keys::kBarsMany, {{"n", std::to_string(bars)}});
 }
 
 } // namespace
@@ -23,9 +30,9 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addAndMakeVisible(*dragHandle_);
 
     const auto settings = processor_.instanceSettings();
-    roleBox_.addItem("Solo", 1);
-    roleBox_.addItem("Hub", 2);
-    roleBox_.addItem("Voice", 3);
+    roleBox_.addItem(tr(keys::kRoleSolo), 1);
+    roleBox_.addItem(tr(keys::kRoleHub), 2);
+    roleBox_.addItem(tr(keys::kRoleVoice), 3);
     roleBox_.setSelectedId(settings.role == mm::core::InstanceRole::Hub     ? 2
                            : settings.role == mm::core::InstanceRole::Voice ? 3
                                                                             : 1,
@@ -42,7 +49,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addAndMakeVisible(roleBox_);
 
     for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
-        voiceBox_.addItem("Voice " + juce::String(voice), voice);
+        voiceBox_.addItem(tr(keys::kVoiceN, {{"n", std::to_string(voice)}}), voice);
     }
     voiceBox_.setSelectedId(settings.outputVoice, juce::dontSendNotification);
     voiceBox_.onChange = [this] {
@@ -52,8 +59,8 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addAndMakeVisible(voiceBox_);
 
-    followBox_.addItem("Slot: follows hub", 1);
-    followBox_.addItem("Slot: own", 2);
+    followBox_.addItem(tr(keys::kFollowHub), 1);
+    followBox_.addItem(tr(keys::kFollowOwn), 2);
     followBox_.setSelectedId(settings.slotFollow == mm::core::SlotFollow::Own ? 2 : 1, juce::dontSendNotification);
     followBox_.onChange = [this] {
         auto next = processor_.instanceSettings();
@@ -62,8 +69,8 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(followBox_);
 
-    outputBox_.addItem("Output: a voice", 1);
-    outputBox_.addItem("Output: none", 2);
+    outputBox_.addItem(tr(keys::kOutputVoice), 1);
+    outputBox_.addItem(tr(keys::kOutputNone), 2);
     outputBox_.setSelectedId(settings.outputMode == mm::core::OutputMode::None ? 2 : 1, juce::dontSendNotification);
     outputBox_.onChange = [this] {
         auto next = processor_.instanceSettings();
@@ -72,13 +79,14 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(outputBox_);
 
+    takeOverButton_.setButtonText(tr(keys::kButtonTakeOver));
     takeOverButton_.onClick = [this] { processor_.acceptHubOffer(); };
     addChildComponent(takeOverButton_);
 
     const auto& profiles = processor_.styles().profiles();
     const auto current = processor_.instanceSettings().generation.styleId;
     for (size_t i = 0; i < profiles.size(); ++i) {
-        styleBox_.addItem(juce::String(profiles[i].nameEn), static_cast<int>(i) + 1);
+        styleBox_.addItem(juce::String::fromUTF8(profiles[i].nameDe.c_str()), static_cast<int>(i) + 1);
         if (profiles[i].id == current) {
             styleBox_.setSelectedId(static_cast<int>(i) + 1, juce::dontSendNotification);
         }
@@ -100,9 +108,9 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     styleBox_.setComponentID("style");
 
     keyBox_.setComponentID("key");
-    keyBox_.addItem("Key: auto", 1);
+    keyBox_.addItem(tr(keys::kKeyAuto), 1);
     for (int i = 0; i < 12; ++i) {
-        keyBox_.addItem(juce::String("Key: ") + kKeyNames[i], i + 2);
+        keyBox_.addItem(tr(keys::kKeyNote, {{"note", kKeyNames[i]}}), i + 2);
     }
     keyBox_.onChange = [this] {
         auto next = processor_.instanceSettings();
@@ -117,11 +125,11 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addChildComponent(keyBox_);
 
     scaleBox_.setComponentID("scale");
-    scaleBox_.addItem("Scale: auto", 1);
+    scaleBox_.addItem(tr(keys::kScaleAuto), 1);
     {
         int id = 2;
         for (const auto& scale : mm::core::allScales()) {
-            scaleBox_.addItem("Scale: " + scaleLabel(scale.id), id++);
+            scaleBox_.addItem(tr(keys::kScaleItem, {{"name", scaleLabel(scale.id).toStdString()}}), id++);
         }
     }
     scaleBox_.onChange = [this] {
@@ -139,7 +147,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 
     barsBox_.setComponentID("bars");
     for (const int bars : {1, 2, 4, 8, 16}) {
-        barsBox_.addItem(juce::String(bars) + (bars == 1 ? " bar" : " bars"), bars);
+        barsBox_.addItem(barsText(static_cast<uint32_t>(bars)), bars);
     }
     barsBox_.onChange = [this] {
         auto next = processor_.instanceSettings();
@@ -150,7 +158,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 
     seedEditor_.setComponentID("seed");
     seedEditor_.setInputRestrictions(20, "0123456789");
-    seedEditor_.setTextToShowWhenEmpty("Seed: random", juce::Colours::white.withAlpha(0.45f));
+    seedEditor_.setTextToShowWhenEmpty(tr(keys::kSeedRandom), juce::Colours::white.withAlpha(0.45f));
     const auto applySeed = [this] {
         auto next = processor_.instanceSettings();
         next.generation.seed = mm::core::parseSeed(seedEditor_.getText().toStdString());
@@ -161,6 +169,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     seedEditor_.onFocusLost = applySeed;
     addChildComponent(seedEditor_);
 
+    randomButton_.setButtonText(tr(keys::kButtonRandom));
     randomButton_.setComponentID("random");
     randomButton_.onClick = [this] {
         auto next = processor_.instanceSettings();
@@ -186,6 +195,8 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         next.generation.creativityPct = static_cast<int>(creativitySlider_.getValue());
         processor_.setInstanceSettings(next);
     };
+    energyLabel_.setText(tr(keys::kLabelEnergy), juce::dontSendNotification);
+    creativityLabel_.setText(tr(keys::kLabelCreativity), juce::dontSendNotification);
     for (auto* label : {&energyLabel_, &creativityLabel_}) {
         label->setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
         addChildComponent(*label);
@@ -204,16 +215,19 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     infoLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
     addChildComponent(infoLabel_);
 
+    openHubButton_.setButtonText(tr(keys::kButtonOpenHub));
     openHubButton_.setComponentID("openHub");
     openHubButton_.onClick = [this] { processor_.showHub(); };
     addChildComponent(openHubButton_);
 
+    muteButton_.setButtonText(tr(keys::kButtonMute));
     muteButton_.setComponentID("mute");
     addChildComponent(muteButton_);
 
     octaveBox_.setComponentID("octave");
     for (int octave = -2; octave <= 2; ++octave) {
-        octaveBox_.addItem(juce::String("Octave ") + (octave > 0 ? "+" : "") + juce::String(octave), octave + 3);
+        octaveBox_.addItem(tr(keys::kOctaveItem, {{"value", (octave > 0 ? "+" : "") + std::to_string(octave)}}),
+                           octave + 3);
     }
     octaveBox_.setSelectedId(settings.octave + 3, juce::dontSendNotification);
     octaveBox_.onChange = [this] {
@@ -227,6 +241,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     rollView_.setComponentID("roll");
     addChildComponent(rollView_);
 
+    generateButton_.setButtonText(tr(keys::kButtonGenerate));
     generateButton_.onClick = [this] {
         processor_.generate();
         updateStatus();
@@ -249,7 +264,8 @@ PlaceholderEditor::~PlaceholderEditor() {
 
 void PlaceholderEditor::updateStatus() {
     using mm::core::GroupStatus;
-    juce::String group = groupStatusText(processor_.groupStatus(), processor_.groupVoices());
+    juce::String group =
+        juce::String::fromUTF8(groupStatusText(processor_.groupStatus(), processor_.groupVoices()).c_str());
     takeOverButton_.setVisible(processor_.groupStatus() == GroupStatus::HubOffered);
     const auto role = processor_.instanceSettings().role;
     const int roleId = role == mm::core::InstanceRole::Hub ? 2 : role == mm::core::InstanceRole::Voice ? 3 : 1;
@@ -270,25 +286,25 @@ void PlaceholderEditor::updateStatus() {
     openHubButton_.setEnabled(processor_.groupStatus() == GroupStatus::VoiceConnected);
     outputBox_.setVisible(role == mm::core::InstanceRole::Hub);
     if (isVoice && processor_.lateSwitches() > 0) {
-        group += " (" + juce::String(static_cast<int>(processor_.lateSwitches())) + " late)";
+        group += tr(keys::kStatusLate, {{"n", std::to_string(processor_.lateSwitches())}});
     }
     groupText_ = group;
 
     switch (processor_.generationStatus()) {
     case GenerationStatus::Generating:
-        statusLabel_.setText("Generating...", juce::dontSendNotification);
+        statusLabel_.setText(tr(keys::kStatusGenerating), juce::dontSendNotification);
         break;
     case GenerationStatus::Done:
-        statusLabel_.setText("Done: plays from the next bar", juce::dontSendNotification);
+        statusLabel_.setText(tr(keys::kStatusDone), juce::dontSendNotification);
         break;
     case GenerationStatus::NoResult:
-        statusLabel_.setText("No result: the slot is unchanged", juce::dontSendNotification);
+        statusLabel_.setText(tr(keys::kStatusNoResult), juce::dontSendNotification);
         break;
     case GenerationStatus::UseHub:
-        statusLabel_.setText("No hub to generate for this voice", juce::dontSendNotification);
+        statusLabel_.setText(tr(keys::kStatusUseHub), juce::dontSendNotification);
         break;
     case GenerationStatus::Forwarded:
-        statusLabel_.setText("Asked the hub to generate", juce::dontSendNotification);
+        statusLabel_.setText(tr(keys::kStatusForwarded), juce::dontSendNotification);
         break;
     case GenerationStatus::Idle:
         statusLabel_.setText({}, juce::dontSendNotification);
@@ -413,7 +429,8 @@ void PlaceholderEditor::updateFullView() {
     if (changed) {
         shownVoices_ = views;
         for (size_t i = 0; i < rows_.size(); ++i) {
-            rows_[i]->setView(i < views.size() ? &views[i] : nullptr, i == 0 ? "Bass" : "Melody");
+            rows_[i]->setView(i < views.size() ? &views[i] : nullptr,
+                              i == 0 ? tr(keys::kVoiceBass) : tr(keys::kVoiceMelody), i != 0);
         }
     }
     for (auto& row : rows_) {
@@ -424,15 +441,16 @@ void PlaceholderEditor::updateFullView() {
     if (!(info == shownInfo_) || infoLabel_.getText().isEmpty()) {
         shownInfo_ = info;
         if (!info.filled) {
-            infoLabel_.setText("Slot " + juce::String(info.slot) + ": empty. Generate fills it.",
-                               juce::dontSendNotification);
+            infoLabel_.setText(tr(keys::kSlotEmpty, {{"slot", std::to_string(info.slot)}}), juce::dontSendNotification);
         } else {
-            const auto scale = std::string_view(info.scaleId);
-            infoLabel_.setText("Slot " + juce::String(info.slot) + ": " + juce::String(info.styleId) + ", " +
-                                   kKeyNames[info.root % 12] + " " + scaleLabel(scale).toLowerCase() + ", " +
-                                   juce::String(static_cast<int>(info.lengthBars)) + " bars, seed " +
-                                   juce::String(std::to_string(info.seed)) + " (winner " +
-                                   juce::String(std::to_string(info.winnerSeed)) + ")",
+            const auto* style = processor_.styles().find(info.styleId);
+            infoLabel_.setText(tr(keys::kSlotInfo, {{"slot", std::to_string(info.slot)},
+                                                    {"style", style != nullptr ? style->nameDe : info.styleId},
+                                                    {"key", kKeyNames[info.root % 12]},
+                                                    {"scale", scaleLabel(info.scaleId).toStdString()},
+                                                    {"length", barsText(info.lengthBars).toStdString()},
+                                                    {"seed", std::to_string(info.seed)},
+                                                    {"winner", std::to_string(info.winnerSeed)}}),
                                juce::dontSendNotification);
         }
     }
@@ -449,7 +467,7 @@ void PlaceholderEditor::updateVoiceView() {
         }
     }
     const bool mutedByHub = processor_.mutedByHub();
-    muteButton_.setButtonText(mutedByHub ? "Mute (by hub)" : "Mute");
+    muteButton_.setButtonText(tr(mutedByHub ? keys::kButtonMuteByHub : keys::kButtonMute));
     rollView_.setDimmed(processor_.mutedByOwnSwitch() || mutedByHub);
     const int octaveId = processor_.instanceSettings().octave + 3;
     if (octaveBox_.getSelectedId() != octaveId) {
@@ -458,9 +476,11 @@ void PlaceholderEditor::updateVoiceView() {
     auto view = processor_.playingVoice();
     if (!view.sameSource(shown_) || shown_.origin == 0 /* nothing shown yet */) {
         shown_ = view;
-        rollView_.setAccent(view.voiceName == "Melody" ? juce::Colour(0xffe0a458) : juce::Colour(0xff4fc3a1));
-        rollView_.setContent(mm::core::layoutRoll(view.notes, view.lengthTicks),
-                             "Slot " + juce::String(view.slot) + " - " + view.voiceName, !view.hasPattern);
+        rollView_.setAccent(view.melody ? juce::Colour(0xffe0a458) : juce::Colour(0xff4fc3a1));
+        rollView_.setContent(
+            mm::core::layoutRoll(view.notes, view.lengthTicks),
+            tr(keys::kRollTitle, {{"slot", std::to_string(view.slot)}, {"voice", view.displayName.toStdString()}}),
+            !view.hasPattern);
     }
 }
 

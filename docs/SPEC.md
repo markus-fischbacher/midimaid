@@ -1339,6 +1339,9 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
 - Alle Texte über eine zentrale Übersetzungstabelle (`resources/i18n/de.json`, `en.json`), keine
   festen Strings im UI-Code
 - Ein Test prüft, dass alle Sprachdateien dieselben Schlüssel enthalten (ab v1.1 relevant)
+- Aufbau: `core/Translation` lädt ein flaches JSON-Objekt `Schlüssel → Text`; Platzhalter haben die Form `{name}`; ein fehlender
+  Schlüssel erscheint als Schlüssel selbst. Die Schlüssel stehen in `core/TextKeys.h`, die Tests prüfen, dass die Sprachdatei
+  genau diese Schlüssel enthält (D-152)
 - Prompts an die KI bleiben unabhängig von der UI-Sprache in Englisch (bessere Ergebnisse); der
   Nutzerprompt darf in jeder Sprache sein
 

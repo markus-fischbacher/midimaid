@@ -136,7 +136,7 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
 - [ ] Verlauf (20 Ergebnisse pro Slot) und Undo-Stapel nach SPEC §3.6
 - [ ] Schaltflächen für alle Aktionen (Rückgängig, Wiederholen, Duplizieren, Generieren, Variation)
 - [ ] Oberfläche in zwei Ebenen: Basis und Experte (SPEC §8.1), Starttonart
-- [ ] Übersetzungs-Infrastruktur mit deutscher Sprachdatei
+- [x] Übersetzungs-Infrastruktur mit deutscher Sprachdatei (D-152)
 
 **Abnahme:** Alle Edits sind rückgängig zu machen. Gesperrte Stimmen bleiben bei Variationen erhalten.
 Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.

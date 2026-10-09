@@ -14,17 +14,17 @@ aus. Nur Instanzen im selben Prozess finden sich.
 
 1. **Eine Variante für alle Instanzen.** Hub und Voices müssen aus demselben Plugin-Bundle stammen (Format und Variante):
    Logic: alle als MIDI-FX `MidiMaid MIDI`; Live: alle als VST3. Gemischte Varianten verbinden sich nicht.
-2. **Eine Instanz als Hub.** Rolle „Hub“ wählen. Die Statuszeile zeigt „Hub: n voices“.
+2. **Eine Instanz als Hub.** Rolle „Hub“ wählen. Die Statuszeile zeigt „Hub: n Stimmen“.
 3. **Pro Stimme eine Instanz als Voice.** Rolle „Voice“, daneben die Stimme wählen (Voice 1 = Bass, Voice 2 = Melodie).
-   Die Voice zeigt „Connected to the hub“ und übernimmt den Slot-Satz des Hubs.
+   Die Voice zeigt „Mit dem Hub verbunden“ und übernimmt den Slot-Satz des Hubs.
 4. **Pro Spur ein Instrument** für die Ausgabe der Voice. Der Hub spielt selbst eine Stimme; soll er schweigen, stellst
-   du bei ihm „Output: none“ ein.
-5. **Erzeugen im Hub** (Knopf „Generate“). In einer Voice leitet derselbe Knopf die Anfrage an den Hub weiter.
+   du bei ihm „Ausgabe: keine“ ein.
+5. **Erzeugen im Hub** (Knopf „Erzeugen“). In einer Voice leitet derselbe Knopf die Anfrage an den Hub weiter.
 
 ## Slot-Wechsel und Automation
 
-- Eine Voice folgt standardmäßig dem Slot des Hubs („Slot: follows hub“). Automatisiere den Slot-Parameter **im Hub**.
-- **Bounce einer einzelnen Spur und Freeze:** Dabei läuft der Hub eventuell nicht mit. Stelle die Voice auf „Slot: own“
+- Eine Voice folgt standardmäßig dem Slot des Hubs („Slot: folgt dem Hub“). Automatisiere den Slot-Parameter **im Hub**.
+- **Bounce einer einzelnen Spur und Freeze:** Dabei läuft der Hub eventuell nicht mit. Stelle die Voice auf „Slot: eigener“
   und automatisiere den Slot-Parameter der Voice selbst (D-131).
 - Wechsel kurz vor der Taktgrenze verschiebt die Gruppe automatisch auf den Takt danach, damit alle gleichzeitig
   wechseln. Die Statuszeile einer Voice zählt Wechsel, die zu spät ankamen („n late“); der Wert sollte 0 bleiben.
@@ -36,7 +36,7 @@ Mute wirkt doppelt: Schaltet der Hub `Mute n`, schweigt Voice n; schaltet eine V
 ## Wenn der Hub fehlt
 
 - **Hub gelöscht:** Die Voices spielen weiter. Die älteste Voice zeigt „Hub not found: you can take over“ mit dem
-  Knopf „Become hub“. Es gibt keine stille Übernahme.
+  Knopf „Hub werden“. Es gibt keine stille Übernahme.
 - **Projekt öffnen ohne Hub:** Die Voice spielt ihre gespeicherte Stimme unverändert weiter und zeigt „Hub not found“.
   Weil jede Instanz alle Slots speichert, kann sie Hub werden.
 

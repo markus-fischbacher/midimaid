@@ -1,6 +1,8 @@
 #include "plugin/EditorParts.h"
 
 #include "core/ParameterRegister.h"
+#include "core/TextKeys.h"
+#include "plugin/EmbeddedTranslation.h"
 
 namespace mm::plugin {
 
@@ -47,6 +49,7 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     if (auto* parameter = processor.parameters().getParameter(mm::core::muteParameterId(voice))) {
         muteAttachment_ = std::make_unique<juce::ButtonParameterAttachment>(*parameter, muteButton_);
     }
+    muteButton_.setButtonText(tr(mm::core::text::kButtonMute));
     addAndMakeVisible(muteButton_);
 
     roll_.setComponentID("roll_" + juce::String(voice));
@@ -55,10 +58,10 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     addAndMakeVisible(drag_);
 }
 
-void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String& fallbackName) {
-    const auto name = view != nullptr && view->voiceName.isNotEmpty() ? view->voiceName : fallbackName;
+void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String& fallbackName, bool fallbackMelody) {
+    const auto name = view != nullptr && view->displayName.isNotEmpty() ? view->displayName : fallbackName;
     nameLabel_.setText(name, juce::dontSendNotification);
-    const bool melody = name == "Melody";
+    const bool melody = view != nullptr ? view->melody : fallbackMelody;
     roll_.setAccent(melody ? juce::Colour(0xffe0a458) : juce::Colour(0xff4fc3a1));
     if (view == nullptr || !view->hasPattern) {
         roll_.setContent(mm::core::layoutRoll({}, mm::core::kTicksPerQuarter * 4), {}, true);

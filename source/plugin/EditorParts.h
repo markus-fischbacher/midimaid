@@ -36,7 +36,7 @@ public:
 
     int voice() const { return voice_; }
     /// `view` is null for a slot without pattern.
-    void setView(const ProcessorBase::VoiceView* view, const juce::String& fallbackName);
+    void setView(const ProcessorBase::VoiceView* view, const juce::String& fallbackName, bool fallbackMelody);
     /// Dim the roll while the voice is muted. Message thread.
     void updateMuted();
 
@@ -46,7 +46,7 @@ private:
     ProcessorBase& processor_;
     int voice_;
     juce::Label nameLabel_;
-    juce::ToggleButton muteButton_{"Mute"};
+    juce::ToggleButton muteButton_;
     RollView roll_;
     DragHandle drag_;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;
