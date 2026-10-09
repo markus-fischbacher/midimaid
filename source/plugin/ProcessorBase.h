@@ -2,6 +2,7 @@
 
 #include "core/InstanceSettings.h"
 #include "core/ParameterRegister.h"
+#include "core/RollEdit.h"
 #include "core/SlotBank.h"
 #include "core/StyleLibrary.h"
 #include "core/UndoStack.h"
@@ -83,6 +84,10 @@ public:
         juce::String displayName; ///< the same in the language of the UI
         bool melody = false;      ///< the voice has the melody role (accent colour)
         bool locked = false;      ///< the voice is locked (SPEC 3.5)
+        /// What the piano roll edits: the source notes of the pattern (with ids, no groove, no instance octave).
+        std::vector<mm::core::RollNote> source;
+        mm::core::PitchClass root = 9;
+        std::string scaleId;
         /// True when `other` shows the same thing (no need to redraw or export again).
         bool sameSource(const VoiceView& other) const {
             return hasPattern == other.hasPattern && slot == other.slot && voice == other.voice &&

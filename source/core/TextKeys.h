@@ -52,6 +52,9 @@ namespace mm::core::text {
     X(kSlotInfo, "slot.info")                                                                                          \
     X(kRollTitle, "roll.title")                                                                                        \
     X(kRollEmpty, "roll.empty")                                                                                        \
+    X(kRollTriplet, "roll.triplet")                                                                                    \
+    X(kRollSnapScale, "roll.snapScale")                                                                                \
+    X(kRollSnapChromatic, "roll.snapChromatic")                                                                        \
     X(kGroupHubOne, "group.hub.one")                                                                                   \
     X(kGroupHubMany, "group.hub.many")                                                                                 \
     X(kGroupConnected, "group.connected")                                                                              \

@@ -20,7 +20,7 @@ public:
 
     const mm::core::RollLayout& layout() const { return layout_; }
 
-private:
+protected:
     mm::core::RollLayout layout_;
     juce::String title_;
     bool empty_ = true;
