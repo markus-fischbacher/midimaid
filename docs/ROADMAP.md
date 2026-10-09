@@ -145,11 +145,13 @@ Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
 ## Phase 3 – KI-Anbindung
 - [ ] Provider-Schnittstelle, Abbruch inklusive Netzwerkverbindung, Warten beim Schließen, Timeouts,
       Backoff (SPEC §7.1)
+  - Stand: Schnittstelle `IAiProvider`, `CancellationToken` und Mock fertig (D-165, P3-A); Netzwerk, Timeouts und Backoff folgen in P3-D.
 - [ ] Anthropic-Provider (native API, Structured Outputs)
 - [ ] OpenAI-kompatibler Provider mit Voreinstellungen (OpenAI, Ollama, LM Studio, OpenRouter) und
       Fähigkeitsstufe pro Backend; Verbindungstest stuft nur herab (SPEC §7.2)
 - [ ] Antwort-Schema v1 (v1.0-Felder, Stufen, Oktave, Progressionen, Motive bei über 8 Takten), Parser und
       Validierung, ein Reparaturversuch, Nachfrage bei Fehlschlag (SPEC §7.3)
+  - Stand: Schema, Parser und Umwandlung in ein Pattern fertig (D-165, P3-A). Offen: der Reparaturversuch und die Nachfrage (P3-C), die Ableitung der Phrasen aus einem Motiv bei 16 Takten (P3-C).
 - [ ] Zustimmung pro Cloud-Provider für Referenzen und importierte Stimmen; Logging ohne Prompts und
       Nutzerinhalte, Option „Prompts protokollieren“ (SPEC §3.20, §10)
 - [ ] Prompt-Vorlagen v1 (Generieren, Verfeinern) mit Stilregeln, Motivik und Anti-Klischee-Liste
@@ -159,7 +161,7 @@ Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
 - [ ] Einstellungsdialog inklusive Verbindungstest; `models.json` mit Empfehlungen
 - [ ] Kreativitäts-Regler: Abbildung auf Temperatur, Prompt und Algorithmus (SPEC §7.6)
 - [ ] Fehlerverhalten nach SPEC §7.9: Dialog, nicht blockierende Leiste während der Wiedergabe
-- [ ] Mock-Provider und Tests mit kaputten Antworten
+- [x] Mock-Provider und Tests mit kaputten Antworten (D-165; weitere Fehlerfälle des Netzes kommen mit dem Fake-Server in P3-D)
 
 **Abnahme:** Textprompt und Verfeinern liefern über Anthropic, OpenAI und Ollama gültige Patterns.
 Ungültige Antworten führen nie zu unbrauchbarem MIDI. Ohne Netz erscheint eine verständliche Meldung

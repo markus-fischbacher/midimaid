@@ -40,6 +40,7 @@ endif()
 enable_testing()
 
 add_subdirectory(source/core)
+add_subdirectory(source/ai)
 add_subdirectory(source/engine)
 add_subdirectory(source/plugin)
 add_subdirectory(tools/mmgen)
