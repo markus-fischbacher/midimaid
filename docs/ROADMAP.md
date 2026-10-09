@@ -132,8 +132,8 @@ kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und o
 - [ ] Raster, Skalen-Einrasten, Undo/Redo (Kern und Plugin-Anbindung fertig, D-153; die Bedienung folgt mit Piano-Roll und Schaltflächen)
 - [ ] Spurfokus (alle / einzelne Stimme)
 - [x] Stimme sperren (SPEC §3.5; D-154: Erzeugen um gesperrte Stimmen, Schalter je Stimmenzeile; Variation und Verfeinern folgen den Hilfsfunktionen)
-- [x] Variations-Engine mit subtilen und strukturellen Operatoren und Stärke-Regler (SPEC §3.6)
-  - Kern und Operatoren fertig (D-155, D-156); `ProcessorBase::vary` mit Stärke-Parameter. Schaltfläche und Regler in der Oberfläche kommen mit P2-G (Schaltflächen für alle Aktionen); Kalibrierung der Stärke im Hörtest.
+- [ ] Variations-Engine mit subtilen und strukturellen Operatoren und Stärke-Regler (SPEC §3.6)
+  - Stand: Kern und Operatoren fertig (D-155, D-156), `ProcessorBase::vary` mit Stärke-Parameter. Offen bis zum Abhaken: Schaltfläche und Stärke-Regler in der Oberfläche (P2-G), Kalibrierung der Stärke im Hörtest.
 - [ ] Verlauf (20 Ergebnisse pro Slot) und Undo-Stapel nach SPEC §3.6
 - [ ] Schaltflächen für alle Aktionen (Rückgängig, Wiederholen, Duplizieren, Generieren, Variation)
 - [ ] Oberfläche in zwei Ebenen: Basis und Experte (SPEC §8.1), Starttonart
