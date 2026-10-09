@@ -124,6 +124,24 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(keyBox_);
 
+    gridBox_.setComponentID("grid_box");
+    for (const int division : {4, 8, 16, 32}) {
+        gridBox_.addItem("1/" + juce::String(division), division);
+    }
+    gridBox_.setSelectedId(16, juce::dontSendNotification);
+    gridBox_.onChange = [this] { applyEditSettings(); };
+    addChildComponent(gridBox_);
+    tripletButton_.setComponentID("triplet");
+    tripletButton_.setButtonText(tr(keys::kRollTriplet));
+    tripletButton_.onClick = [this] { applyEditSettings(); };
+    addChildComponent(tripletButton_);
+    snapBox_.setComponentID("snap_box");
+    snapBox_.addItem(tr(keys::kRollSnapScale), 1);
+    snapBox_.addItem(tr(keys::kRollSnapChromatic), 2);
+    snapBox_.setSelectedId(1, juce::dontSendNotification);
+    snapBox_.onChange = [this] { applyEditSettings(); };
+    addChildComponent(snapBox_);
+
     scaleBox_.setComponentID("scale");
     scaleBox_.addItem(tr(keys::kScaleAuto), 1);
     {
@@ -341,9 +359,9 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     openHubButton_.setVisible(voiceLayout);
     rollView_.setVisible(voiceLayout);
     dragHandle_->setVisible(voiceLayout);
-    for (auto* component : std::initializer_list<juce::Component*>{&keyBox_, &scaleBox_, &barsBox_, &seedEditor_,
-                                                                   &randomButton_, &energySlider_, &creativitySlider_,
-                                                                   &energyLabel_, &creativityLabel_, &infoLabel_}) {
+    for (auto* component : std::initializer_list<juce::Component*>{
+             &keyBox_, &scaleBox_, &barsBox_, &seedEditor_, &randomButton_, &energySlider_, &creativitySlider_,
+             &energyLabel_, &creativityLabel_, &infoLabel_, &gridBox_, &tripletButton_, &snapBox_}) {
         component->setVisible(!voiceLayout);
     }
     for (auto& button : slotButtons_) {
@@ -405,6 +423,15 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     }
 }
 
+void PlaceholderEditor::applyEditSettings() {
+    const mm::core::EditGrid grid{static_cast<uint32_t>(std::max(gridBox_.getSelectedId(), 4)),
+                                  tripletButton_.getToggleState()};
+    const auto snap = snapBox_.getSelectedId() == 2 ? mm::core::PitchSnap::Chromatic : mm::core::PitchSnap::Scale;
+    for (auto& row : rows_) {
+        row->roll().setEditSettings(grid, snap);
+    }
+}
+
 void PlaceholderEditor::rebuildRows(size_t count) {
     rows_.clear();
     for (size_t i = 0; i < count; ++i) {
@@ -412,6 +439,7 @@ void PlaceholderEditor::rebuildRows(size_t count) {
         addAndMakeVisible(*row);
         rows_.push_back(std::move(row));
     }
+    applyEditSettings();
     shownVoices_.clear();
     resized();
 }
@@ -571,6 +599,12 @@ void PlaceholderEditor::resized() {
 
     statusLabel_.setBounds(area.removeFromBottom(40).reduced(16, 0));
     infoLabel_.setBounds(area.removeFromBottom(28).reduced(16, 0));
+    auto editBar = area.removeFromTop(32).reduced(16, 2);
+    gridBox_.setBounds(editBar.removeFromLeft(80));
+    editBar.removeFromLeft(8);
+    tripletButton_.setBounds(editBar.removeFromLeft(90));
+    editBar.removeFromLeft(8);
+    snapBox_.setBounds(editBar.removeFromLeft(190));
     if (!rows_.empty()) {
         const int rowHeight = area.getHeight() / static_cast<int>(rows_.size());
         for (auto& row : rows_) {

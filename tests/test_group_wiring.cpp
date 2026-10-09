@@ -1,6 +1,7 @@
 #include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "engine/GroupChannel.h"
+#include "plugin/EditableRoll.h"
 #include "plugin/EditorParts.h"
 #include "plugin/GroupText.h"
 #include "plugin/ProcessorBase.h"
@@ -66,6 +67,7 @@ public:
     void setPlaying(bool playing) { playing_ = playing; }
     double ppq() const { return ppq_; }
     const std::vector<NoteOn>& notes() const { return notes_; }
+    const std::vector<NoteOn>& noteOffs() const { return offs_; }
 
     void step() {
         head_.info.setIsPlaying(playing_);
@@ -78,6 +80,9 @@ public:
             const auto message = metadata.getMessage();
             if (message.isNoteOn()) {
                 notes_.push_back(
+                    {std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition, message.getNoteNumber()});
+            } else if (message.isNoteOff()) {
+                offs_.push_back(
                     {std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition, message.getNoteNumber()});
             }
         }
@@ -104,6 +109,7 @@ private:
     double ppq_ = 0.0;
     bool playing_ = true;
     std::vector<NoteOn> notes_;
+    std::vector<NoteOn> offs_;
 };
 
 /// A one-bar pattern whose bass plays `pitch` on every bar line.
@@ -1226,4 +1232,541 @@ TEST_CASE("the lock switch of a voice row follows the pattern and locks the voic
     solo.processor.editSlots([&](mm::core::SlotBank& bank) { bank.clear(0); }); // the slot is empty again
     REQUIRE(waitFor([&] { return !lock1->isEnabled(); }));
     CHECK_FALSE(lock2->isEnabled());
+}
+
+namespace {
+
+/// A solo instance with a two-bar pattern and a piano roll on its melody voice, driven through the gesture methods.
+/// `refresh` plays the part of the editor's timer: it hands the current voice to the roll.
+struct RollRig {
+    RollRig() : roll(solo.processor, 2) {
+        roll.setBounds(0, 0, 800, 200);
+        mm::core::Pattern pattern = mm::core::makeEmptyPattern(2, "peak_time"); // A minor
+        for (const auto& note :
+             std::vector<std::array<uint32_t, 3>>{{60, 0, 480}, {64, 960, 480}, {67, 1920, 480}, {69, 3840, 960}}) {
+            REQUIRE(mm::core::addNote(pattern, 1, static_cast<uint8_t>(note[0]), note[1], note[2], 100) != 0);
+        }
+        solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, std::move(pattern))); });
+        refresh();
+    }
+
+    void refresh() {
+        const auto views = solo.processor.playingVoices();
+        REQUIRE(views.size() >= 2);
+        roll.setSource(&views[1]);
+    }
+    const mm::core::RollNote& note(size_t index) const { return roll.source().at(index); }
+    uint32_t idAt(size_t index) const { return note(index).id; }
+    double xOf(uint32_t tick, double inside = 3.0) const { return roll.geometry().tickToX(tick) + inside; }
+    double yOf(int pitch) const { return roll.geometry().pitchToY(pitch) + roll.geometry().rowHeight() / 2.0; }
+    juce::Point<double> at(uint32_t tick, int pitch, double inside = 3.0) const {
+        return {xOf(tick, inside), yOf(pitch)};
+    }
+    double pixelsForTicks(double ticks) const { return ticks / roll.geometry().ticksPerPixel(); }
+    double pixelsForRows(double rows) const { return rows * roll.geometry().rowHeight(); }
+    /// A drag from `from` by (dx, dy) in three steps.
+    void dragBy(juce::Point<double> from, double dx, double dy) {
+        roll.press(from, {});
+        for (const double share : {0.3, 0.7, 1.0}) {
+            roll.drag({from.x + dx * share, from.y + dy * share});
+            refresh();
+        }
+        roll.release({from.x + dx, from.y + dy});
+        refresh();
+    }
+    std::vector<mm::core::Note> melody() const {
+        return solo.processor.slotsSnapshot().slot(0)->pattern->voices[1].notes;
+    }
+
+    Quiet quiet;
+    Instance solo{"Solo"};
+    mm::plugin::EditableRoll roll;
+};
+
+} // namespace
+
+TEST_CASE("the roll shows the source notes of its voice, not the rendered ones", "[roll][editor]") {
+    RollRig rig;
+    REQUIRE(rig.roll.source().size() == 4);
+    CHECK(rig.note(0).pitch == 60);
+    CHECK(rig.note(1).startTick == 960);
+    CHECK(rig.note(3).lengthTicks == 960);
+    CHECK(rig.idAt(0) != 0);
+    CHECK(rig.roll.selection().empty());
+    // the window fits the two bars; the pitch rows are centred on the notes
+    CHECK(rig.roll.viewport().startTick == 0);
+    CHECK(rig.roll.viewport().spanTicks == 2 * mm::core::kTicksPerBar);
+    const auto& v = rig.roll.viewport();
+    CHECK(v.lowPitch <= 60);
+    CHECK(v.lowPitch + v.rows > 69);
+}
+
+TEST_CASE("a click selects, shift adds, shift on a selected note removes, a click in the empty clears",
+          "[roll][editor]") {
+    RollRig rig;
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(0)});
+
+    rig.roll.press(rig.at(960, 64), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(960, 64));
+    CHECK(rig.roll.selection() == (std::set<uint32_t>{rig.idAt(0), rig.idAt(1)}));
+
+    rig.roll.press(rig.at(0, 60), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(0, 60));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
+
+    rig.roll.press(rig.at(1200, 70), {}); // nothing there
+    rig.roll.release(rig.at(1200, 70));
+    CHECK(rig.roll.selection().empty());
+    CHECK_FALSE(rig.solo.processor.canUndo()); // selecting is no edit
+}
+
+TEST_CASE("a click on one of several selected notes narrows the selection, a drag moves them all", "[roll][editor]") {
+    RollRig rig;
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    rig.roll.press(rig.at(960, 64), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(960, 64));
+    REQUIRE(rig.roll.selection().size() == 2);
+
+    // a plain click on a selected note keeps the other until the mouse comes up, then narrows
+    rig.roll.press(rig.at(960, 64), {});
+    CHECK(rig.roll.selection().size() == 2);
+    rig.roll.release(rig.at(960, 64));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
+
+    // a shake of the mouse below the drag threshold is still a click
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    rig.roll.press(rig.at(960, 64), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(960, 64));
+    REQUIRE(rig.roll.selection().size() == 2);
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.drag({rig.at(960, 64).x + 2.0, rig.at(960, 64).y});
+    rig.roll.release(rig.at(960, 64));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
+    CHECK_FALSE(rig.solo.processor.canUndo());
+
+    // with both selected, dragging one carries the other
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    rig.roll.press(rig.at(960, 64), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(960, 64));
+    rig.dragBy(rig.at(960, 64), rig.pixelsForTicks(480.0), 0.0);
+    const auto notes = rig.melody();
+    CHECK(notes[0].startTick == 480);
+    CHECK(notes[1].startTick == 1440);
+    CHECK(notes[2].startTick == 1920); // not selected
+}
+
+TEST_CASE("the rubber band selects, with shift it adds", "[roll][editor]") {
+    RollRig rig;
+    const auto from = juce::Point<double>(rig.xOf(900, 0.0), rig.yOf(70));
+    const auto to = juce::Point<double>(rig.xOf(2500, 0.0), rig.yOf(58));
+    rig.roll.press(from, {});
+    rig.roll.drag(to);
+    rig.roll.release(to);
+    CHECK(rig.roll.selection() == (std::set<uint32_t>{rig.idAt(1), rig.idAt(2)}));
+
+    rig.roll.press({rig.xOf(3800, 0.0), rig.yOf(72)}, juce::ModifierKeys::shiftModifier);
+    rig.roll.drag({rig.xOf(4900, 0.0), rig.yOf(66)});
+    rig.roll.release({rig.xOf(4900, 0.0), rig.yOf(66)});
+    CHECK(rig.roll.selection() == (std::set<uint32_t>{rig.idAt(1), rig.idAt(2), rig.idAt(3)}));
+    CHECK_FALSE(rig.solo.processor.canUndo());
+}
+
+TEST_CASE("a double click adds a note on the grid and the scale, and one undo takes it away", "[roll][editor]") {
+    RollRig rig;
+    // tick 1250 is in the 16th at 1200, row 61 (C#) snaps down to C
+    rig.roll.doubleClick({rig.xOf(1250, 0.0), rig.yOf(61)});
+    rig.refresh();
+    REQUIRE(rig.roll.source().size() == 5);
+    const auto added = std::find_if(rig.roll.source().begin(), rig.roll.source().end(),
+                                    [](const auto& n) { return n.startTick == 1200; });
+    REQUIRE(added != rig.roll.source().end());
+    CHECK(added->pitch == 60);
+    CHECK(added->lengthTicks == 240);
+    CHECK(added->velocity == 100);
+    CHECK(rig.roll.selection() == std::set<uint32_t>{added->id});
+    CHECK(rig.solo.processor.canUndo());
+    REQUIRE(rig.solo.processor.undo());
+    rig.refresh();
+    CHECK(rig.roll.source().size() == 4);
+    CHECK(rig.roll.selection().empty()); // the new note is gone, so is its selection
+}
+
+TEST_CASE("the grid and the snapping of the roll decide where a double click lands", "[roll][editor]") {
+    RollRig rig;
+    rig.roll.setEditSettings({8, false}, mm::core::PitchSnap::Chromatic);
+    rig.roll.doubleClick({rig.xOf(1250, 0.0), rig.yOf(61)});
+    rig.refresh();
+    auto it = std::find_if(rig.roll.source().begin(), rig.roll.source().end(),
+                           [](const auto& n) { return n.startTick == 960 && n.pitch == 61; });
+    REQUIRE(it != rig.roll.source().end());
+    CHECK(it->lengthTicks == 480);
+
+    rig.roll.setEditSettings({16, true}, mm::core::PitchSnap::Chromatic);
+    rig.roll.doubleClick({rig.xOf(2500, 0.0), rig.yOf(62)});
+    rig.refresh();
+    it = std::find_if(rig.roll.source().begin(), rig.roll.source().end(),
+                      [](const auto& n) { return n.startTick == 2400 && n.pitch == 62; });
+    REQUIRE(it != rig.roll.source().end()); // 16th triplets: 2500 / 160 = 15.6 -> 2400
+    CHECK(it->lengthTicks == 160);
+}
+
+TEST_CASE("a double click on a note deletes that note only", "[roll][editor]") {
+    RollRig rig;
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    rig.roll.press(rig.at(960, 64), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(960, 64));
+    const uint32_t second = rig.idAt(1);
+    rig.roll.doubleClick(rig.at(960, 64));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(0)}); // at once, before the view is refreshed
+    rig.refresh();
+    REQUIRE(rig.roll.source().size() == 3);
+    CHECK(std::none_of(rig.roll.source().begin(), rig.roll.source().end(),
+                       [&](const auto& n) { return n.id == second; }));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(0)});
+    REQUIRE(rig.solo.processor.undo());
+    rig.refresh();
+    CHECK(rig.roll.source().size() == 4);
+}
+
+TEST_CASE("dragging a note moves it by grid and scale and is one undo step", "[roll][editor]") {
+    RollRig rig;
+    const auto before = rig.melody();
+    // the note E4 (64 at 960) goes half a bar later and up three rows: 67 (G) is in the scale
+    rig.dragBy(rig.at(960, 64), rig.pixelsForTicks(480.0), -rig.pixelsForRows(3.0));
+    auto notes = rig.melody();
+    REQUIRE(notes.size() == 4);
+    CHECK(notes[1].startTick == 1440);
+    CHECK(notes[1].pitch == 67);
+    CHECK(notes[0] == before[0]);
+    CHECK(notes[2] == before[2]);
+    CHECK(rig.roll.selection() == std::set<uint32_t>{before[1].id});
+
+    REQUIRE(rig.solo.processor.undo()); // one step for the whole gesture, however many mouse moves it had
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+    REQUIRE(rig.solo.processor.redo());
+    CHECK(rig.melody()[1].startTick == 1440);
+}
+
+TEST_CASE("a drag that snaps back to where it started changes nothing", "[roll][editor]") {
+    RollRig rig;
+    const auto before = rig.melody();
+    rig.dragBy(rig.at(960, 64), rig.pixelsForTicks(60.0), 0.0); // a quarter of a 16th: snaps back
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+}
+
+TEST_CASE("a note cannot be dragged out of the pattern", "[roll][editor]") {
+    RollRig rig;
+    rig.dragBy(rig.at(3840, 69), rig.pixelsForTicks(5000.0), -rig.pixelsForRows(100.0));
+    const auto notes = rig.melody();
+    for (const auto& note : notes) {
+        CHECK(note.startTick + note.lengthTicks <= 2 * mm::core::kTicksPerBar);
+        CHECK(note.pitch <= 127);
+    }
+    // the block is rigid: the last note ends at the end of the pattern, the others moved with it only when selected
+    CHECK(notes[3].startTick + notes[3].lengthTicks == 2 * mm::core::kTicksPerBar);
+}
+
+TEST_CASE("dragging the right edge sets the length from the snapped end and is one undo step", "[roll][editor]") {
+    RollRig rig;
+    const auto before = rig.melody();
+    const auto edge = rig.roll.geometry().tickToX(960 + 480) - 1.0; // the last pixel of the note
+    rig.dragBy({edge, rig.yOf(64)}, rig.pixelsForTicks(480.0), 0.0);
+    auto notes = rig.melody();
+    CHECK(notes[1].lengthTicks == 960);
+    CHECK(notes[1].startTick == 960);
+    REQUIRE(rig.solo.processor.undo());
+    CHECK(rig.melody() == before);
+
+    // dragged to nothing: one grid step is the least
+    rig.refresh();
+    rig.dragBy({edge, rig.yOf(64)}, -rig.pixelsForTicks(2000.0), 0.0);
+    CHECK(rig.melody()[1].lengthTicks == 240);
+}
+
+TEST_CASE("a drag is cancelled when somebody else changes the note under it", "[roll][editor]") {
+    RollRig rig;
+    const auto from = rig.at(960, 64);
+    rig.roll.press(from, {});
+    rig.roll.drag({from.x + rig.pixelsForTicks(480.0), from.y});
+    rig.refresh();
+    REQUIRE(rig.melody()[1].startTick == 1440);
+    // another edit moves the note (an undo or the hub would do the same)
+    REQUIRE(rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) {
+        const std::vector<uint32_t> ids{rig.idAt(1)};
+        return mm::core::moveNotes(p, 1, ids, 240, 0);
+    }));
+    rig.refresh();
+    const auto externallyMoved = rig.melody();
+    rig.roll.drag({from.x + rig.pixelsForTicks(960.0), from.y});
+    CHECK_FALSE(rig.roll.gestureActive());
+    CHECK(rig.melody() == externallyMoved); // the drag did not overwrite it
+    rig.roll.release({from.x, from.y});
+}
+
+TEST_CASE("another slot or length starts a fresh view and drops the selection", "[roll][editor]") {
+    RollRig rig;
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    REQUIRE_FALSE(rig.roll.selection().empty());
+    rig.roll.scrollBy(0, 5);
+    const auto scrolled = rig.roll.viewport();
+    // the same pattern edited elsewhere keeps selection and window
+    REQUIRE(rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) {
+        const std::vector<uint32_t> ids{rig.idAt(2)};
+        return mm::core::moveNotes(p, 1, ids, 240, 0);
+    }));
+    rig.refresh();
+    CHECK_FALSE(rig.roll.selection().empty());
+    CHECK(rig.roll.viewport() == scrolled);
+    // an empty slot empties the roll
+    rig.solo.processor.editSlots([](mm::core::SlotBank& bank) { bank.clear(0); });
+    const auto views = rig.solo.processor.playingVoices();
+    rig.roll.setSource(views.empty() ? nullptr : &views[1]);
+    CHECK(rig.roll.source().empty());
+    CHECK(rig.roll.selection().empty());
+    rig.roll.doubleClick({100.0, 50.0}); // and nothing can be added
+    CHECK(rig.solo.processor.slotsSnapshot().slot(0)->pattern == std::nullopt);
+}
+
+TEST_CASE("keys: delete, select all, arrows, undo and redo", "[roll][editor]") {
+    RollRig rig;
+    using mm::core::kTicksPerBar;
+    const auto key = [](int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); };
+
+    CHECK(rig.roll.handleKey(key('A', juce::ModifierKeys::commandModifier)));
+    CHECK(rig.roll.selection().size() == 4);
+
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    REQUIRE(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
+
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::rightKey)));
+    CHECK(rig.melody()[1].startTick == 1200);
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier)));
+    CHECK(rig.melody()[1].startTick == 240); // one bar-fraction back: four grid steps
+    rig.refresh();
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey))); // E -> F in A minor
+    CHECK(rig.melody()[1].pitch == 65);
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::downKey)));
+    CHECK(rig.melody()[1].pitch == 64);
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier)));
+    CHECK(rig.melody()[1].pitch == 76);
+
+    CHECK(rig.roll.handleKey(key('Z', juce::ModifierKeys::commandModifier)));
+    CHECK(rig.melody()[1].pitch == 64);
+    CHECK(rig.roll.handleKey(key('Z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier)));
+    CHECK(rig.melody()[1].pitch == 76);
+
+    rig.refresh();
+    CHECK(rig.roll.handleKey(key(juce::KeyPress::deleteKey)));
+    rig.refresh();
+    CHECK(rig.roll.source().size() == 3);
+    CHECK(rig.roll.selection().empty());
+    CHECK_FALSE(rig.roll.handleKey(key('Q')));
+}
+
+TEST_CASE("zoom and scroll move the window and stay inside the pattern", "[roll][editor]") {
+    RollRig rig;
+    const auto full = rig.roll.viewport();
+    rig.roll.zoomAt(100.0, 0.5);
+    CHECK(rig.roll.viewport().spanTicks == full.spanTicks / 2);
+    const auto anchorBefore = full.startTick + 100.0 * full.spanTicks / 766.0;
+    const auto g = rig.roll.geometry();
+    CHECK(std::abs(g.xToTick(100.0) - anchorBefore) < 40.0); // the tick under the mouse stays put
+    rig.roll.scrollBy(100000, 100);
+    CHECK(rig.roll.viewport().startTick + rig.roll.viewport().spanTicks == 2 * mm::core::kTicksPerBar);
+    CHECK(rig.roll.viewport().lowPitch + rig.roll.viewport().rows == 128);
+    rig.roll.scrollBy(-100000, -200);
+    CHECK(rig.roll.viewport().startTick == 0);
+    CHECK(rig.roll.viewport().lowPitch == 0);
+    rig.roll.zoomAt(0.0, 100.0);
+    CHECK(rig.roll.viewport().spanTicks == 2 * mm::core::kTicksPerBar);
+    // the zoom decides what a pixel is: a note stays hittable after zooming
+    rig.roll.zoomAt(0.0, 0.25);
+    rig.roll.scrollBy(0, 60);
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    CHECK(rig.roll.selection().size() == 1);
+}
+
+TEST_CASE("a voice instance cannot edit through the roll", "[roll][editor]") {
+    RollRig rig;
+    auto settings = rig.solo.processor.instanceSettings();
+    settings.role = InstanceRole::Voice;
+    rig.solo.processor.setInstanceSettings(settings);
+    const auto before = rig.melody();
+    rig.roll.doubleClick(rig.at(1200, 62));
+    rig.dragBy(rig.at(960, 64), rig.pixelsForTicks(480.0), 0.0);
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    CHECK(rig.roll.handleKey(juce::KeyPress(juce::KeyPress::deleteKey)));
+    CHECK(rig.melody() == before);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+}
+
+TEST_CASE("deleting or moving a sounding note in the roll leaves no hanging note", "[roll][editor][engine]") {
+    for (const bool remove : {true, false}) {
+        Quiet quiet;
+        Instance solo("Solo");
+        solo.setRole(InstanceRole::Solo, SlotFollow::Hub, 2); // the melody: the bass is cut before the kick
+        auto pattern = mm::core::makeEmptyPattern(1, "peak_time");
+        REQUIRE(mm::core::addNote(pattern, 1, 69, 0, 3000, 100) != 0);
+        solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, std::move(pattern))); });
+        mm::plugin::EditableRoll roll(solo.processor, 2);
+        roll.setBounds(0, 0, 800, 200);
+
+        runTo({&solo}, 1.0); // the note has been sounding for one beat
+        REQUIRE(solo.notes().size() == 1);
+        REQUIRE(solo.noteOffs().empty());
+        const auto views = solo.processor.playingVoices();
+        roll.setSource(&views[1]);
+        const auto g = roll.geometry();
+        const juce::Point<double> onNote{g.tickToX(500.0), g.pitchToY(69) + g.rowHeight() / 2.0};
+        roll.press(onNote, {});
+        roll.release(onNote);
+        REQUIRE(roll.selection().size() == 1);
+        if (remove) {
+            REQUIRE(roll.handleKey(juce::KeyPress(juce::KeyPress::deleteKey)));
+        } else {
+            REQUIRE(roll.handleKey(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(), 0)));
+        }
+        runTo({&solo}, 1.5);
+        CHECK(solo.noteOffs().size() == 1); // the sounding note ended at once
+        CHECK(solo.noteOffs().front().pitch == 69);
+        runTo({&solo}, 4.5); // past the loop: a moved note starts again from its new place at 4.25
+        CHECK(solo.notes().size() == (remove ? 1u : 2u));
+        CHECK(solo.noteOffs().size() == 1); // the second one is still sounding, nothing else hangs
+    }
+}
+
+TEST_CASE("the hub UI hands grid, triplets and snapping to the rolls and shows the source notes", "[roll][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    auto* grid = dynamic_cast<juce::ComboBox*>(find(*editor, "grid_box"));
+    auto* triplet = dynamic_cast<juce::Button*>(find(*editor, "triplet"));
+    auto* snapBox = dynamic_cast<juce::ComboBox*>(find(*editor, "snap_box"));
+    REQUIRE((grid != nullptr && triplet != nullptr && snapBox != nullptr));
+    CHECK(grid->isVisible());
+    CHECK(triplet->getButtonText() == "Triolen");
+    CHECK(snapBox->getText() == "Einrasten: Skala");
+
+    auto* roll1 = dynamic_cast<mm::plugin::EditableRoll*>(find(*editor, "roll_1"));
+    auto* roll2 = dynamic_cast<mm::plugin::EditableRoll*>(find(*editor, "roll_2"));
+    REQUIRE((roll1 != nullptr && roll2 != nullptr));
+    CHECK(roll2->snap().grid == mm::core::EditGrid{16, false}); // the defaults
+    CHECK(roll2->snap().pitch == mm::core::PitchSnap::Scale);
+
+    grid->setSelectedId(8, juce::sendNotificationSync);
+    triplet->setToggleState(true, juce::sendNotificationSync);
+    snapBox->setSelectedId(2, juce::sendNotificationSync);
+    for (auto* roll : {roll1, roll2}) {
+        CHECK(roll->snap().grid == mm::core::EditGrid{8, true});
+        CHECK(roll->snap().pitch == mm::core::PitchSnap::Chromatic);
+    }
+
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+    REQUIRE(waitFor([&] { return roll2->source().size() == 1; }));
+    CHECK(roll1->source().front().pitch == 41);
+    CHECK(roll2->source().front().pitch == 42);
+    CHECK(roll2->source().front().lengthTicks == 240); // the source note, not the rendered one
+
+    // the settings survive a new set of rows (a pattern with another number of voices)
+    mm::core::Pattern three = markedTwoVoices(41, 42);
+    three.voices.push_back(three.voices[1]);
+    three.voices.back().midiChannel = 3;
+    three.voices.back().notes[0].id = mm::core::allocateNoteId(three);
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(1, three)); });
+    solo.processor.selectSlot(2);
+    auto* roll3 = static_cast<mm::plugin::EditableRoll*>(nullptr);
+    REQUIRE(waitFor([&] {
+        roll3 = dynamic_cast<mm::plugin::EditableRoll*>(find(*editor, "roll_3"));
+        return roll3 != nullptr;
+    }));
+    CHECK(roll3->snap().grid == mm::core::EditGrid{8, true});
+}
+
+TEST_CASE("a resize is cancelled when somebody else changes the length under it", "[roll][editor]") {
+    RollRig rig;
+    const auto edge = rig.roll.geometry().tickToX(960 + 480) - 1.0;
+    const juce::Point<double> from{edge, rig.yOf(64)};
+    rig.roll.press(from, {});
+    rig.roll.drag({from.x + rig.pixelsForTicks(480.0), from.y});
+    rig.refresh();
+    REQUIRE(rig.melody()[1].lengthTicks == 960);
+    REQUIRE(rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) {
+        const std::vector<uint32_t> ids{rig.idAt(1)};
+        return mm::core::setLength(p, 1, ids, 120);
+    }));
+    rig.refresh();
+    rig.roll.drag({from.x + rig.pixelsForTicks(960.0), from.y});
+    CHECK_FALSE(rig.roll.gestureActive());
+    CHECK(rig.melody()[1].lengthTicks == 120); // the drag did not overwrite it
+    rig.roll.release(from);
+}
+
+namespace {
+
+juce::MouseEvent mouseEventAt(juce::Component& component, juce::Point<float> position, int clicks = 1,
+                              juce::ModifierKeys mods = {}) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, mods, 0.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, &component, &component, juce::Time::getCurrentTime(), position,
+                            juce::Time::getCurrentTime(), clicks, false);
+}
+
+} // namespace
+
+TEST_CASE("the mouse handlers of the roll translate into gestures with the key gutter taken off", "[roll][editor]") {
+    RollRig rig;
+    const auto gutter = static_cast<float>(mm::plugin::EditableRoll::kGutter);
+    const auto onNote = rig.at(960, 64);
+    const juce::Point<float> position(static_cast<float>(onNote.x) + gutter, static_cast<float>(onNote.y));
+
+    rig.roll.mouseDown(mouseEventAt(rig.roll, position));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, position));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
+
+    // a drag with the mouse events moves the note
+    const auto target = position + juce::Point<float>(static_cast<float>(rig.pixelsForTicks(480.0)), 0.0f);
+    rig.roll.mouseDown(mouseEventAt(rig.roll, position));
+    rig.roll.mouseDrag(mouseEventAt(rig.roll, target));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, target));
+    CHECK(rig.melody()[1].startTick == 1440);
+    rig.refresh();
+
+    // the second press of a double click deletes the note under it (the first one only selected)
+    const auto moved = rig.at(1440, 64);
+    const juce::Point<float> second(static_cast<float>(moved.x) + gutter, static_cast<float>(moved.y));
+    rig.roll.mouseDown(mouseEventAt(rig.roll, second, 2));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, second, 2));
+    CHECK(rig.melody().size() == 3);
+    rig.refresh();
+
+    // the wheel with Cmd/Ctrl zooms, plain it scrolls
+    juce::MouseWheelDetails wheel;
+    wheel.deltaY = 0.5f;
+    const auto spanBefore = rig.roll.viewport().spanTicks;
+    const auto fieldX = static_cast<double>(second.x) - gutter;
+    const auto tickUnderMouse = rig.roll.geometry().xToTick(fieldX);
+    rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second, 1, juce::ModifierKeys::commandModifier), wheel);
+    CHECK(rig.roll.viewport().spanTicks < spanBefore);
+    // the tick under the mouse stays where it was, so the gutter is taken off the position
+    const auto tickAfter = static_cast<double>(rig.roll.geometry().xToTick(fieldX));
+    CHECK(std::abs(tickAfter - static_cast<double>(tickUnderMouse)) < 60.0);
+    const auto lowBefore = rig.roll.viewport().lowPitch;
+    rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second), wheel);
+    CHECK(rig.roll.viewport().lowPitch > lowBefore);
+    rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second, 1, juce::ModifierKeys::shiftModifier), wheel);
+    CHECK(rig.roll.viewport().startTick >= 0);
+    // the key handler of the component is the key handler of the roll
+    CHECK(rig.roll.keyPressed(juce::KeyPress('A', juce::ModifierKeys::commandModifier, 0)));
+    CHECK(rig.roll.selection().size() == 3);
 }

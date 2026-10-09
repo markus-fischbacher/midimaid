@@ -32,6 +32,8 @@ private:
     void updateFullView();
     void syncFields(const mm::core::InstanceSettings& settings);
     void rebuildRows(size_t count);
+    /// Hands the grid and the pitch snapping to every roll of the hub UI.
+    void applyEditSettings();
 
     ProcessorBase& processor_;
     juce::ComboBox roleBox_;
@@ -42,6 +44,9 @@ private:
     juce::ComboBox keyBox_;
     juce::ComboBox scaleBox_;
     juce::ComboBox barsBox_;
+    juce::ComboBox gridBox_; // hub: the edit grid of the piano rolls
+    juce::ToggleButton tripletButton_;
+    juce::ComboBox snapBox_;
     juce::TextEditor seedEditor_;
     juce::TextButton randomButton_;
     juce::Label energyLabel_;

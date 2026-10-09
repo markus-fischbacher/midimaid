@@ -39,7 +39,7 @@ void DragHandle::mouseDrag(const juce::MouseEvent& event) {
 }
 
 VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
-    : processor_(processor), voice_(voice), drag_(processor.midiExporter(), voice) {
+    : processor_(processor), voice_(voice), roll_(processor, voice), drag_(processor.midiExporter(), voice) {
     setComponentID("row_" + juce::String(voice));
     nameLabel_.setComponentID("name_" + juce::String(voice));
     nameLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.85f));
@@ -80,6 +80,7 @@ void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String&
         roll_.setContent(mm::core::layoutRoll(view->notes, view->lengthTicks),
                          view->locked ? name + tr(mm::core::text::kVoiceLockedSuffix) : name, false);
     }
+    roll_.setSource(view);
     const bool filled = view != nullptr && view->hasPattern;
     slotIndex_ = filled ? view->slot - 1 : -1;
     lockButton_.setEnabled(filled);

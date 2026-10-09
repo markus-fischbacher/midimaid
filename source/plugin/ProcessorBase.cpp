@@ -675,6 +675,15 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
     view.melody = view.voiceName == "Melody";
     view.locked = voiceIndex < pattern.voices.size() && mm::core::isVoiceLocked(pattern.voices[voiceIndex]);
+    view.root = pattern.context.root;
+    view.scaleId = pattern.context.scaleId;
+    view.source.clear();
+    if (voiceIndex < pattern.voices.size()) {
+        for (const auto& note : pattern.voices[voiceIndex].notes) {
+            view.source.push_back(
+                {note.id, note.pitch, note.startTick, note.lengthTicks, note.velocity, note.accent, note.slide});
+        }
+    }
     view.displayName = view.melody ? tr(mm::core::text::kVoiceMelody)
                        : view.voiceName == "Bass"
                            ? tr(mm::core::text::kVoiceBass)

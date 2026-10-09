@@ -1,5 +1,6 @@
 #pragma once
 
+#include "plugin/EditableRoll.h"
 #include "plugin/MidiExporter.h"
 #include "plugin/ProcessorBase.h"
 #include "plugin/RollView.h"
@@ -28,7 +29,7 @@ private:
     bool dragging_ = false;
 };
 
-/// One voice of the hub UI (SPEC 8.1): name, Mute (host parameter `mute_<voice>`), the read-only roll and the grip to
+/// One voice of the hub UI (SPEC 8.1): name, Mute (host parameter `mute_<voice>`), the piano roll and the grip to
 /// drag the voice's file into the host, and the lock of the voice (SPEC 3.5).
 class VoiceRow : public juce::Component {
 public:
@@ -39,6 +40,7 @@ public:
     void setView(const ProcessorBase::VoiceView* view, const juce::String& fallbackName, bool fallbackMelody);
     /// Dim the roll while the voice is muted. Message thread.
     void updateMuted();
+    EditableRoll& roll() { return roll_; }
 
     void resized() override;
 
@@ -49,7 +51,7 @@ private:
     juce::ToggleButton muteButton_;
     juce::ToggleButton lockButton_;
     int slotIndex_ = -1; // the slot the row shows (0-based), -1 while there is none
-    RollView roll_;
+    EditableRoll roll_;
     DragHandle drag_;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;
 };
