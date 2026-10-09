@@ -1787,6 +1787,19 @@ TEST_CASE("the mouse handlers of the roll translate into gestures with the key g
     const auto lowBefore = rig.roll.viewport().lowPitch;
     rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second), wheel);
     CHECK(rig.roll.viewport().lowPitch > lowBefore);
+    // a trackpad: many small steps, none of them a whole row, still scroll (they add up); a change of direction goes back
+    juce::MouseWheelDetails small;
+    small.deltaY = 0.04f; // 0.32 of a row
+    const auto lowSmall = rig.roll.viewport().lowPitch;
+    for (int i = 0; i < 20; ++i) {
+        rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second), small);
+    }
+    CHECK(rig.roll.viewport().lowPitch == lowSmall + 6); // 6.4 rows
+    small.deltaY = -0.04f;
+    for (int i = 0; i < 20; ++i) {
+        rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second), small);
+    }
+    CHECK(rig.roll.viewport().lowPitch == lowSmall); // the leftover 0.4 of the first direction did not count
     rig.roll.mouseWheelMove(mouseEventAt(rig.roll, second, 1, juce::ModifierKeys::shiftModifier), wheel);
     CHECK(rig.roll.viewport().startTick >= 0);
     rig.roll.selectAll();

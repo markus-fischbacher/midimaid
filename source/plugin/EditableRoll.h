@@ -127,6 +127,7 @@ private:
     bool stepped_ = false;
     std::map<uint32_t, uint8_t> velocityStart_; // the velocities of the selection when a lane drag started
     juce::Point<double> lastLanePoint_;
+    double wheelRows_ = 0.0; // the part of a row the wheel has scrolled so far
     int hintValue_ = 0;
     uint32_t hintId_ = 0;
 };
