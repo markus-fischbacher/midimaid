@@ -276,3 +276,82 @@ TEST_CASE("snapPitch keeps the pitch chromatically and finds the nearest scale t
     CHECK(snapPitch(0, PitchSnap::Scale, 0, *minor) == 0);
     CHECK(snapPitch(127, PitchSnap::Scale, 0, *minor) <= 127);
 }
+
+TEST_CASE("duplicateNotes copies the selection right behind itself, rounded up to the grid", "[pattern-edit][duplicate]") {
+    auto pattern = base();
+    const auto a = addNote(pattern, 0, 45, 0, 240, 100);
+    const auto b = addNote(pattern, 0, 48, 480, 240, 90);
+    const auto other = addNote(pattern, 0, 50, 2000, 120, 70); // not selected
+    REQUIRE((a != 0 && b != 0 && other != 0));
+    pattern.voices[0].notes[0].accent = true;
+    pattern.voices[0].notes[1].slide = true;
+    pattern.voices[0].notes[1].lock.pitch = true;
+    pattern.info.source = "algorithm";
+    std::vector<uint32_t> added;
+    const auto selection = ids({a, b});
+    // The selection spans 0 to 720; the next multiple of a beat (960) is the offset.
+    REQUIRE(duplicateNotes(pattern, 0, selection, 960, &added) == 2);
+    CHECK(pattern.info.source == "edit");
+    REQUIRE(added.size() == 2);
+    const Note* copyA = find(pattern, 0, added[0]);
+    const Note* copyB = find(pattern, 0, added[1]);
+    REQUIRE((copyA != nullptr && copyB != nullptr));
+    CHECK((copyA->startTick == 960 && copyA->pitch == 45 && copyA->lengthTicks == 240 && copyA->velocity == 100));
+    CHECK(copyA->accent);
+    CHECK((copyB->startTick == 1440 && copyB->pitch == 48 && copyB->velocity == 90));
+    CHECK((copyB->slide && copyB->lock.pitch));
+    CHECK(std::set<uint32_t>{a, b, other, added[0], added[1]}.size() == 5);
+    CHECK(find(pattern, 0, a)->startTick == 0); // the originals stay
+    CHECK(find(pattern, 0, other)->startTick == 2000);
+    CHECK(std::is_sorted(pattern.voices[0].notes.begin(), pattern.voices[0].notes.end(),
+                         [](const Note& x, const Note& y) { return x.startTick < y.startTick; }));
+    CHECK(validatePattern(pattern).empty());
+    CHECK(pattern.voices[1].notes.empty());
+}
+
+TEST_CASE("duplicateNotes: grid 0 means one tick, a single note moves by its own length", "[pattern-edit][duplicate]") {
+    auto pattern = base();
+    const auto a = addNote(pattern, 0, 45, 100, 240, 100);
+    const auto b = addNote(pattern, 0, 47, 300, 100, 100);
+    std::vector<uint32_t> added;
+    REQUIRE(duplicateNotes(pattern, 0, ids({a}), 0, &added) == 1);
+    CHECK(find(pattern, 0, added[0])->startTick == 340);
+    REQUIRE(duplicateNotes(pattern, 0, ids({a, b}), 0, &added) == 2); // span 100 to 400 = 300
+    CHECK(find(pattern, 0, added[0])->startTick == 400);
+    CHECK(find(pattern, 0, added[1])->startTick == 600);
+}
+
+TEST_CASE("duplicateNotes drops the copies that do not fit and changes nothing when none does",
+          "[pattern-edit][duplicate]") {
+    auto pattern = base(); // 7680 ticks
+    const auto early = addNote(pattern, 0, 45, 0, 240, 100);
+    const auto late = addNote(pattern, 0, 47, 6000, 240, 100);
+    std::vector<uint32_t> added;
+    REQUIRE(duplicateNotes(pattern, 0, ids({early, late}), 1, &added) == 1); // offset 6240: only `early` fits
+    REQUIRE(added.size() == 1);
+    CHECK(find(pattern, 0, added[0])->startTick == 6240);
+    CHECK(pattern.voices[0].notes.size() == 3);
+    // The end of a copy may touch the end of the pattern, not pass it.
+    auto edge = base();
+    const auto first = addNote(edge, 0, 45, 0, 3840, 100);
+    REQUIRE(duplicateNotes(edge, 0, ids({first}), 1) == 1); // 3840 + 3840 = 7680
+    auto none = base();
+    const auto wide = addNote(none, 0, 45, 0, 4000, 100);
+    const auto before = none;
+    added = {99};
+    CHECK(duplicateNotes(none, 0, ids({wide}), 1, &added) == 0);
+    CHECK(added.empty());
+    CHECK(none == before);
+}
+
+TEST_CASE("duplicateNotes ignores unknown voices and ids and leaves the pattern untouched", "[pattern-edit][duplicate]") {
+    auto pattern = base();
+    const auto a = addNote(pattern, 0, 45, 0, 240, 100);
+    pattern.info.source = "algorithm";
+    const auto before = pattern;
+    CHECK(duplicateNotes(pattern, 5, ids({a}), 960) == 0);
+    CHECK(duplicateNotes(pattern, 0, ids({a + 100}), 960) == 0);
+    CHECK(duplicateNotes(pattern, 1, ids({a}), 960) == 0); // `a` lives in the other voice
+    CHECK(duplicateNotes(pattern, 0, {}, 960) == 0);
+    CHECK(pattern == before);
+}

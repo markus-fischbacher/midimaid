@@ -36,7 +36,10 @@ enum class GenerationStatus {
     AllLocked,
     Varied,
     NothingToVary,
-    VaryAllLocked
+    VaryAllLocked,
+    Renewed,
+    NothingToRenew,
+    RenewLocked
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -110,6 +113,8 @@ public:
         uint32_t lengthBars = 0;
         uint64_t seed = 0;
         uint64_t winnerSeed = 0;
+        size_t historySize = 0;  ///< results kept for the slot (SPEC 3.6)
+        size_t historyIndex = 0; ///< 0-based position of the entry the current pattern shows or is based on
         bool operator==(const SlotInfo&) const = default;
     };
     SlotInfo playingSlotInfo() const;
@@ -179,7 +184,20 @@ public:
     /// (default: random). The result is a history entry and an undo step and plays at the next bar line. Locked
     /// voices stay as they are. False, with the status telling why, for a voice instance, an empty slot, all voices
     /// locked, strength 0 or when nothing could change.
-    bool vary(int strengthPct, std::optional<size_t> voice = std::nullopt, std::optional<uint64_t> seed = std::nullopt);
+    /// `slot` (0-based) names another slot than the selected one: the editor passes the slot its rows show.
+    bool vary(int strengthPct, std::optional<size_t> voice = std::nullopt, std::optional<uint64_t> seed = std::nullopt,
+              std::optional<size_t> slot = std::nullopt);
+    /// Message thread: generates the voice anew (0-based) with `regenerateVoice` (D-160): purely algorithmic, so
+    /// synchronous, with a random seed unless `seed` is given. Harmony, kick grid and the other voices stay; the
+    /// energy and creativity are those of the hub settings. The result is a history entry and an undo step and plays
+    /// at the next bar line. False, with the status telling why, for a voice instance, an empty slot, a voice with all
+    /// three locks or when the voice cannot be generated.
+    bool renewVoice(size_t voice, std::optional<uint64_t> seed = std::nullopt, std::optional<size_t> slot = std::nullopt);
+    /// Message thread: browses the results of the slot (SPEC 3.6): the entry becomes the current pattern and plays at
+    /// the next bar line. Browsing is no undo step; it removes the undo and redo steps of the slot, which would no
+    /// longer fit (D-160). False at the ends, for an empty history and in a voice instance.
+    bool historyBack(std::optional<size_t> slot = std::nullopt);
+    bool historyForward(std::optional<size_t> slot = std::nullopt);
     /// How many notes the last successful `vary` changed.
     size_t lastVariationChanges() const { return lastVariationChanges_; }
     /// Group (SPEC 6.5, D-141): where this instance stands, how many voices a hub has, and the offer to take over a
@@ -204,6 +222,7 @@ public:
 
 private:
     bool stepUndo(bool back);
+    bool browseHistory(bool back, std::optional<size_t> slot);
     void writeEvents(juce::MidiBuffer& midi) const;
     // Under `slotsLock_`: the playing slot (also fills slot, origin and revision of `view`), and one voice of a
     // pattern.

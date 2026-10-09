@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <vector>
 
 namespace mm::core {
 
@@ -42,6 +43,13 @@ struct VelocityChange {
 };
 /// Sets the base velocity per note (the velocity lane edits several bars at once).
 size_t setVelocities(Pattern& pattern, size_t voice, std::span<const VelocityChange> changes);
+
+/// Copies the notes right behind themselves: the offset is the span from the first start to the last end of the
+/// selection, rounded up to a multiple of `gridTicks` (0 counts as 1). Copies get new ids and keep pitch, length, velocity,
+/// accent, slide and note locks; copies that no longer fit into the pattern are dropped. Returns the number of copies
+/// added; their ids go to `newIds` when given (cleared first).
+size_t duplicateNotes(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, uint32_t gridTicks,
+                      std::vector<uint32_t>* newIds = nullptr);
 
 /// Slide and accent flags. A slide removes a ratchet (the two never combine).
 size_t setSlide(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, bool slide);

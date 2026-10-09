@@ -190,4 +190,51 @@ size_t setAccent(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, 
     });
 }
 
+size_t duplicateNotes(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, uint32_t gridTicks,
+                      std::vector<uint32_t>* newIds) {
+    if (newIds != nullptr) {
+        newIds->clear();
+    }
+    if (voice >= pattern.voices.size()) {
+        return 0;
+    }
+    auto& track = pattern.voices[voice];
+    std::vector<Note> originals;
+    for (const auto& note : track.notes) {
+        if (contains(ids, note.id)) {
+            originals.push_back(note);
+        }
+    }
+    if (originals.empty()) {
+        return 0;
+    }
+    uint64_t first = std::numeric_limits<uint64_t>::max();
+    uint64_t last = 0;
+    for (const auto& note : originals) {
+        first = std::min<uint64_t>(first, note.startTick);
+        last = std::max<uint64_t>(last, static_cast<uint64_t>(note.startTick) + note.lengthTicks);
+    }
+    const uint64_t grid = std::max<uint32_t>(gridTicks, 1);
+    const uint64_t span = last - first;
+    const uint64_t shift = (span + grid - 1) / grid * grid;
+    size_t added = 0;
+    for (auto copy : originals) {
+        if (static_cast<uint64_t>(copy.startTick) + shift + copy.lengthTicks > patternEnd(pattern)) {
+            continue;
+        }
+        copy.id = allocateNoteId(pattern);
+        copy.startTick = static_cast<uint32_t>(copy.startTick + shift);
+        track.notes.push_back(copy);
+        if (newIds != nullptr) {
+            newIds->push_back(copy.id);
+        }
+        ++added;
+    }
+    if (added > 0) {
+        sortNotes(track);
+        pattern.info.source = "edit";
+    }
+    return added;
+}
+
 } // namespace mm::core
