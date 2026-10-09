@@ -74,6 +74,24 @@ bool SlotBank::edit(size_t index, Pattern pattern) {
     return valid(index) && slots_[index].pattern.has_value() && store(index, std::move(pattern), false);
 }
 
+bool SlotBank::undoResult(size_t index, const std::optional<Pattern>& before, size_t cursor) {
+    if (!valid(index) || slots_[index].history.empty() || (before && !validatePattern(*before).empty())) {
+        return false;
+    }
+    Slot& slot = slots_[index];
+    slot.history.pop_back();
+    slot.cursor = slot.history.empty() ? 0 : std::min(cursor, slot.history.size() - 1);
+    if (before) {
+        Pattern restored = *before;
+        restored.version = nextVersion_++;
+        slot.pattern = std::move(restored);
+    } else {
+        slot.pattern.reset();
+    }
+    ++slot.revision;
+    return true;
+}
+
 bool SlotBank::historyBack(size_t index) {
     if (!valid(index) || slots_[index].history.empty() || slots_[index].cursor == 0) {
         return false;

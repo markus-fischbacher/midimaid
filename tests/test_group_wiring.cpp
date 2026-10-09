@@ -1,3 +1,4 @@
+#include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "engine/GroupChannel.h"
 #include "plugin/EditorParts.h"
@@ -1155,4 +1156,41 @@ TEST_CASE("the editor shows the German texts of the table", "[group-wiring][edit
     CHECK(child<juce::TextEditor>(*editor, "seed")->getTextToShowWhenEmpty() == "Seed: zufällig");
     CHECK(child<juce::Button>(*editor, "random")->getButtonText() == "Zufälliger Seed");
     CHECK(child<juce::Button>(*editor, "mute_1")->getButtonText() == "Stumm");
+}
+
+TEST_CASE("a note edit in the hub plays at once there and at the next bar line in the voice", "[group-wiring][edit]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    fillSlots(hub);
+    runTo({&hub, &voice}, 1.0);
+    REQUIRE(hub.processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 60, 3 * 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    runTo({&hub, &voice}, 9.0);
+    CHECK(near(hub.firstWith(60), at(3.0)));   // in the bar that plays
+    CHECK(near(voice.firstWith(60), at(7.0))); // the voice takes the slots at the bar line
+    CHECK(voice.processor.slotsSnapshot().slot(0)->pattern->voices[0].notes.size() == 2);
+}
+
+TEST_CASE("an undo in the hub reaches the voice, a voice cannot undo", "[group-wiring][edit]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    fillSlots(hub);
+    runTo({&hub, &voice}, 1.0);
+    REQUIRE(hub.processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::addNote(pattern, 0, 60, 3 * 960, 240, 100) != 0 ? size_t{1} : size_t{0};
+    }));
+    runTo({&hub, &voice}, 5.0);
+    REQUIRE(hub.processor.undo());
+    CHECK_FALSE(voice.processor.undo());
+    runTo({&hub, &voice}, 13.0);
+    CHECK(voice.processor.slotsSnapshot().slot(0)->pattern->voices[0].notes.size() == 1);
+    CHECK(voice.firstWith(60, at(8.0)) < 0);
+    CHECK(hub.firstWith(60, at(8.0)) < 0);
 }

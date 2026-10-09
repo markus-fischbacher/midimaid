@@ -190,12 +190,81 @@ void ProcessorBase::editSlots(const std::function<void(mm::core::SlotBank&)>& ch
     }
 }
 
+bool ProcessorBase::editNotes(size_t slotIndex, const std::function<size_t(mm::core::Pattern&)>& change,
+                              bool mergeWithPrevious) {
+    mm::core::SlotSnapshot forVoices;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        const auto* slot = slots_.slot(slotIndex);
+        if (settings_.role == mm::core::InstanceRole::Voice || slot == nullptr || !slot->pattern) {
+            return false;
+        }
+        const mm::core::Pattern before = *slot->pattern;
+        mm::core::Pattern after = before;
+        if (change(after) == 0 || !slots_.edit(slotIndex, after)) {
+            return false;
+        }
+        undo_.recordEdit(slotIndex, before, std::move(after), mergeWithPrevious);
+        publisher_.publishEdit(slots_, slotIndex);
+        if (settings_.role == mm::core::InstanceRole::Hub) {
+            forVoices = std::make_shared<const mm::core::SlotBank>(slots_);
+        }
+    }
+    if (forVoices) {
+        groupLink_->publish(std::move(forVoices), std::nullopt); // outside the lock: the registry may call back
+    }
+    return true;
+}
+
+bool ProcessorBase::undo() {
+    return stepUndo(true);
+}
+
+bool ProcessorBase::redo() {
+    return stepUndo(false);
+}
+
+bool ProcessorBase::stepUndo(bool back) {
+    mm::core::SlotSnapshot forVoices;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (settings_.role == mm::core::InstanceRole::Voice) {
+            return false;
+        }
+        size_t slot = 0;
+        if (!(back ? undo_.undo(slots_, &slot) : undo_.redo(slots_, &slot))) {
+            return false;
+        }
+        if (!publisher_.publishEdit(slots_, slot)) {
+            publisher_.sync(slots_); // the slot is empty again: the engine drops its pattern at the next bar line
+        }
+        if (settings_.role == mm::core::InstanceRole::Hub) {
+            forVoices = std::make_shared<const mm::core::SlotBank>(slots_);
+        }
+    }
+    if (forVoices) {
+        groupLink_->publish(std::move(forVoices), std::nullopt);
+    }
+    return true;
+}
+
+bool ProcessorBase::canUndo() const {
+    const juce::ScopedLock lock(slotsLock_);
+    return settings_.role != mm::core::InstanceRole::Voice && undo_.canUndo();
+}
+
+bool ProcessorBase::canRedo() const {
+    const juce::ScopedLock lock(slotsLock_);
+    return settings_.role != mm::core::InstanceRole::Voice && undo_.canRedo();
+}
+
 void ProcessorBase::adoptHubSlots(const mm::core::SlotSnapshot& snapshot, std::optional<double> stampPpq) {
     const juce::ScopedLock lock(slotsLock_);
     if (settings_.role != mm::core::InstanceRole::Voice || snapshot == nullptr) {
         return;
     }
     slots_ = *snapshot; // a copy: the hub's snapshot stays immutable
+    undo_.clear();
     publisher_.sync(slots_, 4.0, stampPpq);
 }
 
@@ -295,7 +364,15 @@ void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core
 }
 
 void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern pattern) {
-    editSlots([&](mm::core::SlotBank& bank) { bank.setResult(static_cast<size_t>(job.slot), std::move(pattern)); });
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto index = static_cast<size_t>(job.slot);
+        const auto* slot = bank.slot(index);
+        std::optional<mm::core::Pattern> before = slot != nullptr ? slot->pattern : std::nullopt;
+        const size_t cursor = slot != nullptr ? slot->cursor : 0;
+        if (bank.setResult(index, std::move(pattern))) {
+            undo_.recordResult(index, std::move(before), cursor, *bank.slot(index)->pattern);
+        }
+    });
     generationStatus_ = GenerationStatus::Done;
 }
 
@@ -709,6 +786,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     {
         const juce::ScopedLock lock(slotsLock_);
         slots_ = std::move(bank);
+        undo_.clear();
         slotLoadProblems_ = std::move(problems);
         setInstanceSettingsLocked(settings);
         role = settings_.role;

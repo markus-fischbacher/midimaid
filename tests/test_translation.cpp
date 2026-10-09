@@ -32,11 +32,12 @@ TEST_CASE("a text is returned for its key and the key itself when it is missing"
 }
 
 TEST_CASE("placeholders are replaced, unknown ones stay, values are not searched again", "[i18n]") {
-    const auto table = Translation::fromJson(R"json({"a": "{n} of {total} ({x})", "b": "{n}{n}", "c": "open { brace"})json");
+    const auto table =
+        Translation::fromJson(R"json({"a": "{n} of {total} ({x})", "b": "{n}{n}", "c": "open { brace"})json");
     CHECK(table.tr("a", {{"n", "3"}, {"total", "16"}}) == "3 of 16 ({x})");
-CHECK(table.tr("b", {{"n", "{n}"}}) == "{n}{n}");
-CHECK(table.tr("c", {{"n", "1"}}) == "open { brace");
-CHECK(table.tr("missing", {{"n", "1"}}) == "missing");
+    CHECK(table.tr("b", {{"n", "{n}"}}) == "{n}{n}");
+    CHECK(table.tr("c", {{"n", "1"}}) == "open { brace");
+    CHECK(table.tr("missing", {{"n", "1"}}) == "missing");
 }
 
 TEST_CASE("an entry that is not a text and broken JSON are reported", "[i18n]") {

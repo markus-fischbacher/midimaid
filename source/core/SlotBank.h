@@ -64,6 +64,10 @@ public:
     bool setResult(size_t index, Pattern pattern);
     /// Replaces the current pattern with an edited one (no history entry). False when the slot is empty.
     bool edit(size_t index, Pattern pattern);
+    /// Takes back the result that was appended last (undo, D-153): it leaves the history, `before` becomes the current
+    /// pattern again (none: the slot is empty) and `cursor` the history cursor, cut to the history that is left. False
+    /// for an invalid index, an empty history or an invalid `before` (nothing changes).
+    bool undoResult(size_t index, const std::optional<Pattern>& before, size_t cursor);
     /// Browse the results (Cmd+[ and Cmd+]): the entry becomes the current pattern. False at the ends.
     bool historyBack(size_t index);
     bool historyForward(size_t index);

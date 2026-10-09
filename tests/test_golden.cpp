@@ -142,8 +142,8 @@ std::string firstDifference(const std::string& expected, const std::string& actu
             return "no difference";
         }
         if (!okA || !okB || lineA != lineB) {
-            return "line " + std::to_string(line) + "\n  golden: " + (okA ? lineA : "<end>") + "\n  actual: " +
-                   (okB ? lineB : "<end>");
+            return "line " + std::to_string(line) + "\n  golden: " + (okA ? lineA : "<end>") +
+                   "\n  actual: " + (okB ? lineB : "<end>");
         }
         ++line;
     }
