@@ -112,16 +112,14 @@ std::string sanitizeUserText(std::string_view text, size_t maxChars) {
     // The delimiters never survive, also not when taking one out makes another: remove until none is left. Control
     // characters are turned into spaces afterwards (they are not removed, so they cannot join anything).
     std::string raw(text);
-    for (const char* delimiter : {"<<<", ">>>"}) {
-        for (size_t at = raw.find(delimiter); at != std::string::npos; at = raw.find(delimiter)) {
-            raw.erase(at, 3);
+    for (bool again = true; again;) {
+        again = false;
+        for (const char* delimiter : {"<<<", ">>>"}) {
+            for (size_t at = raw.find(delimiter); at != std::string::npos; at = raw.find(delimiter)) {
+                raw.erase(at, 3);
+                again = true;
+            }
         }
-    }
-    for (size_t at = raw.find("<<<"); at != std::string::npos; at = raw.find("<<<")) {
-        raw.erase(at, 3); // an erased ">>>" can leave "<<<" behind
-    }
-    for (size_t at = raw.find(">>>"); at != std::string::npos; at = raw.find(">>>")) {
-        raw.erase(at, 3);
     }
     std::string cleaned;
     bool space = true; // swallows leading white space

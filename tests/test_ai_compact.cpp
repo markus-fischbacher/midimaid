@@ -214,6 +214,36 @@ TEST_CASE("the note ids are left out on request and unknown scales or ranges giv
     CHECK_FALSE(patternToSchemaJson(pattern, &style).has_value());
 }
 
+TEST_CASE("phrases and their turnaround are written", "[ai][compact]") {
+    const auto style = shipped("peak_time");
+    Pattern pattern = makeEmptyPattern(16, "peak_time");
+    pattern.phrases.clear();
+    Phrase a;
+    a.startBar = 0;
+    a.lengthBars = 8;
+    a.role = PhraseRole::Main;
+    Phrase b;
+    b.startBar = 8;
+    b.lengthBars = 8;
+    b.role = PhraseRole::Breakdown;
+    b.turnaround = true;
+    pattern.phrases = {a, b};
+    pattern.context.progression.clear();
+    ChordEvent event;
+    event.startHalfBar = 0;
+    event.lengthHalfBars = 32;
+    pattern.context.progression.push_back(event);
+    const auto compact = patternToSchemaJson(pattern, &style);
+    REQUIRE(compact.has_value());
+    const auto phrases = json::parse(compact->json)["phrases"];
+    REQUIRE(phrases.size() == 2);
+    CHECK(phrases[0]["role"] == "main");
+    CHECK_FALSE(phrases[0].contains("turnaround"));
+    CHECK(phrases[1]["role"] == "breakdown");
+    CHECK(phrases[1]["start_bar"] == 8);
+    CHECK(phrases[1]["turnaround"] == true);
+}
+
 TEST_CASE("a note at the very end of the pattern keeps its step inside the pattern", "[ai][compact]") {
     const auto style = shipped("peak_time");
     Pattern pattern = makeEmptyPattern(1, "peak_time");
