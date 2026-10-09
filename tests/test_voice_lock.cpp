@@ -207,3 +207,25 @@ TEST_CASE("series: the locked voice is the same for many seeds", "[voice-lock][s
         CHECK(validatePattern(result.pattern).empty());
     }
 }
+
+TEST_CASE("the voices around a locked one are made for it, in patterns with several phrases too",
+          "[voice-lock][generator]") {
+    const StyleProfile style = loadShipped("peak_time");
+    for (const uint32_t bars : {4u, 8u}) {
+        const Pattern first = lockedSource(style, bars, 9, 0);
+        Pattern second = first;
+        // The same locked bass with other pitches: the melody around it has to follow.
+        for (auto& note : second.voices[0].notes) {
+            note.pitch = static_cast<uint8_t>(note.pitch + 7);
+        }
+        int differing = 0;
+        for (uint64_t seed = 1; seed <= 12; ++seed) {
+            const auto a = generatePatternAroundLocks(style, requestFor(bars, seed), first);
+            const auto b = generatePatternAroundLocks(style, requestFor(bars, seed), second);
+            REQUIRE((a.success && b.success));
+            differing += a.pattern.voices[1].notes == b.pattern.voices[1].notes ? 0 : 1;
+        }
+        INFO(bars << " bars");
+        CHECK(differing > 0);
+    }
+}

@@ -1222,4 +1222,8 @@ TEST_CASE("the lock switch of a voice row follows the pattern and locks the voic
     REQUIRE(waitFor([&] { return solo.processor.playingVoices()[1].locked; }));
     lock2->triggerClick(); // and off again
     REQUIRE(waitFor([&] { return !solo.processor.playingVoices()[1].locked; }));
+
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { bank.clear(0); }); // the slot is empty again
+    REQUIRE(waitFor([&] { return !lock1->isEnabled(); }));
+    CHECK_FALSE(lock2->isEnabled());
 }

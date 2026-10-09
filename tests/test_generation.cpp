@@ -792,11 +792,11 @@ TEST_CASE("a result that does not fit the locked voice is dropped", "[generation
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor processor("Test");
     auto settings = processor.instanceSettings();
-    settings.generation.lengthBars = 4;
+    settings.generation.lengthBars = 2;
     processor.setInstanceSettings(settings);
     generateAndWait(processor);
     const auto before = processor.slotsSnapshot();
-    settings.generation.lengthBars = 2; // another length than the slot
+    settings.generation.lengthBars = 4; // another length than the slot; the locked notes would still fit
     processor.setInstanceSettings(settings);
     processor.generate();
     REQUIRE(processor.setVoiceLocked(0, 0, true));
