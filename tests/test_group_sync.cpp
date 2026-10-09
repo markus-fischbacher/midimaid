@@ -508,10 +508,17 @@ TEST_CASE("hub and voices on their own threads, with members coming and going, s
     std::atomic<bool> stop{false};
     std::atomic<long> violations{0};
     std::atomic<long> plans{0};
+    std::atomic<int> joined{0};
 
     const auto audioThread = [&](bool isHub, unsigned seed) {
         const int id = channel.acquire();
         GroupSync sync(channel, id);
+        // The hub plans only with company: start together, so that a thread that is scheduled late (a loaded CI
+        // machine) cannot let the hub run its blocks alone, which left `plans` at zero now and then.
+        joined.fetch_add(1);
+        while (joined.load() < 3) {
+            std::this_thread::yield();
+        }
         std::mt19937 random(seed);
         double ppq = 0.0;
         int slot = 1;

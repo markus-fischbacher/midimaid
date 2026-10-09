@@ -345,6 +345,10 @@ Gepinnte Actions: `actions/checkout` v7, `actions/cache` v6 (Tags), `ilammy/msvc
 - **Geänderte Tests (offengelegt):** „the hub UI hands grid, triplets and snapping to the rolls …“ erwartete das Rasterfeld ohne Zutun sichtbar; es gehört jetzt zur Experten-Ebene, der Test schaltet sie vorher ein (`CHECK_FALSE` vor dem Schalter, dann Schalter und Warten). Alle weiteren Prüfungen des Tests sind unverändert.
 - **Nicht enthalten:** Einstellungsdialog (Phase 3), Oktav-Offset, Archetyp-Wahl und Swing in der Experten-Ebene (die Elemente gibt es im Hub-Fenster noch nicht), Speichern des Spurfokus, Fenstergröße je Instanz.
 
+### D-163 – Stresstest der Gruppen-Synchronisation startet seine Threads gemeinsam
+- **Befund:** Der Test „hub and voices on their own threads, with members coming and going, stay consistent“ (`tests/test_group_sync.cpp`) schlug unter der CI-Sanitizer-Last gelegentlich bei `CHECK(plans.load() > 0)` fehl. Ursache im Test, nicht im Produktcode: Der Hub plant einen Wechsel nur mit Gesellschaft (`memberCount() > 1`). Wird der Hub-Thread vor den Voice-Threads und dem Nachrichten-Thread eingeplant, läuft er seine Blöcke allein und plant nie. Nachgestellt mit 300 ms Verzögerung der anderen Threads (Test schlug fehl).
+- **Korrektur:** Die drei Audio-Threads warten nach dem Beitreten, bis alle da sind (`joined`). Die Prüfungen sind unverändert. Mit derselben Verzögerung besteht der Test jetzt.
+
 ### D-164 – Senkrechtes Scrollen der Roll mit dem Trackpad
 - **Befund:** Das Rad scrollt die Roll senkrecht (D-157), das war von Anfang an vorgesehen. Die Schrittgröße wurde aber je Ereignis auf ganze Zeilen gerundet (`lround(deltaY * 8)`). Ein Trackpad schickt viele kleine Schritte unter einer Zeile; jeder wurde zu 0 gerundet, die Roll blieb stehen.
 - **Korrektur:** Die Bruchteile werden gesammelt (`wheelRows_`), gescrollt wird um ganze Zeilen; ein Richtungswechsel beginnt neu. Test mit 20 Schritten à 0,04 (6 Zeilen) und der Rückrichtung; Mutationsprüfung (alte Rundung und fehlender Neubeginn werden erkannt). Ob das auf dem Gerät des Entwicklers die Ursache war, zeigt die Probe im Host (H24).
