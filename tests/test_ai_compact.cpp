@@ -1,6 +1,5 @@
 #include "ai/AiSchema.h"
 #include "ai/PatternCompact.h"
-
 #include "core/PatternGenerator.h"
 #include "core/PatternValidation.h"
 #include "core/StyleProfile.h"
@@ -74,7 +73,8 @@ TEST_CASE("the key is written with sharps", "[ai][compact]") {
     CHECK(rootName(21) == "A"); // modulo 12
 }
 
-TEST_CASE("generated patterns survive the schema: same notes, ids, flags, harmony and phrases", "[ai][compact][series]") {
+TEST_CASE("generated patterns survive the schema: same notes, ids, flags, harmony and phrases",
+          "[ai][compact][series]") {
     size_t patterns = 0;
     size_t rounded = 0;
     for (const char* name : {"peak_time", "melodic_techno", "hard_industrial"}) {
@@ -175,9 +175,9 @@ TEST_CASE("a bar with two chords is written as x|y and one chord over many bars 
         event.lengthHalfBars = length;
         pattern.context.progression.push_back(event);
     };
-    add(0, 3, 0, ChordQuality::Minor);   // i for a bar and a half
-    add(3, 1, 10, ChordQuality::Major);  // bVII for the second half of bar 2
-    add(4, 4, 8, ChordQuality::Major);   // bVI for bars 3 and 4
+    add(0, 3, 0, ChordQuality::Minor);  // i for a bar and a half
+    add(3, 1, 10, ChordQuality::Major); // bVII for the second half of bar 2
+    add(4, 4, 8, ChordQuality::Major);  // bVI for bars 3 and 4
     Note note;
     note.id = allocateNoteId(pattern);
     note.pitch = 33;

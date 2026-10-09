@@ -66,11 +66,16 @@ std::optional<Spelling> spell(const Scale& scale, int base, int pitch) {
 
 const char* phraseRoleName(PhraseRole role) {
     switch (role) {
-    case PhraseRole::Main: return "main";
-    case PhraseRole::Variation: return "variation";
-    case PhraseRole::Build: return "build";
-    case PhraseRole::Breakdown: return "breakdown";
-    case PhraseRole::Answer: return "answer";
+    case PhraseRole::Main:
+        return "main";
+    case PhraseRole::Variation:
+        return "variation";
+    case PhraseRole::Build:
+        return "build";
+    case PhraseRole::Breakdown:
+        return "breakdown";
+    case PhraseRole::Answer:
+        return "answer";
     }
     return "main";
 }
@@ -92,8 +97,7 @@ std::string rootName(PitchClass root) {
     return names[root % 12];
 }
 
-std::optional<CompactPattern> patternToSchemaJson(const Pattern& pattern, const StyleProfile* style,
-                                                  bool includeIds) {
+std::optional<CompactPattern> patternToSchemaJson(const Pattern& pattern, const StyleProfile* style, bool includeIds) {
     const Scale* scale = findScale(pattern.context.scaleId);
     if (scale == nullptr) {
         return std::nullopt;
@@ -119,7 +123,8 @@ std::optional<CompactPattern> patternToSchemaJson(const Pattern& pattern, const 
     root["context"]["progression"] = progression;
     json phrases = json::array();
     for (const auto& phrase : pattern.phrases) {
-        json entry = {{"start_bar", phrase.startBar}, {"bars", phrase.lengthBars}, {"role", phraseRoleName(phrase.role)}};
+        json entry = {
+            {"start_bar", phrase.startBar}, {"bars", phrase.lengthBars}, {"role", phraseRoleName(phrase.role)}};
         if (phrase.turnaround) {
             entry["turnaround"] = true;
         }

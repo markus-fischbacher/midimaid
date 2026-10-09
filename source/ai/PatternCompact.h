@@ -10,8 +10,8 @@
 namespace mm::ai {
 
 struct CompactPattern {
-    std::string json;         ///< schema v1 (`AiSchema.h`), one line
-    size_t roundedNotes = 0;  ///< notes whose start or length is not a whole number of 16ths: the schema rounds them
+    std::string json;        ///< schema v1 (`AiSchema.h`), one line
+    size_t roundedNotes = 0; ///< notes whose start or length is not a whole number of 16ths: the schema rounds them
 };
 
 /// The pattern as an answer of schema v1 (SPEC 3.15, 7.3): key, scale, one chord symbol per bar (`"x|y"` for two
@@ -21,8 +21,8 @@ struct CompactPattern {
 /// nearest whole number of 16ths (at least 1), and the note counts in `roundedNotes` (the caller can restore a note
 /// that the answer leaves unchanged). Nullopt for an unknown scale or a voice without a base note. `style` gives the
 /// ranges (null: the defaults), like `BuildContext::style`.
-std::optional<CompactPattern> patternToSchemaJson(const mm::core::Pattern& pattern,
-                                                  const mm::core::StyleProfile* style, bool includeIds = true);
+std::optional<CompactPattern> patternToSchemaJson(const mm::core::Pattern& pattern, const mm::core::StyleProfile* style,
+                                                  bool includeIds = true);
 
 /// "A", "C#" ...: the key as the schema writes it (sharps).
 std::string rootName(mm::core::PitchClass root);

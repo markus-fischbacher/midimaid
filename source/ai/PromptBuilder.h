@@ -63,9 +63,9 @@ struct Prompt {
 struct GeneratePromptInput {
     const mm::core::StyleProfile* style = nullptr;
     uint32_t lengthBars = 4;
-    std::optional<mm::core::PitchClass> root;     ///< fixed key, else the model chooses
-    std::optional<std::string> scaleId;           ///< fixed scale, else the model chooses
-    std::optional<std::string> bassArchetype;     ///< manual choice, else the model chooses from the style
+    std::optional<mm::core::PitchClass> root; ///< fixed key, else the model chooses
+    std::optional<std::string> scaleId;       ///< fixed scale, else the model chooses
+    std::optional<std::string> bassArchetype; ///< manual choice, else the model chooses from the style
     std::optional<std::string> melodyArchetype;
     int energyPct = 50;
     int creativityPct = 40;

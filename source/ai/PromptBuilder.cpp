@@ -180,7 +180,8 @@ std::string styleRules(const PromptTemplates& templates, const StyleProfile& sty
     for (size_t i = 0; i < style.scales.size(); ++i) {
         out << (i == 0 ? "" : ", ") << style.scales[i].id << " (" << style.scales[i].weight << ")";
     }
-    out << "\n- chromatic notes: about " << style.chromaticDefaultPercent << " percent of the notes may leave the scale\n";
+    out << "\n- chromatic notes: about " << style.chromaticDefaultPercent
+        << " percent of the notes may leave the scale\n";
     out << "- default kick grid: " << style.kickDefault << '\n';
     out << "- bass range MIDI " << style.bass.range.low << " to " << style.bass.range.high << ", melody range MIDI "
         << style.melody.range.low << " to " << style.melody.range.high << '\n';
@@ -258,7 +259,8 @@ std::optional<Prompt> buildRefinePrompt(const PromptTemplates& templates, const 
         const auto& phrase = pattern.phrases[*input.phrase];
         scope = "only the bars " + std::to_string(phrase.startBar) + " to " +
                 std::to_string(phrase.startBar + phrase.lengthBars - 1) + " (steps " +
-                std::to_string(phrase.startBar * 16) + " to " + std::to_string((phrase.startBar + phrase.lengthBars) * 16 - 1) +
+                std::to_string(phrase.startBar * 16) + " to " +
+                std::to_string((phrase.startBar + phrase.lengthBars) * 16 - 1) +
                 "); leave every other bar exactly as it is";
     }
     std::vector<std::string> lockedVoices;
@@ -272,8 +274,9 @@ std::optional<Prompt> buildRefinePrompt(const PromptTemplates& templates, const 
     for (size_t i = from; i < input.history.size(); ++i) {
         const auto text = sanitizeUserText(input.history[i], 400);
         if (!text.empty()) {
-            history += (history.empty() ? "Earlier refinements of this pattern, oldest first (for context only):\n" : "") +
-                       std::to_string(i - from + 1) + ". <<<" + text + ">>>\n";
+            history +=
+                (history.empty() ? "Earlier refinements of this pattern, oldest first (for context only):\n" : "") +
+                std::to_string(i - from + 1) + ". <<<" + text + ">>>\n";
         }
     }
     std::map<std::string, std::string> request;
