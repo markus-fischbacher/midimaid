@@ -128,8 +128,7 @@ Plattformen dasselbe Ergebnis. Alle Constraint- und Ausgabestufen-Tests sind gr�
 kurz vor der Taktgrenze und beim Start mitten im Arrangement. Projekte mit und ohne Hub öffnen korrekt.
 
 ## Phase 2 – Bearbeitung und Variationen
-- [ ] Piano-Roll (eine Spur pro Stimme): Setzen, Löschen, Verschieben, Länge, Velocity-Spur, Slide, Akzent
-  - Stand: Setzen, Löschen, Verschieben, Länge, Auswahl, Zoom und Scrollen fertig (D-157, P2-E1); Velocity-Spur, Slide und Akzent offen (P2-E2)
+- [x] Piano-Roll (eine Spur pro Stimme): Setzen, Löschen, Verschieben, Länge, Velocity-Spur, Slide, Akzent (D-157, D-158; Sichtprüfung im Host steht aus)
 - [ ] Raster, Skalen-Einrasten, Undo/Redo (Kern und Plugin-Anbindung fertig, D-153; Raster, Einrasten und Tasten in der Roll fertig, D-157; Schaltflächen für Rückgängig und Wiederholen folgen in P2-G)
 - [ ] Spurfokus (alle / einzelne Stimme)
 - [x] Stimme sperren (SPEC §3.5; D-154: Erzeugen um gesperrte Stimmen, Schalter je Stimmenzeile; Variation und Verfeinern folgen den Hilfsfunktionen)

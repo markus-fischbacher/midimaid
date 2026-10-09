@@ -5,6 +5,7 @@
 #include "plugin/ProcessorBase.h"
 #include "plugin/RollView.h"
 
+#include <map>
 #include <set>
 
 namespace mm::plugin {
@@ -35,11 +36,26 @@ public:
     bool gestureEdited() const { return stepped_; }
 
     void press(juce::Point<double> point, juce::ModifierKeys mods);
+    /// A press in the velocity lane: `point.x` is the field x, `point.y` the height from the top of the lane. The
+    /// drag and release that follow take lane positions too. Dragging a bar sets its velocity (a selection moves by the
+    /// same delta); with Alt a stroke over empty lane sets every bar it crosses.
+    void pressLane(juce::Point<double> point, juce::ModifierKeys mods);
+    /// The position is in field coordinates, or in lane coordinates while a lane gesture runs.
     void drag(juce::Point<double> point);
     void release(juce::Point<double> point);
     void doubleClick(juce::Point<double> point);
     /// Cmd/Ctrl+Z (Shift: redo), Delete, Cmd/Ctrl+A, the arrow keys. False for a key that is not ours.
     bool handleKey(const juce::KeyPress& key);
+    /// Accent and slide of the selection: all set takes them away, otherwise they are set (one undo step).
+    void toggleAccent();
+    void toggleSlide();
+    /// Adds `delta` to the velocity of the selection (cut to 1-127), one undo step.
+    void changeVelocity(int delta);
+    /// The menu of a right click on a note and what its items do (`kMenu...`).
+    juce::PopupMenu contextMenu() const;
+    void runMenuAction(int id);
+    /// The value shown next to the lane while a bar is dragged (0: none).
+    int velocityHint() const { return hintValue_; }
     /// Zooms horizontally around the field position `x`; `factor` > 1 shows more.
     void zoomAt(double x, double factor);
     /// Scrolls by ticks and rows.
@@ -56,11 +72,19 @@ public:
 
     static constexpr int kGutter = 34; ///< width of the key labels at the left
     static constexpr int kRowPixels = 7;
+    static constexpr int kLaneHeight = 40; ///< the velocity lane under the notes
+    static constexpr int kMenuAccent = 1;
+    static constexpr int kMenuSlide = 2;
+    static constexpr int kMenuDelete = 3;
 
 private:
-    enum class Mode { Idle, Moving, Resizing, Rubber };
+    enum class Mode { Idle, Moving, Resizing, Rubber, Velocity, Draw };
 
     juce::Rectangle<int> field() const;
+    int laneHeight() const;
+    void flipFlag(bool accent);
+    void stepVelocity(double y);
+    void stepDraw(juce::Point<double> point);
     const mm::core::RollNote* find(uint32_t id) const;
     int rowsForHeight() const;
     void endGesture();
@@ -93,6 +117,10 @@ private:
     mm::core::RollNote anchor_; // the grabbed note as it was when the gesture started
     std::optional<mm::core::RollNote> expected_;
     bool stepped_ = false;
+    std::map<uint32_t, uint8_t> velocityStart_; // the velocities of the selection when a lane drag started
+    juce::Point<double> lastLanePoint_;
+    int hintValue_ = 0;
+    uint32_t hintId_ = 0;
 };
 
 } // namespace mm::plugin

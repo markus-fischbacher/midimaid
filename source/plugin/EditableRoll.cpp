@@ -42,8 +42,12 @@ EditableRoll::EditableRoll(ProcessorBase& processor, int voice) : processor_(pro
     viewport_.rows = 24;
 }
 
+int EditableRoll::laneHeight() const {
+    return std::min(kLaneHeight, getHeight() / 3);
+}
+
 juce::Rectangle<int> EditableRoll::field() const {
-    return getLocalBounds().withTrimmedLeft(kGutter);
+    return getLocalBounds().withTrimmedLeft(kGutter).withTrimmedBottom(laneHeight());
 }
 
 int EditableRoll::rowsForHeight() const {
@@ -116,6 +120,9 @@ void EditableRoll::endGesture() {
     dragged_ = false;
     narrowOnRelease_ = false;
     expected_.reset();
+    velocityStart_.clear();
+    hintValue_ = 0;
+    hintId_ = 0;
 }
 
 void EditableRoll::press(juce::Point<double> point, juce::ModifierKeys mods) {
@@ -161,13 +168,19 @@ void EditableRoll::drag(juce::Point<double> point) {
     const double dx = point.x - pressPoint_.x;
     const double dy = point.y - pressPoint_.y;
     if (!dragged_) {
-        if (std::hypot(dx, dy) < kDragThreshold) {
+        if (std::hypot(dx, dy) < kDragThreshold) { // a stroke starts dragged: it needs no threshold
             return;
         }
         dragged_ = true;
         narrowOnRelease_ = false;
     }
     switch (mode_) {
+    case Mode::Velocity:
+        stepVelocity(point.y);
+        break;
+    case Mode::Draw:
+        stepDraw(point);
+        break;
     case Mode::Moving:
         stepMove(dx, dy);
         break;
@@ -195,6 +208,175 @@ void EditableRoll::release(juce::Point<double>) {
     }
     endGesture();
     repaint();
+}
+
+void EditableRoll::pressLane(juce::Point<double> point, juce::ModifierKeys mods) {
+    endGesture();
+    stepped_ = false;
+    if (!haveView_) {
+        return;
+    }
+    pressPoint_ = point;
+    lastLanePoint_ = point;
+    const uint32_t id = mm::core::hitVelocityBar(geometry(), source_, point.x);
+    if (id != 0) {
+        // A bar of a note outside the selection selects that note, like a click in the note field.
+        if (selection_.count(id) == 0) {
+            selection_ = {id};
+        }
+        anchor_ = *find(id);
+        velocityStart_.clear();
+        for (const uint32_t selected : selection_) {
+            if (const auto* note = find(selected)) {
+                velocityStart_[selected] = note->velocity;
+            }
+        }
+        mode_ = Mode::Velocity;
+    } else if (mods.isAltDown()) {
+        mode_ = Mode::Draw;
+        dragged_ = true;
+        stepDraw(point);
+    }
+    repaint();
+}
+
+void EditableRoll::stepVelocity(double y) {
+    const int target = mm::core::velocityAtY(laneHeight(), y);
+    const int delta = target - velocityStart_[anchor_.id];
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    std::vector<mm::core::VelocityChange> changes;
+    for (const auto& [id, velocity] : velocityStart_) {
+        changes.push_back({id, mm::core::shiftVelocity(velocity, delta)});
+    }
+    bool mismatch = false;
+    const bool ok = processor_.editNotes(
+        static_cast<size_t>(slotIndex_),
+        [&](mm::core::Pattern& pattern) -> size_t {
+            if (voice >= pattern.voices.size()) {
+                mismatch = true;
+                return 0;
+            }
+            const auto& notes = pattern.voices[voice].notes;
+            const auto it = std::find_if(notes.begin(), notes.end(), [&](const auto& n) { return n.id == anchor_.id; });
+            if (it == notes.end() || (expected_ && it->velocity != expected_->velocity)) {
+                mismatch = true; // somebody else changed the velocity under the gesture
+                return 0;
+            }
+            const size_t changed = mm::core::setVelocities(pattern, voice, changes);
+            expected_ =
+                mm::core::RollNote{anchor_.id, 0, 0, 0, mm::core::shiftVelocity(velocityStart_[anchor_.id], delta)};
+            return changed;
+        },
+        stepped_);
+    stepped_ = stepped_ || ok;
+    hintId_ = anchor_.id;
+    hintValue_ = mm::core::shiftVelocity(velocityStart_[anchor_.id], delta);
+    if (mismatch) {
+        endGesture();
+    }
+    repaint();
+}
+
+void EditableRoll::stepDraw(juce::Point<double> point) {
+    const auto ids = mm::core::velocityBarsBetween(geometry(), source_, lastLanePoint_.x, point.x);
+    const double dx = point.x - lastLanePoint_.x;
+    std::vector<mm::core::VelocityChange> changes;
+    for (const uint32_t id : ids) {
+        const auto* note = find(id);
+        if (note == nullptr) {
+            continue;
+        }
+        // The height of the stroke where it crosses the bar: a straight line between the last and this position.
+        const double middle = mm::core::velocityBarBox(geometry(), *note, 1.0).x + 2.0;
+        const double share = std::abs(dx) < 1e-9 ? 1.0 : std::clamp((middle - lastLanePoint_.x) / dx, 0.0, 1.0);
+        const double y = lastLanePoint_.y + (point.y - lastLanePoint_.y) * share;
+        changes.push_back({id, mm::core::velocityAtY(laneHeight(), y)});
+    }
+    lastLanePoint_ = point;
+    if (changes.empty()) {
+        return;
+    }
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    const bool ok = processor_.editNotes(
+        static_cast<size_t>(slotIndex_),
+        [&](mm::core::Pattern& pattern) { return mm::core::setVelocities(pattern, voice, changes); }, stepped_);
+    stepped_ = stepped_ || ok;
+    repaint();
+}
+
+void EditableRoll::flipFlag(bool accent) {
+    if (selection_.empty() || !haveView_) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        if (voice >= pattern.voices.size()) {
+            return 0;
+        }
+        bool all = true;
+        for (const auto& note : pattern.voices[voice].notes) {
+            if (std::find(ids.begin(), ids.end(), note.id) != ids.end() && !(accent ? note.accent : note.slide)) {
+                all = false;
+            }
+        }
+        return accent ? mm::core::setAccent(pattern, voice, ids, !all) : mm::core::setSlide(pattern, voice, ids, !all);
+    });
+}
+
+void EditableRoll::toggleAccent() {
+    flipFlag(true);
+}
+
+void EditableRoll::toggleSlide() {
+    flipFlag(false);
+}
+
+void EditableRoll::changeVelocity(int delta) {
+    if (selection_.empty() || !haveView_) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        if (voice >= pattern.voices.size()) {
+            return 0;
+        }
+        std::vector<mm::core::VelocityChange> changes;
+        for (const auto& note : pattern.voices[voice].notes) {
+            if (std::find(ids.begin(), ids.end(), note.id) != ids.end()) {
+                changes.push_back({note.id, mm::core::shiftVelocity(note.velocity, delta)});
+            }
+        }
+        return mm::core::setVelocities(pattern, voice, changes);
+    });
+}
+
+juce::PopupMenu EditableRoll::contextMenu() const {
+    bool allAccent = !selection_.empty();
+    bool allSlide = !selection_.empty();
+    for (const uint32_t id : selection_) {
+        if (const auto* note = find(id)) {
+            allAccent = allAccent && note->accent;
+            allSlide = allSlide && note->slide;
+        }
+    }
+    juce::PopupMenu menu;
+    menu.addItem(kMenuAccent, tr(mm::core::text::kRollAccent), !selection_.empty(), allAccent);
+    menu.addItem(kMenuSlide, tr(mm::core::text::kRollSlide), !selection_.empty(), allSlide);
+    menu.addSeparator();
+    menu.addItem(kMenuDelete, tr(mm::core::text::kRollDelete), !selection_.empty());
+    return menu;
+}
+
+void EditableRoll::runMenuAction(int id) {
+    if (id == kMenuAccent) {
+        toggleAccent();
+    } else if (id == kMenuSlide) {
+        toggleSlide();
+    } else if (id == kMenuDelete) {
+        removeIds(std::vector<uint32_t>(selection_.begin(), selection_.end()));
+    }
 }
 
 void EditableRoll::stepMove(double dx, double dy) {
@@ -360,6 +542,19 @@ bool EditableRoll::handleKey(const juce::KeyPress& key) {
         removeIds(std::vector<uint32_t>(selection_.begin(), selection_.end()));
         return true;
     }
+    if (!mods.isCommandDown() && !mods.isAltDown() && (code == 'A' || code == 'a')) {
+        toggleAccent();
+        return true;
+    }
+    if (!mods.isCommandDown() && !mods.isAltDown() && (code == 'S' || code == 's')) {
+        toggleSlide();
+        return true;
+    }
+    if (mods.isAltDown() && (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey)) {
+        const int amount = mods.isShiftDown() ? 10 : 1;
+        changeVelocity(code == juce::KeyPress::upKey ? amount : -amount);
+        return true;
+    }
     const int64_t step = static_cast<int64_t>(grid_.ticks()) * (mods.isShiftDown() ? 4 : 1);
     if (code == juce::KeyPress::leftKey) {
         moveByKey(-step, 0, 0);
@@ -408,6 +603,27 @@ void EditableRoll::resized() {
 void EditableRoll::mouseDown(const juce::MouseEvent& event) {
     grabKeyboardFocus();
     const auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
+    if (event.position.y >= static_cast<float>(field().getBottom())) {
+        pressLane({point.x, point.y - field().getBottom()}, event.mods);
+        return;
+    }
+    if (event.mods.isPopupMenu()) {
+        // A right click on a note: the note joins the selection if it is not in it, then the menu opens.
+        const RollHit hit = haveView_ ? mm::core::hitTest(geometry(), source_, point.x, point.y) : RollHit{};
+        if (hit.id != 0) {
+            if (selection_.count(hit.id) == 0) {
+                selection_ = {hit.id};
+                repaint();
+            }
+            contextMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+                                        [safe = juce::Component::SafePointer<EditableRoll>(this)](int result) {
+                                            if (safe != nullptr && result != 0) {
+                                                safe->runMenuAction(result);
+                                            }
+                                        });
+        }
+        return;
+    }
     if (event.getNumberOfClicks() >= 2) {
         doubleClick(point);
         return;
@@ -416,15 +632,28 @@ void EditableRoll::mouseDown(const juce::MouseEvent& event) {
 }
 
 void EditableRoll::mouseDrag(const juce::MouseEvent& event) {
-    drag((event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble());
+    auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
+    if (mode_ == Mode::Velocity || mode_ == Mode::Draw) {
+        point.y -= field().getBottom();
+    }
+    drag(point);
 }
 
 void EditableRoll::mouseUp(const juce::MouseEvent& event) {
-    release((event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble());
+    auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
+    if (mode_ == Mode::Velocity || mode_ == Mode::Draw) {
+        point.y -= field().getBottom();
+    }
+    release(point);
 }
 
 void EditableRoll::mouseMove(const juce::MouseEvent& event) {
     const auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
+    if (event.position.y >= static_cast<float>(field().getBottom())) {
+        const bool bar = haveView_ && mm::core::hitVelocityBar(geometry(), source_, point.x) != 0;
+        setMouseCursor(bar ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
+        return;
+    }
     const bool edge = haveView_ && mm::core::hitTest(geometry(), source_, point.x, point.y).zone == RollZone::RightEdge;
     setMouseCursor(edge ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
 }
@@ -494,7 +723,8 @@ void EditableRoll::paint(juce::Graphics& g) {
             g.drawVerticalLine(juce::roundToInt(x), static_cast<float>(origin.y), bounds.getBottom());
         }
         // Notes.
-        for (const auto& note : source_) {
+        for (size_t index = 0; index < source_.size(); ++index) {
+            const auto& note = source_[index];
             const auto box = toRect(mm::core::noteBox(geo, note), origin);
             if (!box.intersects(area.toFloat())) {
                 continue;
@@ -507,6 +737,27 @@ void EditableRoll::paint(juce::Graphics& g) {
                 g.setColour(juce::Colours::white.withAlpha(alpha * 0.9f));
                 g.drawRoundedRectangle(box.reduced(0.5f), 2.0f, 1.2f);
             }
+            if (note.accent) {
+                // A small triangle above the start of the note.
+                juce::Path triangle;
+                const float top = box.getY() - 7.0f;
+                triangle.addTriangle(box.getX(), top, box.getX() + 7.0f, top, box.getX() + 3.5f, top + 6.0f);
+                g.setColour(juce::Colours::white.withAlpha(alpha * 0.95f));
+                g.fillPath(triangle);
+            }
+            if (note.slide) {
+                // A line with a diamond from the end of the note to the start of the next one (or a short stub).
+                const float y = box.getCentreY();
+                const float from = box.getRight();
+                const float to = index + 1 < source_.size()
+                                     ? toRect(mm::core::noteBox(geo, source_[index + 1]), origin).getX()
+                                     : from + 12.0f;
+                g.setColour(juce::Colours::white.withAlpha(alpha * 0.85f));
+                g.drawLine(from, y, std::max(to, from + 4.0f), y, 1.2f);
+                juce::Path diamond;
+                diamond.addQuadrilateral(from, y - 3.0f, from + 3.0f, y, from, y + 3.0f, from - 3.0f, y);
+                g.fillPath(diamond);
+            }
         }
         if (mode_ == Mode::Rubber && dragged_) {
             const auto band = juce::Rectangle<float>(
@@ -516,6 +767,45 @@ void EditableRoll::paint(juce::Graphics& g) {
             g.fillRect(band);
             g.setColour(juce::Colours::white.withAlpha(0.5f));
             g.drawRect(band, 1.0f);
+        }
+    }
+
+    // The velocity lane: one bar per note, the accent ones brighter with a cap.
+    {
+        const auto lane = juce::Rectangle<int>(area.getX(), area.getBottom(), area.getWidth(), laneHeight());
+        juce::Graphics::ScopedSaveState state(g);
+        g.reduceClipRegion(lane);
+        g.setColour(juce::Colours::black.withAlpha(0.22f));
+        g.fillRect(lane);
+        g.setColour(juce::Colours::white.withAlpha(0.10f));
+        g.drawHorizontalLine(lane.getY(), static_cast<float>(lane.getX()), static_cast<float>(lane.getRight()));
+        for (const auto& note : source_) {
+            auto box = toRect(mm::core::velocityBarBox(geo, note, static_cast<double>(lane.getHeight())),
+                              {lane.getX(), lane.getY()});
+            if (box.getRight() < static_cast<float>(lane.getX()) || box.getX() > static_cast<float>(lane.getRight())) {
+                continue;
+            }
+            const bool selected = selection_.count(note.id) != 0;
+            auto colour = note.accent ? accent_.brighter(0.8f) : accent_;
+            if (selected) {
+                colour = colour.brighter(0.4f);
+            }
+            g.setColour(colour.withAlpha(alpha * (selected ? 1.0f : 0.8f)));
+            g.fillRect(box);
+            if (note.accent) {
+                g.setColour(juce::Colours::white.withAlpha(alpha * 0.9f));
+                g.fillRect(box.withHeight(2.0f));
+            }
+            if (selected) {
+                g.setColour(juce::Colours::white.withAlpha(alpha * 0.8f));
+                g.drawRect(box, 1.0f);
+            }
+            if (hintValue_ != 0 && note.id == hintId_) {
+                g.setColour(juce::Colours::white);
+                g.setFont(juce::FontOptions(11.0f));
+                g.drawText(juce::String(hintValue_), juce::roundToInt(box.getX()) + 12, lane.getY() + 2, 30, 12,
+                           juce::Justification::centredLeft);
+            }
         }
     }
 

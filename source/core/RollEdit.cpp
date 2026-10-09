@@ -175,6 +175,52 @@ uint32_t dragLength(const RollGeometry& geometry, const RollSnap& snap, const Ro
     return static_cast<uint32_t>(std::max<int64_t>(snappedEnd - anchor.startTick, step));
 }
 
+RollBox velocityBarBox(const RollGeometry& geometry, const RollNote& note, double laneHeight) {
+    const RollBox noteRect = noteBox(geometry, note);
+    RollBox box;
+    box.x = noteRect.x;
+    box.width = std::clamp(noteRect.width - 1.0, 3.0, 10.0);
+    const double share = std::clamp(static_cast<double>(note.velocity), 1.0, 127.0) / 127.0;
+    box.height = std::max(laneHeight * share, 1.0);
+    box.y = laneHeight - box.height;
+    return box;
+}
+
+uint8_t velocityAtY(double laneHeight, double y) {
+    const double share = 1.0 - std::clamp(y / std::max(laneHeight, 1.0), 0.0, 1.0);
+    return static_cast<uint8_t>(std::clamp<long>(std::lround(share * 127.0), 1, 127));
+}
+
+uint32_t hitVelocityBar(const RollGeometry& geometry, std::span<const RollNote> notes, double x) {
+    for (auto it = notes.rbegin(); it != notes.rend(); ++it) {
+        const RollBox box = velocityBarBox(geometry, *it, 1.0);
+        const double width = std::max(box.width, kMinHitWidth);
+        if (x >= box.x && x < box.x + width) {
+            return it->id;
+        }
+    }
+    return 0;
+}
+
+std::vector<uint32_t> velocityBarsBetween(const RollGeometry& geometry, std::span<const RollNote> notes, double x0,
+                                          double x1) {
+    const double left = std::min(x0, x1);
+    const double right = std::max(x0, x1);
+    std::vector<uint32_t> ids;
+    for (const RollNote& note : notes) {
+        const RollBox box = velocityBarBox(geometry, note, 1.0);
+        const double middle = box.x + box.width / 2.0;
+        if (middle >= left && middle <= right) {
+            ids.push_back(note.id);
+        }
+    }
+    return ids;
+}
+
+uint8_t shiftVelocity(uint8_t velocity, int delta) {
+    return static_cast<uint8_t>(std::clamp(static_cast<int>(velocity) + delta, 1, 127));
+}
+
 int stepPitch(int pitch, int direction, const RollSnap& snap) {
     const int step = direction >= 0 ? 1 : -1;
     int candidate = pitch;
