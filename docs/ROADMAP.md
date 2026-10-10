@@ -206,7 +206,7 @@ Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set 
 
 ## Phase 6 – Feinschliff, Vorlagen, v1.0-Abschluss
 - [ ] UI-Polish, Skalierung, HiDPI, Theme
-- [ ] Performance-Messung gegen SPEC §11
+- [x] Performance-Messung gegen SPEC §11
 - [ ] Instrument-Presets pro Rolle (Live und Logic, nur eigene Instrumente, SPEC §12)
 - [ ] DAW-Vorlagen: Live-Set mit Gruppenspuren, Logic-Patches (SPEC §8.6)
 - [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5)
