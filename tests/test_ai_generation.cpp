@@ -1,7 +1,6 @@
 #include "ai/AiGeneration.h"
 #include "ai/MockProvider.h"
 #include "ai/PatternCompact.h"
-
 #include "core/PatternGenerator.h"
 #include "core/PatternValidation.h"
 #include "core/StyleProfile.h"
@@ -173,7 +172,7 @@ TEST_CASE("an unusable answer gets one repair request that names the problem", "
     const auto style = shipped();
     const auto good = answerFor(algorithmic(style, 5), style);
     for (const std::string& bad : {std::string("I am sorry, I cannot do that."), std::string("{\"schema_version\": 1}"),
-                                  std::string("{}"), std::string("")}) {
+                                   std::string("{}"), std::string("")}) {
         MockProvider mock;
         mock.enqueue(okWithTokens(bad, 100, 5));
         mock.enqueue(okWithTokens(good, 110, 700));
@@ -382,7 +381,7 @@ TEST_CASE("locked voices stay, the answer is written for their harmony", "[ai][g
     Pattern other = algorithmic(style, 12);
     other.context.root = static_cast<PitchClass>((current.context.root + 5) % 12);
     json answer = json::parse(answerFor(other, style));
-    answer["voices"][0]["notes"] = json::array(); // locked: returned empty
+    answer["voices"][0]["notes"] = json::array();                    // locked: returned empty
     answer["context"]["progression"] = json::array({"not a chord"}); // the harmony of the locked voice counts, not this
     current.kickGridId = "broken_a";
     current.voices[0].lock = {true, true, true};
@@ -474,8 +473,8 @@ TEST_CASE("a 16-bar answer is a motif that is repeated over the pattern", "[ai][
     json answer = json::parse(answerFor(algorithmic(style, 5, 2), style)); // 2 bars: the motif
     answer["voices"][0]["motif_bars"] = 2;
     answer["voices"][1]["motif_bars"] = 2;
-    answer["phrases"] = json::array({{{"start_bar", 0}, {"bars", 8}, {"role", "main"}},
-                                     {{"start_bar", 8}, {"bars", 8}, {"role", "variation"}}});
+    answer["phrases"] = json::array(
+        {{{"start_bar", 0}, {"bars", 8}, {"role", "main"}}, {{"start_bar", 8}, {"bars", 8}, {"role", "variation"}}});
     MockProvider mock;
     mock.enqueueText(answer.dump());
     auto input = inputFor(style);

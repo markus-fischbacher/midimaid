@@ -586,12 +586,14 @@ BuildResult buildPattern(const AiDraft& draft, const BuildContext& context) {
             ++notesBuilt;
         }
         if (motif) {
-            const std::vector<Note> once(track.notes.begin() + static_cast<std::ptrdiff_t>(firstNote), track.notes.end());
+            const std::vector<Note> once(track.notes.begin() + static_cast<std::ptrdiff_t>(firstNote),
+                                         track.notes.end());
             for (uint32_t repeat = 1; repeat * motifSteps < totalSteps; ++repeat) {
                 for (Note copy : once) {
                     copy.id = 0; // only the first statement of the motif keeps its id
                     copy.startTick += repeat * motifSteps * kTicksPerStep;
-                    // A motif that does not divide the pattern is cut at the end: later notes go, a long one is shortened.
+                    // A motif that does not divide the pattern is cut at the end: later notes go, a long one is
+                    // shortened.
                     if (copy.startTick >= totalSteps * kTicksPerStep) {
                         continue;
                     }

@@ -48,7 +48,7 @@ bool contains(const std::string& text, const std::string& part) {
 TEST_CASE("the shipped templates are all there and only use placeholders the builders fill", "[ai][prompt]") {
     const auto t = templates();
     const std::set<std::string> system = {"schema", "style"};
-    const std::set<std::string> generate = {"bars",       "last_step", "key",        "scale",  "energy",
+    const std::set<std::string> generate = {"bars",       "last_step", "key",        "scale",       "energy",
                                             "creativity", "voices",    "motif_note", "locked_note", "request"};
     const std::set<std::string> refine = {"bars",       "last_step", "scope",   "locked",     "energy",
                                           "creativity", "history",   "pattern", "instruction"};

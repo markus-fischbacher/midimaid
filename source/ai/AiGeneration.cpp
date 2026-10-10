@@ -170,7 +170,8 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
             ArchetypeSettings settings;
             settings.energyPct = input.prompt.energyPct;
             settings.creativityPct = input.prompt.creativityPct;
-            const auto scores = scoreCriteria(attempt.pattern, qualityContextFor(attempt.pattern, *input.style, settings));
+            const auto scores =
+                scoreCriteria(attempt.pattern, qualityContextFor(attempt.pattern, *input.style, settings));
             result.score = std::clamp(overallScore(scores, input.style->quality, input.prompt.creativityPct), 0, 100);
             attempt.pattern.qualityScore = static_cast<uint8_t>(result.score);
             result.belowMinScore = result.score < input.style->quality.minScore;

@@ -3,7 +3,6 @@
 #include "ai/AiSchema.h"
 #include "ai/AiTypes.h"
 #include "ai/PromptBuilder.h"
-
 #include "core/Pattern.h"
 #include "core/StyleProfile.h"
 
@@ -39,10 +38,10 @@ struct AiGenerateResult {
     std::string error;         ///< `Invalid`: path and reason of the problem; `ProviderError`: the provider's message
     AiStatus status = AiStatus::Ok; ///< `ProviderError`: the status of the provider
     int httpStatus = 0;
-    bool repaired = false;       ///< the first answer was unusable and the second one worked
-    int score = 0;               ///< the quality rating (0-100) of the pattern
-    bool belowMinScore = false;  ///< the score is under the minimum of the style (SPEC 4.4): shown, not refused
-    int requests = 0;            ///< how many requests were sent (1 or 2)
+    bool repaired = false;      ///< the first answer was unusable and the second one worked
+    int score = 0;              ///< the quality rating (0-100) of the pattern
+    bool belowMinScore = false; ///< the score is under the minimum of the style (SPEC 4.4): shown, not refused
+    int requests = 0;           ///< how many requests were sent (1 or 2)
     int inputTokens = 0;
     int outputTokens = 0;
     size_t droppedNotes = 0;

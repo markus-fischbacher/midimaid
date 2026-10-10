@@ -431,9 +431,10 @@ TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]"
     const auto style = shippedStyle();
     auto answer = validAnswer();
     answer["voices"][0]["motif_bars"] = 2;
-    answer["voices"][0]["notes"] = json::array({{{"step", 1}, {"degree", 1}, {"len", 2}},
-                                                {{"step", 20}, {"degree", 5}, {"len", 40}}, // reaches past the motif: cut
-                                                {{"step", 40}, {"degree", 2}}});            // outside the motif: dropped
+    answer["voices"][0]["notes"] =
+        json::array({{{"step", 1}, {"degree", 1}, {"len", 2}},
+                     {{"step", 20}, {"degree", 5}, {"len", 40}}, // reaches past the motif: cut
+                     {{"step", 40}, {"degree", 2}}});            // outside the motif: dropped
     auto result = buildFrom(answer, style, 16);
     REQUIRE(result.ok);
     const auto& notes = result.pattern.voices[0].notes;
@@ -441,7 +442,7 @@ TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]"
     REQUIRE(notes.size() == 2 * 8); // two notes, eight statements of a two-bar motif
     CHECK(notes[0].startTick == 240);
     CHECK(notes[1].startTick == 20 * 240);
-    CHECK(notes[1].lengthTicks == 12 * 240); // the motif ends at step 32
+    CHECK(notes[1].lengthTicks == 12 * 240);     // the motif ends at step 32
     CHECK(notes[2].startTick == 32 * 240 + 240); // the second statement
     CHECK(notes[15].startTick == 7 * 32 * 240 + 20 * 240);
     CHECK(notes[14].pitch == notes[0].pitch);
@@ -456,10 +457,11 @@ TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]"
 
     // a motif that does not divide the pattern is cut at the end of the pattern
     answer["voices"][0]["motif_bars"] = 5;
-    answer["voices"][0]["notes"] = json::array({{{"step", 0}, {"degree", 1}, {"len", 4}},
-                                                {{"step", 4}, {"degree", 2}, {"len", 60}}, // long: shortened in the last statement
-                                                {{"step", 64}, {"degree", 3}, {"len", 16}}, // bar 5 of the motif
-                                                {{"step", 76}, {"degree", 5}, {"len", 8}}});
+    answer["voices"][0]["notes"] =
+        json::array({{{"step", 0}, {"degree", 1}, {"len", 4}},
+                     {{"step", 4}, {"degree", 2}, {"len", 60}},  // long: shortened in the last statement
+                     {{"step", 64}, {"degree", 3}, {"len", 16}}, // bar 5 of the motif
+                     {{"step", 76}, {"degree", 5}, {"len", 8}}});
     result = buildFrom(answer, style, 16);
     REQUIRE(result.ok);
     CHECK(validatePattern(result.pattern).empty());
@@ -495,7 +497,7 @@ TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]"
     result = buildFrom(answer, style, 16);
     REQUIRE(result.ok);
     CHECK(result.pattern.voices[0].notes.size() == 4); // two statements of an eight-bar motif
-    answer["voices"][0]["motif_bars"] = 0; // no motif
+    answer["voices"][0]["motif_bars"] = 0;             // no motif
     result = buildFrom(answer, style, 16);
     REQUIRE(result.ok);
     CHECK(result.pattern.voices[0].notes.size() == 2);
