@@ -173,8 +173,9 @@ mit Wahlmöglichkeit, und die Wiedergabe läuft ungestört weiter.
 ## Phase 4 – Lenkung: Stimme importieren, Drum-Referenz, Referenzen
 - [x] MIDI aus der DAW (Clip/Region) und .mid annehmen (Drag-Ziel im Hub und in Voices)
   - Stand: Leser, Importplan und Drag-Ziele fertig (D-176, P4-A); angewendet wird der Import mit „Eigene Stimme importieren“ (P4-C); Host-Check H37.
-- [ ] Analyse: Tonart- und Skalenerkennung, Akkordfolge aus Akkorden bzw. Bass-Grundtönen, Rhythmus,
+- [x] Analyse: Tonart- und Skalenerkennung, Akkordfolge aus Akkorden bzw. Bass-Grundtönen, Rhythmus,
       Register; tonartunabhängige Speicherung; Testkorpus mit Zielwerten (SPEC §3.20, §12)
+  - Stand: fertig (D-177, P4-B): Tonart ≥ 95 % (Grundton) und ≥ 92 % (Grundton und Skala, wo der Inhalt sie zeigt) am Korpus; Grenzen dort.
 - [ ] Eigene Stimme importieren: Ersetzen, Sperre, harmonischer Kontext, übrige Stimmen passend
       generieren, „Sperre lösen“, Grenzen (nur 4/4, Länge, höchstens 16 Takte) (SPEC §3.18)
 - [ ] Drum-Referenz per Clip/.mid: GM-Zuordnung plus Liste in den Einstellungen, `custom`-Kick-Raster,
