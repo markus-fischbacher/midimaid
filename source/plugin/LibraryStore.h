@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Library.h"
+#include "core/LibraryIndex.h"
 
 #include <atomic>
 #include <functional>
@@ -16,7 +17,8 @@ namespace mm::plugin {
 /// The library of the user (SPEC 3.12, 9.2, D-184): one JSON file per entry in `<settings folder>/library`, shared by
 /// every instance of the process. All file access runs on one background thread (CLAUDE.md); the list lives in memory
 /// and is read and changed on the message thread. A store without folder keeps its entries in memory only (the tests
-/// of the other parts run that way). The list is built by reading the folder at the start (P5-C adds an index).
+/// of the other parts run that way). The list is built at the start from the index file (`index.json`) and the folder: a
+/// file that has the size and time the index remembers is not read, any other file is (D-185).
 class LibraryStore {
 public:
     /// `maxEntries` is the limit of the list (the tests use a small one).
@@ -64,6 +66,11 @@ public:
 
     /// Files of the folder that were no usable entry when it was read (for the log and the tests).
     size_t unreadableCount() const { return unreadable_.load(); }
+    /// How the folder was read at the start: entries taken from the index without reading their files, and files that
+    /// were read (new, changed, or all of them without a usable index).
+    size_t indexedCount() const { return indexed_.load(); }
+    size_t parsedCount() const { return parsed_.load(); }
+    static constexpr const char* kIndexFileName = "index.json";
 
     /// `<folder of the settings file>/library`, or empty when the settings are disabled (MIDIMAID_SETTINGS_FILE).
     static juce::File defaultFolder();
@@ -73,6 +80,8 @@ private:
     std::string newId(int64_t createdUnixMs);
     SaveResult add(mm::core::LibraryEntry entry);
     void readAll();
+    void scheduleIndex();
+    void writeIndex();
     void changed();
 
     juce::File folder_;
@@ -83,6 +92,9 @@ private:
     std::function<void()> onChanged_;
     std::atomic<bool> ready_{false};
     std::atomic<size_t> unreadable_{0};
+    std::atomic<size_t> indexed_{0};
+    std::atomic<size_t> parsed_{0};
+    std::atomic<uint64_t> indexRequests_{0}; ///< index writes asked for so far
     std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
     juce::ThreadPool pool_{1};
 };

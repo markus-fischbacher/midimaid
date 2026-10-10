@@ -198,7 +198,8 @@ eigener Referenzen tauchen typische eigene Progressionen auf, ohne dass eine Ref
   - Stand: fertig (D-183, P5-A); Host-Check H42.
 - [x] Bibliothek: Speichern, Laden, Import und Export .mid
   - Stand: fertig (D-184, P5-B); Host-Check H43.
-- [ ] Atomares Schreiben, Index
+- [x] Atomares Schreiben, Index
+  - Stand: fertig (D-184 für das atomare Schreiben, D-185 für Index und Absturzsicherheit, P5-C); Host-Check H43 deckt die Bibliothek mit ab.
 
 **Abnahme:** DAW-Projekte stellen den Zustand exakt wieder her. Die Bibliothek übersteht Abstürze ohne
 Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set reproduzierbar.

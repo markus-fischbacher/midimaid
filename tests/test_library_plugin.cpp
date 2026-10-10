@@ -2,6 +2,7 @@
 #include "core/MidiFile.h"
 #include "core/MidiImport.h"
 #include "core/PatternGenerator.h"
+#include "core/LibraryIndex.h"
 #include "plugin/AtomicFile.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/LibraryDialog.h"
@@ -652,4 +653,405 @@ TEST_CASE("an entry whose file went bad cannot be exported", "[library-plugin][s
     REQUIRE(pumpUntil([&] { return result.has_value(); }));
     CHECK(*result == LibraryStore::ExportResult::NoSuchEntry);
     CHECK_FALSE(data.folder.getChildFile("x.mid").existsAsFile());
+}
+
+// ---- the index and crashes ---------------------------------------------------------------------------------------------
+
+namespace {
+
+juce::File indexFileOf(const TempFolder& folder) {
+    return folder.folder.getChildFile(LibraryStore::kIndexFileName);
+}
+
+std::vector<std::string> ids(const LibraryStore& store) {
+    std::vector<std::string> result;
+    for (const auto& info : store.list()) {
+        result.push_back(info.id);
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+/// A store on the folder, read completely.
+std::unique_ptr<LibraryStore> open(const TempFolder& folder) {
+    auto store = std::make_unique<LibraryStore>(folder.folder);
+    REQUIRE(pumpUntil([&] { return store->ready(); }));
+    store->waitForIdle();
+    return store;
+}
+
+std::vector<std::string> fill(const TempFolder& folder, int count) {
+    auto store = open(folder);
+    for (int i = 0; i < count; ++i) {
+        REQUIRE(store->savePattern("entry " + std::to_string(i), made(static_cast<uint64_t>(i + 1)), "", 0).error ==
+                LibraryStore::SaveError::None);
+    }
+    store->waitForIdle();
+    return ids(*store);
+}
+
+} // namespace
+
+TEST_CASE("the index follows the list and holds what the files are", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 12);
+    REQUIRE(indexFileOf(folder).existsAsFile());
+    const auto loaded = loadLibraryIndex(indexFileOf(folder).loadFileAsString().toStdString());
+    REQUIRE(loaded.ok);
+    REQUIRE(loaded.records.size() == 12);
+    for (const auto& record : loaded.records) {
+        const auto file = folder.folder.getChildFile(juce::String(record.info.id) + ".json");
+        CHECK(record.fileSize == file.getSize());
+        CHECK(record.modifiedMs == file.getLastModificationTime().toMilliseconds());
+    }
+    std::vector<std::string> inIndex;
+    for (const auto& record : loaded.records) {
+        inIndex.push_back(record.info.id);
+    }
+    CHECK(inIndex == saved);
+
+    // remove and rename change the index, too
+    auto store = open(folder);
+    store->remove(saved[0]);
+    store->rename(saved[1], "renamed");
+    store->waitForIdle();
+    const auto after = loadLibraryIndex(indexFileOf(folder).loadFileAsString().toStdString());
+    REQUIRE(after.ok);
+    CHECK(after.records.size() == 11);
+    const auto renamed = std::find_if(after.records.begin(), after.records.end(),
+                                      [&](const auto& r) { return r.info.id == saved[1]; });
+    REQUIRE(renamed != after.records.end());
+    CHECK(renamed->info.name == "renamed");
+    CHECK(renamed->fileSize == folder.folder.getChildFile(juce::String(saved[1]) + ".json").getSize());
+}
+
+TEST_CASE("a burst of saves ends with one index that holds all of them", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 40);
+    const auto loaded = loadLibraryIndex(indexFileOf(folder).loadFileAsString().toStdString());
+    REQUIRE(loaded.ok);
+    CHECK(loaded.records.size() == 40);
+    auto again = open(folder);
+    CHECK(again->indexedCount() == 40);
+    CHECK(again->parsedCount() == 0);
+    CHECK(ids(*again) == saved);
+}
+
+TEST_CASE("with an intact index no entry file is read at the start", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 10);
+    auto first = open(folder);
+    const auto list = first->list();
+    first.reset();
+    auto store = open(folder);
+    CHECK(store->indexedCount() == 10);
+    CHECK(store->parsedCount() == 0);
+    CHECK(store->list() == list);
+    // and it does not rewrite what is right
+    const auto stamp = indexFileOf(folder).getLastModificationTime();
+    store->waitForIdle();
+    CHECK(indexFileOf(folder).getLastModificationTime() == stamp);
+}
+
+TEST_CASE("a file that changed behind the index is read again", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 5);
+    // another entry's text under the id of the first: other size and time
+    const auto other = libraryEntryToString(makePatternEntry(saved[0], "swapped by hand", made(99, 8), "", 0, 1));
+    folder.folder.getChildFile(juce::String(saved[0]) + ".json").replaceWithText(juce::String::fromUTF8(other.c_str()));
+    auto store = open(folder);
+    CHECK(store->indexedCount() == 4);
+    CHECK(store->parsedCount() == 1);
+    CHECK(store->info(saved[0])->name == "swapped by hand");
+    CHECK(store->info(saved[0])->lengthBars == 8);
+    // the index was written again and is right now
+    auto next = open(folder);
+    CHECK(next->indexedCount() == 5);
+    CHECK(next->parsedCount() == 0);
+    CHECK(next->info(saved[0])->name == "swapped by hand");
+}
+
+TEST_CASE("a file that came and one that went are noticed", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 4);
+    folder.folder.getChildFile(juce::String(saved[2]) + ".json").deleteFile();
+    const auto added = libraryEntryToString(makePatternEntry("from-elsewhere", "copied in", made(7), "", 0, 5));
+    folder.folder.getChildFile("from-elsewhere.json").replaceWithText(juce::String::fromUTF8(added.c_str()));
+    auto store = open(folder);
+    CHECK(store->indexedCount() == 3);
+    CHECK(store->parsedCount() == 1);
+    CHECK(store->list().size() == 4);
+    CHECK_FALSE(store->info(saved[2]).has_value());
+    CHECK(store->info("from-elsewhere")->name == "copied in");
+    auto next = open(folder);
+    CHECK(next->indexedCount() == 4);
+    CHECK(next->parsedCount() == 0);
+}
+
+TEST_CASE("without a usable index the library is built from the files, and the index comes back",
+          "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 6);
+    const auto good = indexFileOf(folder).loadFileAsString();
+    const auto list = open(folder)->list();
+    for (const char* damage : {"", "garbage", "{\"indexVersion\":7,\"entries\":[]}", "{\"indexVersion\":1}"}) {
+        SECTION(std::string("index: ") + damage) {
+            if (std::string(damage).empty()) {
+                indexFileOf(folder).deleteFile();
+            } else {
+                indexFileOf(folder).replaceWithText(damage);
+            }
+            auto store = open(folder);
+            CHECK(store->parsedCount() == 6);
+            CHECK(store->indexedCount() == 0);
+            CHECK(store->list() == list);
+            auto next = open(folder);
+            CHECK(next->indexedCount() == 6);
+            CHECK(next->parsedCount() == 0);
+        }
+    }
+    SECTION("a truncated index") {
+        indexFileOf(folder).replaceWithText(good.substring(0, good.length() / 2));
+        auto store = open(folder);
+        CHECK(store->parsedCount() == 6);
+        CHECK(store->list() == list);
+    }
+}
+
+TEST_CASE("an index that lists a file that is gone, or lacks a file that is there, is corrected", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 5);
+    // a crash between the write of an entry and the write of the index: the file is there, the index does not know it
+    auto records = loadLibraryIndex(indexFileOf(folder).loadFileAsString().toStdString()).records;
+    records.erase(std::remove_if(records.begin(), records.end(), [&](const auto& r) { return r.info.id == saved[3]; }),
+                  records.end());
+    // ... and an entry the index lists but whose file is gone
+    auto ghost = records.front();
+    ghost.info.id = "ghost";
+    records.push_back(ghost);
+    indexFileOf(folder).replaceWithText(juce::String::fromUTF8(libraryIndexToString(records).c_str()));
+    auto store = open(folder);
+    CHECK(store->list().size() == 5);
+    CHECK(store->info(saved[3]).has_value());
+    CHECK_FALSE(store->info("ghost").has_value());
+    CHECK(store->parsedCount() == 1);
+    CHECK(store->indexedCount() == 4);
+    auto next = open(folder);
+    CHECK(next->parsedCount() == 0);
+    CHECK(next->list().size() == 5);
+}
+
+TEST_CASE("the index file is never taken for an entry", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    fill(folder, 3);
+    auto store = open(folder);
+    CHECK(store->unreadableCount() == 0);
+    CHECK(store->list().size() == 3);
+}
+
+TEST_CASE("a crash in the middle of a write leaves the old entry whole", "[library-plugin][index][atomic]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 3);
+    const auto target = folder.folder.getChildFile(juce::String(saved[0]) + ".json");
+    const auto before = target.loadFileAsString();
+    // what a write that died after its first bytes leaves: a temporary file, and the entry as it was
+    folder.folder.getChildFile("." + target.getFileName() + ".9f3a.mmtmp").replaceWithText(before.substring(0, 40));
+    auto store = open(folder);
+    CHECK(target.loadFileAsString() == before);
+    CHECK(store->list().size() == 3);
+    CHECK(store->unreadableCount() == 0);
+    CHECK(folder.folder.findChildFiles(juce::File::findFiles, false, "*.mmtmp").isEmpty());
+    // the old entry still loads
+    std::optional<LibraryLoadResult> loaded;
+    store->load(saved[0], [&](LibraryLoadResult r) { loaded = std::move(r); });
+    REQUIRE(pumpUntil([&] { return loaded.has_value(); }));
+    CHECK(loaded->ok());
+}
+
+TEST_CASE("an entry file that was cut short is reported and left, the rest loads", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 4);
+    const auto cut = folder.folder.getChildFile(juce::String(saved[1]) + ".json");
+    const auto text = cut.loadFileAsString();
+    cut.replaceWithText(text.substring(0, text.length() / 3));
+    auto store = open(folder);
+    CHECK(store->list().size() == 3);
+    CHECK(store->unreadableCount() == 1);
+    CHECK(store->parsedCount() == 1); // the changed file was looked at
+    CHECK(cut.existsAsFile());       // never deleted
+    // the next start knows the file is bad only by reading it again: it is read, found bad, and still left alone
+    auto next = open(folder);
+    CHECK(next->list().size() == 3);
+    CHECK(next->unreadableCount() == 1);
+    CHECK(cut.existsAsFile());
+}
+
+TEST_CASE("what was saved just before the store goes is written", "[library-plugin][index][atomic]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    std::vector<std::string> saved;
+    {
+        LibraryStore store{folder.folder};
+        REQUIRE(pumpUntil([&] { return store.ready(); }));
+        for (int i = 0; i < 25; ++i) {
+            saved.push_back(store.savePattern("e", made(static_cast<uint64_t>(i + 1)), "", 0).id);
+        }
+        store.remove(saved.back());
+        saved.pop_back();
+        store.rename(saved[0], "last word");
+    } // gone at once, with the writes still queued
+    auto store = open(folder);
+    std::sort(saved.begin(), saved.end());
+    CHECK(ids(*store) == saved);
+    CHECK(store->info(saved[0])->name == "last word");
+    CHECK(store->parsedCount() == 0); // the index was written, too
+}
+
+TEST_CASE("a library of a thousand entries starts from the index without reading the files", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    folder.folder.createDirectory();
+    const auto pattern = made(3);
+    std::vector<LibraryIndexRecord> records;
+    for (int i = 0; i < 1000; ++i) {
+        const std::string id = "e" + std::to_string(100000 + i);
+        const auto entry = makePatternEntry(id, "entry " + std::to_string(i), pattern, "", 0, 1000 + i);
+        const auto file = folder.folder.getChildFile(juce::String(id) + ".json");
+        file.replaceWithText(juce::String::fromUTF8(libraryEntryToString(entry).c_str()));
+        LibraryIndexRecord record;
+        record.info = entry.info;
+        record.fileSize = file.getSize();
+        record.modifiedMs = file.getLastModificationTime().toMilliseconds();
+        records.push_back(record);
+    }
+    indexFileOf(folder).replaceWithText(juce::String::fromUTF8(libraryIndexToString(records).c_str()));
+    const auto start = std::chrono::steady_clock::now();
+    auto store = open(folder);
+    const auto indexed = std::chrono::steady_clock::now() - start;
+    CHECK(store->indexedCount() == 1000);
+    CHECK(store->parsedCount() == 0);
+    // without the index every file is parsed
+    indexFileOf(folder).deleteFile();
+    const auto slowStart = std::chrono::steady_clock::now();
+    auto rebuilt = open(folder);
+    const auto parsed = std::chrono::steady_clock::now() - slowStart;
+    CHECK(rebuilt->parsedCount() == 1000);
+    CHECK(rebuilt->list() == store->list());
+    CHECK(indexed < parsed); // the index is the quicker way
+    CHECK(indexed < std::chrono::seconds(2));
+}
+
+TEST_CASE("a saved pattern stays as it was when the reference set changes", "[library-plugin][reproducible]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto style = *embeddedStyles().find("peak_time");
+    Chord third;
+    third.rootOffset = 3;
+    third.quality = ChordQuality::Major;
+    Chord seventh;
+    seventh.rootOffset = 10;
+    seventh.quality = ChordQuality::Major;
+    const std::vector<WeightedProgression> mine{{{Chord{}, third, seventh}, 100000}};
+    const std::vector<WeightedProgression> changedSet{{{Chord{}, seventh, third}, 100000}};
+    // a seed whose chords come from the set (the profile also draws a single chord): the changed set then differs
+    GenerationRequest request;
+    request.lengthBars = 4;
+    request.referenceSetId = kReferenceSetId;
+    SelectionResult first, changed;
+    for (uint64_t seed = 1; seed <= 80; ++seed) {
+        request.seed = seed;
+        request.personalProgressions = mine;
+        first = generatePattern(style, request);
+        request.personalProgressions = changedSet;
+        changed = generatePattern(style, request);
+        if (first.success && changed.success && !(changed.pattern == first.pattern)) {
+            break;
+        }
+    }
+    REQUIRE(first.success);
+    REQUIRE(changed.success);
+    CHECK_FALSE(changed.pattern == first.pattern); // generating again would not give the saved pattern
+    std::string id;
+    {
+        LibraryStore store{folder.folder};
+        REQUIRE(pumpUntil([&] { return store.ready(); }));
+        id = store.savePattern("with my set", first.pattern, "", 0).id;
+    }
+    auto store = open(folder);
+    std::optional<LibraryLoadResult> loaded;
+    store->load(id, [&](LibraryLoadResult r) { loaded = std::move(r); });
+    REQUIRE(pumpUntil([&] { return loaded.has_value(); }));
+    REQUIRE(loaded->ok());
+    CHECK(loaded->entry->pattern == first.pattern); // the library gives back what was saved, note for note
+    CHECK(loaded->entry->pattern->info.referenceSetId == "default");
+}
+
+TEST_CASE("a removal alone brings the index up to date", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 6);
+    {
+        auto store = open(folder);
+        REQUIRE(store->remove(saved[2]));
+    }
+    const auto loaded = loadLibraryIndex(indexFileOf(folder).loadFileAsString().toStdString());
+    REQUIRE(loaded.ok);
+    CHECK(loaded.records.size() == 5);
+}
+
+TEST_CASE("an entry gone from the folder makes the next start write the index again", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    const auto saved = fill(folder, 5);
+    folder.folder.getChildFile(juce::String(saved[1]) + ".json").deleteFile();
+    {
+        auto store = open(folder); // nothing new, nothing changed: only a file less
+        CHECK(store->parsedCount() == 0);
+        CHECK(store->indexedCount() == 4);
+    }
+    const auto loaded = loadLibraryIndex(indexFileOf(folder).loadFileAsString().toStdString());
+    REQUIRE(loaded.ok);
+    CHECK(loaded.records.size() == 4);
+}
+
+TEST_CASE("an index with a bad record is written again without it", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    fill(folder, 4);
+    nlohmann::json document = nlohmann::json::parse(indexFileOf(folder).loadFileAsString().toStdString());
+    document["entries"].push_back(5); // not a record
+    indexFileOf(folder).replaceWithText(juce::String::fromUTF8(document.dump().c_str()));
+    {
+        auto store = open(folder);
+        CHECK(store->indexedCount() == 4);
+        CHECK(store->parsedCount() == 0);
+    }
+    const auto loaded = loadLibraryIndex(indexFileOf(folder).loadFileAsString().toStdString());
+    REQUIRE(loaded.ok);
+    CHECK(loaded.skipped == 0);
+    CHECK(loaded.records.size() == 4);
+}
+
+TEST_CASE("a store without a folder writes no file anywhere", "[library-plugin][index]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto stray = juce::File::getCurrentWorkingDirectory().getChildFile(LibraryStore::kIndexFileName);
+    REQUIRE_FALSE(stray.exists());
+    {
+        LibraryStore store{juce::File()};
+        const auto id = store.savePattern("x", made(1), "", 0).id;
+        store.rename(id, "y");
+        store.remove(id);
+        store.waitForIdle();
+    }
+    CHECK_FALSE(stray.exists());
 }
