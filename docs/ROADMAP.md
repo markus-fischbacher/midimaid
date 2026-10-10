@@ -205,7 +205,7 @@ eigener Referenzen tauchen typische eigene Progressionen auf, ohne dass eine Ref
 Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set reproduzierbar.
 
 ## Phase 6 – Feinschliff, Vorlagen, v1.0-Abschluss
-- [ ] UI-Polish, Skalierung, HiDPI, Theme
+- [ ] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen steht (D-190, H47); Theme und stufenloses Ziehen fehlen
 - [x] Performance-Messung gegen SPEC §11
 - [ ] Instrument-Presets pro Rolle (Live und Logic, nur eigene Instrumente, SPEC §12)
 - [ ] DAW-Vorlagen: Live-Set mit Gruppenspuren, Logic-Patches (SPEC §8.6)

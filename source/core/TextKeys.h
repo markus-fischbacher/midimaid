@@ -62,6 +62,7 @@ namespace mm::core::text {
     X(kLabelHistory, "label.history")                                                                                  \
     X(kLabelHistoryNone, "label.historyNone")                                                                          \
     X(kOctaveItem, "octave.item")                                                                                      \
+    X(kZoomItem, "zoom.item")                                                                                          \
     X(kStatusGenerating, "status.generating")                                                                          \
     X(kStatusDone, "status.done")                                                                                      \
     X(kButtonCancelGeneration, "button.cancelGeneration")                                                              \

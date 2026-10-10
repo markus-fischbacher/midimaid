@@ -66,6 +66,7 @@
   "button.historyBack": "◀",
   "button.historyForward": "▶",
   "octave.item": "Oktave {value}",
+  "zoom.item": "Größe {value} %",
   "status.generating": "Erzeuge …",
   "status.done": "Fertig: spielt ab dem nächsten Takt",
   "button.cancelGeneration": "Abbrechen",

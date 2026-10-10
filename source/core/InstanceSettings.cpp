@@ -1,6 +1,7 @@
 #include "core/InstanceSettings.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace mm::core {
 
@@ -84,6 +85,16 @@ std::optional<uint64_t> parseSeed(std::string_view text) {
 
 int clampOctave(int octave) {
     return std::clamp(octave, -2, 2);
+}
+
+int clampUiScale(int percent) {
+    int best = kUiScaleSteps[0];
+    for (const int step : kUiScaleSteps) {
+        if (std::abs(step - percent) < std::abs(best - percent)) {
+            best = step;
+        }
+    }
+    return best;
 }
 
 int clampOutputVoice(int voice) {

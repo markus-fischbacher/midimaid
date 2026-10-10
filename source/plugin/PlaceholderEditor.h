@@ -36,6 +36,7 @@ private:
     void updateStatus();
     /// Switches between the voice UI and the placeholder layout (size and visible controls).
     void applyLayout(bool voiceLayout);
+    void applyScale();
     void updateVoiceView();
     /// The hub UI: fields, slot strip, rows of the playing slot, info line.
     void updateFullView();
@@ -110,6 +111,7 @@ private:
     juce::TextButton openHubButton_;
     juce::ToggleButton muteButton_;
     juce::ComboBox octaveBox_;
+    juce::ComboBox zoomBox_; // the size of the window (SPEC 8.1), both layouts
     RollView rollView_;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;
     int muteVoice_ = 0; // the voice the mute button is bound to

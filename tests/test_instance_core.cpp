@@ -283,3 +283,21 @@ TEST_CASE("an unknown key or scale in the settings becomes auto", "[instance-cor
     settings.seed = 7;
     CHECK(sanitize(settings).seed == 7);
 }
+
+TEST_CASE("the size of the window snaps to the nearest step of 75 to 200 percent", "[instance-core][scale]") {
+    for (const int step : mm::core::kUiScaleSteps) {
+        CHECK(mm::core::clampUiScale(step) == step);
+    }
+    CHECK(mm::core::clampUiScale(0) == 75);
+    CHECK(mm::core::clampUiScale(-40) == 75);
+    CHECK(mm::core::clampUiScale(87) == 75);
+    CHECK(mm::core::clampUiScale(88) == 100);
+    CHECK(mm::core::clampUiScale(130) == 125);
+    CHECK(mm::core::clampUiScale(140) == 150);
+    CHECK(mm::core::clampUiScale(9999) == 200);
+    CHECK(mm::core::kDefaultUiScale == 100);
+    CHECK(std::size(mm::core::kUiScaleSteps) == 6);
+    CHECK(mm::core::kUiScaleSteps[0] == 75);
+    CHECK(mm::core::kUiScaleSteps[std::size(mm::core::kUiScaleSteps) - 1] == 200);
+}
+

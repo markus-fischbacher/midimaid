@@ -204,6 +204,10 @@ public:
     mm::core::SlotBank slotsSnapshot() const;
     /// Role, output mode and output voice (SPEC 6.5, 9.1). The voice also selects the mute parameter that applies.
     mm::core::InstanceSettings instanceSettings() const;
+    /// The size of the editor of this instance in percent (SPEC 8.1, one of `kUiScaleSteps`), kept in the state. Message
+    /// thread. It is not part of `InstanceSettings`: it concerns the window only, not the group.
+    int uiScalePct() const { return uiScalePct_.load(); }
+    void setUiScalePct(int percent) { uiScalePct_.store(mm::core::clampUiScale(percent)); }
     void setInstanceSettings(const mm::core::InstanceSettings& settings);
     /// Message thread: generates a pattern in the background for the slot that is selected now (SPEC 3.1, D-140).
     /// The result lands in that slot and plays at the next bar line; during an offline bounce it waits until the
@@ -390,6 +394,7 @@ private:
     std::optional<ParkedResult> parked_; // a result that arrived during an offline render (message thread)
     class ParkTimer;
     std::unique_ptr<ParkTimer> parkTimer_;
+    std::atomic<int> uiScalePct_{mm::core::kDefaultUiScale}; // the host may set the state from any thread
     bool startKeyPending_ = true;              // message thread
     std::unique_ptr<ParkTimer> startKeyTimer_; // message thread
     mm::engine::PatternPlayer player_;

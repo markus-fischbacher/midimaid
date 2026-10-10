@@ -35,6 +35,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addAndMakeVisible(*dragHandle_);
 
     const auto settings = processor_.instanceSettings();
+    roleBox_.setComponentID("role");
     roleBox_.addItem(tr(keys::kRoleSolo), 1);
     roleBox_.addItem(tr(keys::kRoleHub), 2);
     roleBox_.addItem(tr(keys::kRoleVoice), 3);
@@ -411,6 +412,17 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(octaveBox_);
 
+    zoomBox_.setComponentID("zoom");
+    for (const int step : mm::core::kUiScaleSteps) {
+        zoomBox_.addItem(tr(keys::kZoomItem, {{"value", std::to_string(step)}}), step);
+    }
+    zoomBox_.setSelectedId(processor_.uiScalePct(), juce::dontSendNotification);
+    zoomBox_.onChange = [this] {
+        processor_.setUiScalePct(zoomBox_.getSelectedId());
+        applyScale();
+    };
+    addAndMakeVisible(zoomBox_);
+
     rollView_.setComponentID("roll");
     addChildComponent(rollView_);
 
@@ -637,6 +649,11 @@ void PlaceholderEditor::updateStatus() {
     }
 }
 
+void PlaceholderEditor::applyScale() {
+    // The layout keeps its logical size; the window grows or shrinks with it, so the aspect ratio stays (SPEC 8.1).
+    setScaleFactor(static_cast<float>(processor_.uiScalePct()) / 100.0f);
+}
+
 void PlaceholderEditor::applyLayout(bool voiceLayout) {
     voiceLayout_ = voiceLayout;
     styleBox_.setVisible(!voiceLayout);
@@ -660,6 +677,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     }
     // The voice UI is compact (SPEC 8.1); the hub UI has the size of the standard window (SPEC 8.1).
     setSize(voiceLayout ? 600 : 1000, voiceLayout ? 320 : 720);
+    applyScale();
     resized();
 }
 
@@ -985,10 +1003,17 @@ void PlaceholderEditor::paint(juce::Graphics& g) {
 
 void PlaceholderEditor::resized() {
     auto area = getLocalBounds();
-    if (voiceLayout_) {
-        dragHandle_->setBounds(area.removeFromBottom(56).reduced(16));
+    if (voiceLayout_) { // the compact window has no room in the top row: the size sits next to the drag handle
+        auto bottom = area.removeFromBottom(56).reduced(16, 6);
+        zoomBox_.setBounds(bottom.removeFromRight(120).withSizeKeepingCentre(120, 28)); // as high as the boxes above
+        bottom.removeFromRight(8);
+        dragHandle_->setBounds(bottom);
     }
     auto roles = area.removeFromTop(48).reduced(16, 10);
+    if (!voiceLayout_) {
+        zoomBox_.setBounds(roles.removeFromRight(110));
+        roles.removeFromRight(8);
+    }
     if (!voiceLayout_) { // the voice UI is compact: the settings belong to the hub
         settingsButton_.setBounds(roles.removeFromRight(120));
         roles.removeFromRight(8);

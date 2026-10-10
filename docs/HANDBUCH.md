@@ -35,6 +35,7 @@ Eine neue Instanz ist **still**, bis du etwas erzeugt hast.
 | **Energie, Kreativität** | Dichte und Abwechslung (Seed und Zufälliger Seed im Experten-Modus) |
 | **Slots 1–16** | 16 Pattern-Plätze je Instanz bzw. Hub; ein Klick wählt den Slot (Wechsel zum nächsten Takt) |
 | **Piano-Roll** je Stimme | Noten ansehen und bearbeiten (Abschnitt 6) |
+| **Größe** | Fenstergröße von 75 bis 200 % (Hub oben rechts, Stimme unten rechts); wird je Instanz im Projekt gespeichert |
 | **Statuszeile** | Was gerade passiert, auch Fehler und Hinweise |
 
 Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehen der Stimme, Hilfe zum Aufnehmen.
