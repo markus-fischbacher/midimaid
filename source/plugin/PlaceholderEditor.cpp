@@ -35,6 +35,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addAndMakeVisible(*dragHandle_);
 
     const auto settings = processor_.instanceSettings();
+    roleBox_.setComponentID("role");
     roleBox_.addItem(tr(keys::kRoleSolo), 1);
     roleBox_.addItem(tr(keys::kRoleHub), 2);
     roleBox_.addItem(tr(keys::kRoleVoice), 3);
@@ -1003,8 +1004,8 @@ void PlaceholderEditor::paint(juce::Graphics& g) {
 void PlaceholderEditor::resized() {
     auto area = getLocalBounds();
     if (voiceLayout_) { // the compact window has no room in the top row: the size sits next to the drag handle
-        auto bottom = area.removeFromBottom(56).reduced(16);
-        zoomBox_.setBounds(bottom.removeFromRight(110).withTrimmedTop(8).withTrimmedBottom(8));
+        auto bottom = area.removeFromBottom(56).reduced(16, 6);
+        zoomBox_.setBounds(bottom.removeFromRight(120).withSizeKeepingCentre(120, 28)); // as high as the boxes above
         bottom.removeFromRight(8);
         dragHandle_->setBounds(bottom);
     }

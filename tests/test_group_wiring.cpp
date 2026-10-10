@@ -946,6 +946,12 @@ TEST_CASE("the size box scales the window and keeps its aspect ratio, in the hub
         box->setSelectedId(75, juce::sendNotificationSync);
         CHECK(editor->getTransform().mat00 == Catch::Approx(0.75f));
 
+        // the box is as high as the other boxes (a thin box shrinks its text, seen in the voice window)
+        auto* role = child<juce::ComboBox>(*editor, "role");
+        REQUIRE(role != nullptr);
+        CHECK(box->getHeight() == role->getHeight());
+        CHECK(box->getWidth() >= 100);
+
         // the box lies inside the window and on no other control
         const auto zoom = box->getBounds();
         CHECK(editor->getLocalBounds().contains(zoom));
