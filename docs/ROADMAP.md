@@ -205,7 +205,7 @@ eigener Referenzen tauchen typische eigene Progressionen auf, ohne dass eine Ref
 Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set reproduzierbar.
 
 ## Phase 6 – Feinschliff, Vorlagen, v1.0-Abschluss
-- [ ] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen steht (D-190, H47); Theme und stufenloses Ziehen fehlen
+- [x] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen (D-190, H47), Theme und Voice-Fenster (D-193, H50); offen bleiben stufenloses Ziehen und die alten Dialoge
 - [x] Performance-Messung gegen SPEC §11
 - [x] Slot-Aktionen: Kopieren, Einfügen, Leeren, Tauschen per Menü und Ziehen (SPEC §3.10, D-191)
 - [x] Playhead in der Piano-Roll, Hub und Voice-Fenster (D-192)

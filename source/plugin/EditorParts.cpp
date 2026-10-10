@@ -8,9 +8,11 @@ namespace mm::plugin {
 
 void DragHandle::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
-    g.setColour(juce::Colour(0xff2c2c33));
-    g.fillRoundedRectangle(bounds, 6.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.7f));
+    g.setColour(juce::Colour(0xff23252d));
+    g.fillRoundedRectangle(bounds, 7.0f);
+    g.setColour(juce::Colour(0xff3a3e4a));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), 7.0f, 1.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.6f));
     const float cx = bounds.getCentreX();
     const float cy = bounds.getCentreY();
     for (int row = -1; row <= 1; ++row) {

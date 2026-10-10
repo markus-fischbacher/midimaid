@@ -32,6 +32,7 @@ juce::String barsText(uint32_t bars) {
 PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     : juce::AudioProcessorEditor(processor), processor_(processor),
       dragHandle_(std::make_unique<DragHandle>(processor.midiExporter())) {
+    setLookAndFeel(&lookAndFeel_);
     addAndMakeVisible(*dragHandle_);
 
     const auto settings = processor_.instanceSettings();
@@ -445,10 +446,13 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         }
         updateStatus();
     };
+    // the main action in the accent colour
+    generateButton_.setColour(juce::TextButton::buttonColourId, juce::Colour(MidiMaidLookAndFeel::kAccent));
+    generateButton_.setColour(juce::TextButton::textColourOffId, juce::Colours::black);
     addAndMakeVisible(generateButton_);
 
     statusLabel_.setComponentID("status");
-    statusLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    statusLabel_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
     statusLabel_.setJustificationType(juce::Justification::centredLeft);
     statusLabel_.setMinimumHorizontalScale(1.0f); // the hub hint is long: wrap instead of squeezing
     addAndMakeVisible(statusLabel_);
@@ -462,6 +466,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 }
 
 PlaceholderEditor::~PlaceholderEditor() {
+    setLookAndFeel(nullptr);
     playheadTicker_.stopTimer();
     stopTimer();
 }
@@ -1068,33 +1073,60 @@ void PlaceholderEditor::timerCallback() {
 }
 
 void PlaceholderEditor::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colour(0xff1b1b1f));
-    g.setColour(juce::Colours::white);
-    g.setFont(juce::FontOptions(24.0f));
-    g.drawText(getAudioProcessor()->getName(), getLocalBounds(), juce::Justification::centred);
+    g.fillAll(juce::Colour(MidiMaidLookAndFeel::kBackground));
+}
+
+void PlaceholderEditor::layoutVoiceWindow() {
+    // One grid for the compact window (SPEC 8.1): 16 px at the sides, 10 px between controls, every control 34 px high
+    // in rows of 52 px; the roll takes what is left.
+    constexpr int kPad = 16;
+    constexpr int kGap = 10;
+    constexpr int kControl = 34;
+    constexpr int kRow = 52;
+    constexpr int kInset = (kRow - kControl) / 2;
+    auto area = getLocalBounds();
+
+    auto footer = area.removeFromBottom(kRow).reduced(kPad, kInset);
+    zoomBox_.setBounds(footer.removeFromRight(120));
+    footer.removeFromRight(kGap);
+    dragHandle_->setBounds(footer);
+
+    auto roles = area.removeFromTop(kRow).reduced(kPad, kInset);
+    takeOverButton_.setBounds(roles.removeFromRight(120));
+    roleBox_.setBounds(roles.removeFromLeft(110));
+    roles.removeFromLeft(kGap);
+    voiceBox_.setBounds(roles.removeFromLeft(110));
+    roles.removeFromLeft(kGap);
+    followBox_.setBounds(roles.removeFromLeft(170));
+    outputBox_.setBounds(followBox_.getBounds()); // never visible together
+
+    auto actions = area.removeFromTop(kRow).reduced(kPad, kInset);
+    generateButton_.setBounds(actions.removeFromRight(130));
+    actions.removeFromRight(kGap);
+    openHubButton_.setBounds(actions.removeFromRight(110));
+    muteButton_.setBounds(actions.removeFromLeft(130));
+    actions.removeFromLeft(kGap);
+    octaveBox_.setBounds(actions.removeFromLeft(110));
+
+    statusLabel_.setBounds(area.removeFromBottom(30).reduced(kPad, 0));
+    rollView_.setBounds(area.reduced(kPad, 2));
 }
 
 void PlaceholderEditor::resized() {
+    if (voiceLayout_) {
+        layoutVoiceWindow();
+        return;
+    }
     auto area = getLocalBounds();
-    if (voiceLayout_) { // the compact window has no room in the top row: the size sits next to the drag handle
-        auto bottom = area.removeFromBottom(56).reduced(16, 6);
-        zoomBox_.setBounds(bottom.removeFromRight(120).withSizeKeepingCentre(120, 28)); // as high as the boxes above
-        bottom.removeFromRight(8);
-        dragHandle_->setBounds(bottom);
-    }
     auto roles = area.removeFromTop(48).reduced(16, 10);
-    if (!voiceLayout_) {
-        zoomBox_.setBounds(roles.removeFromRight(110));
-        roles.removeFromRight(8);
-    }
-    if (!voiceLayout_) { // the voice UI is compact: the settings belong to the hub
-        settingsButton_.setBounds(roles.removeFromRight(120));
-        roles.removeFromRight(8);
-        referencesButton_.setBounds(roles.removeFromRight(110));
-        roles.removeFromRight(8);
-        libraryButton_.setBounds(roles.removeFromRight(110));
-        roles.removeFromRight(8);
-    }
+    zoomBox_.setBounds(roles.removeFromRight(110));
+    roles.removeFromRight(8);
+    settingsButton_.setBounds(roles.removeFromRight(120));
+    roles.removeFromRight(8);
+    referencesButton_.setBounds(roles.removeFromRight(110));
+    roles.removeFromRight(8);
+    libraryButton_.setBounds(roles.removeFromRight(110));
+    roles.removeFromRight(8);
     takeOverButton_.setBounds(roles.removeFromRight(120));
     roles.removeFromRight(8);
     followBox_.setBounds(roles.removeFromRight(150));
@@ -1102,21 +1134,11 @@ void PlaceholderEditor::resized() {
     roles.removeFromRight(8);
     voiceBox_.setBounds(roles.removeFromRight(120));
     roles.removeFromRight(8);
-    roleBox_.setBounds(roles.removeFromLeft(voiceLayout_ ? roles.getWidth() : 150));
+    roleBox_.setBounds(roles.removeFromLeft(150));
 
     auto top = area.removeFromTop(48).reduced(16, 10);
     generateButton_.setBounds(top.removeFromRight(120));
     top.removeFromRight(8);
-    if (voiceLayout_) {
-        openHubButton_.setBounds(top.removeFromRight(110));
-        top.removeFromRight(8);
-        octaveBox_.setBounds(top.removeFromRight(130));
-        top.removeFromRight(8);
-        muteButton_.setBounds(top.removeFromLeft(130));
-        statusLabel_.setBounds(area.removeFromBottom(40).reduced(16, 0));
-        rollView_.setBounds(area.reduced(16, 4));
-        return;
-    }
 
     // Hub UI: the settings of "Generate" in one row, then energy and creativity, the slot strip, the voices.
     if (expert_) {
