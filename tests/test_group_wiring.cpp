@@ -10,6 +10,7 @@
 #include "plugin/ProcessorBase.h"
 
 #include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
@@ -715,6 +716,42 @@ TEST_CASE("the octave is saved, limited, and missing in older states", "[group-w
     CHECK(target.processor.instanceSettings().octave == 2);
 }
 
+TEST_CASE("the size of the window is saved with the instance, snapped to a step, and missing in older states",
+          "[group-wiring][scale]") {
+    Quiet quiet;
+    Instance source("Source");
+    CHECK(source.processor.uiScalePct() == 100);
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("uiScale")); // the standard size leaves the state as it was
+
+    source.processor.setUiScalePct(150);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.processor.uiScalePct() == 150);
+
+    root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    root->setAttribute("uiScale", 900);
+    juce::MemoryBlock far;
+    juce::AudioProcessor::copyXmlToBinary(*root, far);
+    target.processor.setStateInformation(far.getData(), static_cast<int>(far.getSize()));
+    CHECK(target.processor.uiScalePct() == 200);
+    root->setAttribute("uiScale", 130);
+    juce::MemoryBlock between;
+    juce::AudioProcessor::copyXmlToBinary(*root, between);
+    target.processor.setStateInformation(between.getData(), static_cast<int>(between.getSize()));
+    CHECK(target.processor.uiScalePct() == 125);
+    root->removeAttribute("uiScale");
+    juce::MemoryBlock old;
+    juce::AudioProcessor::copyXmlToBinary(*root, old);
+    target.processor.setStateInformation(old.getData(), static_cast<int>(old.getSize()));
+    CHECK(target.processor.uiScalePct() == 100);
+}
+
 TEST_CASE("a voice's Open hub request reaches the hub's window, nobody else's", "[group-wiring]") {
     Quiet quiet;
     Instance hub("Hub");
@@ -882,6 +919,58 @@ TEST_CASE("the mute button is the host parameter of the voice, both ways", "[gro
     mute->setToggleState(true, juce::sendNotificationSync);
     CHECK(voice.processor.parameters().getRawParameterValue("mute_1")->load() == 1.0f);
     CHECK(parameter->getValue() == 0.0f);
+}
+
+TEST_CASE("the size box scales the window and keeps its aspect ratio, in the hub and in a voice",
+          "[group-wiring][editor][scale]") {
+    Quiet quiet;
+    for (const bool voice : {false, true}) {
+        Instance instance("Window");
+        if (voice) {
+            instance.setRole(InstanceRole::Voice);
+        }
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        auto* box = child<juce::ComboBox>(*editor, "zoom");
+        REQUIRE(box != nullptr);
+        CHECK(box->isVisible());
+        CHECK(box->getSelectedId() == 100);
+        const int width = editor->getWidth();
+        const int height = editor->getHeight();
+        CHECK(editor->getTransform().isIdentity());
+
+        box->setSelectedId(150, juce::sendNotificationSync);
+        CHECK(instance.processor.uiScalePct() == 150);
+        CHECK(editor->getTransform().mat00 == Catch::Approx(1.5f));
+        CHECK(editor->getWidth() == width); // the layout keeps its size, the window grows with the transform
+        CHECK(editor->getHeight() == height);
+        box->setSelectedId(75, juce::sendNotificationSync);
+        CHECK(editor->getTransform().mat00 == Catch::Approx(0.75f));
+
+        // the box lies inside the window and on no other control
+        const auto zoom = box->getBounds();
+        CHECK(editor->getLocalBounds().contains(zoom));
+        for (auto* other : editor->getChildren()) {
+            if (other != box && other->isVisible() && other->getWidth() > 0) {
+                INFO((voice ? "voice: " : "hub: ") << other->getComponentID().toStdString());
+                if (other->getY() < 60 || other->getBottom() > editor->getHeight() - 60) {
+                    CHECK_FALSE(zoom.intersects(other->getBounds()));
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("a window opened after the state was loaded starts at the saved size", "[group-wiring][editor][scale]") {
+    Quiet quiet;
+    Instance source("Source");
+    source.processor.setUiScalePct(200);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    std::unique_ptr<juce::AudioProcessorEditor> editor(target.processor.createEditor());
+    CHECK(child<juce::ComboBox>(*editor, "zoom")->getSelectedId() == 200);
+    CHECK(editor->getTransform().mat00 == Catch::Approx(2.0f));
 }
 
 TEST_CASE("the octave box sets the octave of the instance and shows it", "[group-wiring][editor]") {

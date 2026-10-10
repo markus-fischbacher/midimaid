@@ -68,5 +68,10 @@ int clampOutputVoice(int voice);
 std::optional<uint64_t> parseSeed(std::string_view text);
 /// Clamps to -2 to +2.
 int clampOctave(int octave);
+/// The sizes of the editor in percent of its standard size (SPEC 8.1: 75 to 200 %, the aspect ratio stays).
+inline constexpr int kUiScaleSteps[] = {75, 100, 125, 150, 175, 200};
+inline constexpr int kDefaultUiScale = 100;
+/// The step nearest to `percent` (a value out of range gives the first or last step).
+int clampUiScale(int percent);
 
 } // namespace mm::core

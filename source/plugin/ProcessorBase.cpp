@@ -1498,6 +1498,9 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         root.setAttribute("genSeed", settings_.generation.seed
                                          ? juce::String(std::to_string(*settings_.generation.seed))
                                          : juce::String("random"));
+        if (uiScalePct() != mm::core::kDefaultUiScale) { // only when it differs: states of the standard size stay as they were
+            root.setAttribute("uiScale", uiScalePct());
+        }
         root.createNewChildElement("Slots")->addTextElement(juce::String(mm::core::slotBankToString(slots_)));
     }
     copyXmlToBinary(root, destData);
@@ -1551,6 +1554,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     }
     settings.generation.seed = mm::core::parseSeed(root->getStringAttribute("genSeed").toStdString());
     settings.generation.prompt = root->getStringAttribute("genPrompt").toStdString();
+    setUiScalePct(root->getIntAttribute("uiScale", mm::core::kDefaultUiScale));
 
     mm::core::SlotBank bank;
     std::vector<std::string> problems;
