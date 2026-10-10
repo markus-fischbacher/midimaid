@@ -1,5 +1,7 @@
 #include "plugin/ProcessorBase.h"
 
+#include "core/Analysis.h"
+#include "core/DrumReference.h"
 #include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
@@ -524,7 +526,12 @@ void ProcessorBase::onImported(const ImportRequest& request, ImportOutcome outco
         return;
     }
     if (request.apply) {
-        applyImport(request, outcome.plan);
+        // A drum clip is no voice: it becomes the drum reference (SPEC 3.14).
+        if (mm::core::suggestRole(outcome.plan.notes) == mm::core::TrackRole::Drums) {
+            applyDrumReference(request, outcome.plan);
+        } else {
+            applyImport(request, outcome.plan);
+        }
         return;
     }
     PendingImport pending;
@@ -534,6 +541,61 @@ void ProcessorBase::onImported(const ImportRequest& request, ImportOutcome outco
     pending.plan = std::move(outcome.plan);
     generationStatus_ = pending.plan.truncated ? GenerationStatus::ImportReadCut : GenerationStatus::ImportRead;
     pendingImport_ = std::move(pending);
+}
+
+void ProcessorBase::applyDrumReference(const ImportRequest& request, const mm::core::ImportPlan& plan) {
+    mm::core::GenerationSettings settings;
+    bool isVoice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+        settings = settings_.generation;
+    }
+    if (isVoice) {
+        generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
+        return;
+    }
+    const auto mapping = mm::core::drumMappingFromText(globalSettings().get().drumMap);
+    const auto reference = mm::core::deriveRhythmReference(plan.notes, plan.lengthBars, mapping);
+    const auto* style = styles_.findOrFallback(settings.styleId);
+    if (!reference || style == nullptr) {
+        generationStatus_ = GenerationStatus::DrumRefNoKickHat;
+        return;
+    }
+    drumReference_ = reference;
+    const auto index = static_cast<size_t>(request.slot);
+    const bool applied = editNotes(index, [&](mm::core::Pattern& pattern) {
+        mm::core::applyRhythmReference(pattern, *reference, *style);
+        pattern.info.source = "edit";
+        return size_t{1};
+    });
+    generationStatus_ = applied ? GenerationStatus::DrumRefApplied : GenerationStatus::DrumRefStored;
+}
+
+bool ProcessorBase::removeDrumReference(std::optional<size_t> slotChoice) {
+    mm::core::GenerationSettings settings;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (settings_.role == mm::core::InstanceRole::Voice) {
+            return false;
+        }
+        settings = settings_.generation;
+    }
+    const auto* style = styles_.findOrFallback(settings.styleId);
+    const size_t index =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    drumReference_.reset();
+    editNotes(index, [&](mm::core::Pattern& pattern) {
+        if (!pattern.rhythmRef || style == nullptr) {
+            return size_t{0};
+        }
+        mm::core::removeRhythmReference(pattern, *style);
+        pattern.info.source = "edit";
+        return size_t{1};
+    });
+    generationStatus_ = GenerationStatus::DrumRefRemoved;
+    return true;
 }
 
 void ProcessorBase::applyImport(const ImportRequest& request, const mm::core::ImportPlan& plan) {
@@ -861,6 +923,12 @@ void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern p
             }
             kept = true;
         }
+        // New and generated patterns take the drum reference that was dropped last (SPEC 3.14).
+        if (drumReference_ && !pattern.rhythmRef) {
+            if (const auto* style = styles_.findOrFallback(pattern.styleId)) {
+                mm::core::applyRhythmReference(pattern, *drumReference_, *style);
+            }
+        }
         std::optional<mm::core::Pattern> before = slot != nullptr ? slot->pattern : std::nullopt;
         const size_t cursor = slot != nullptr ? slot->cursor : 0;
         if (bank.setResult(index, std::move(pattern))) {
@@ -1092,6 +1160,7 @@ ProcessorBase::SlotInfo ProcessorBase::playingSlotInfo() const {
     info.lengthBars = pattern.lengthBars;
     info.seed = pattern.info.seed;
     info.winnerSeed = pattern.info.winnerSeed;
+    info.drumReference = pattern.rhythmRef.has_value();
     info.historySize = slot->history.size();
     info.historyIndex = slot->cursor;
     return info;

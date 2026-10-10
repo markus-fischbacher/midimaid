@@ -1,3 +1,4 @@
+#include "NoUserSettings.h"
 #include "core/MidiFile.h"
 #include "plugin/ProcessorBase.h"
 
@@ -488,4 +489,182 @@ TEST_CASE("after the lock is released an imported voice can be varied", "[midi-i
     REQUIRE(processor.vary(100, 0, 7));
     CHECK(processor.lastVariationChanges() > 0);
     CHECK_FALSE(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes == imported.notes);
+}
+
+namespace {
+
+/// `bars` bars of drums on channel 10: kick on the "and" of every beat, closed hats on every 16th (the odd ones late
+/// by `late` ticks), plus whatever `extra` adds.
+std::vector<uint8_t> drumBytes(uint32_t bars, int late = 0, uint8_t kick = 36, uint8_t hat = 42) {
+    std::vector<PatternNote> list;
+    for (uint32_t bar = 0; bar < bars; ++bar) {
+        for (uint32_t step = 0; step < 16; ++step) {
+            const uint32_t tick = bar * kTicksPerBar + step * 240;
+            if (step % 4 == 2) {
+                list.push_back({tick, 120, 10, kick, 110});
+            }
+            list.push_back({tick + (step % 2 == 1 ? static_cast<uint32_t>(late) : 0), 60, 10, hat, 80});
+        }
+    }
+    std::stable_sort(list.begin(), list.end(),
+                     [](const PatternNote& a, const PatternNote& b) { return a.startTick < b.startTick; });
+    return writeMidiFile(PatternView{list.data(), list.size(), bars * kTicksPerBar}, {});
+}
+
+bool drumDone(ProcessorBase& processor) {
+    const auto status = processor.generationStatus();
+    return status == GenerationStatus::DrumRefApplied || status == GenerationStatus::DrumRefStored ||
+           status == GenerationStatus::DrumRefNoKickHat || status == GenerationStatus::UseHub;
+}
+
+} // namespace
+
+TEST_CASE("a drum clip dropped on an empty slot is kept for the next generation", "[midi-import-plugin][drum-reference]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    TempMidi midi(drumBytes(2, 40));
+    REQUIRE(processor.importVoice(midi.file, 0));
+    REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::DrumRefStored);
+    REQUIRE(processor.drumReference().has_value());
+    CHECK(processor.drumReference()->kickSteps.count() == 8);
+    CHECK(processor.drumReference()->bars == 2);
+    CHECK_FALSE(processor.slotsSnapshot().slot(0)->pattern.has_value()); // no voice was imported
+
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+    const auto pattern = *processor.slotsSnapshot().slot(0)->pattern;
+    CHECK(pattern.rhythmRef == processor.drumReference());
+    CHECK(pattern.kickGridId == "custom");
+    for (const auto& track : pattern.voices) {
+        CHECK(track.groove.templateId == "drum_reference");
+    }
+    // another slot takes it as well (SPEC 3.14: new slots take the one used last)
+    processor.selectSlot(2);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.slotsSnapshot().slot(1)->pattern.has_value(); }));
+    CHECK(processor.slotsSnapshot().slot(1)->pattern->rhythmRef == processor.drumReference());
+}
+
+TEST_CASE("a drum clip dropped on a slot with a pattern becomes its reference, undoable", "[midi-import-plugin][drum-reference]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+    const auto before = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE_FALSE(before.rhythmRef.has_value());
+
+    TempMidi midi(drumBytes(1));
+    REQUIRE(processor.importVoice(midi.file, 0));
+    REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::DrumRefApplied);
+    const auto after = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE(after.rhythmRef.has_value());
+    CHECK(after.rhythmRef->bars == 1);
+    CHECK(after.kickGridId == "custom");
+    CHECK(after.lengthBars == before.lengthBars);
+    CHECK(after.voices[0].lock == before.voices[0].lock);
+    CHECK(processor.playingSlotInfo().drumReference);
+
+    REQUIRE(processor.undo());
+    CHECK_FALSE(processor.slotsSnapshot().slot(0)->pattern->rhythmRef.has_value());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->kickGridId == before.kickGridId);
+}
+
+TEST_CASE("a drum clip without kick and hat gives nothing", "[midi-import-plugin][drum-reference]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    std::vector<PatternNote> list = {{0, 120, 10, 38, 100}, {960, 120, 10, 39, 100}};
+    const auto bytes = writeMidiFile(PatternView{list.data(), list.size(), kTicksPerBar}, {});
+    TempMidi midi(bytes);
+    REQUIRE(processor.importVoice(midi.file, 0));
+    REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::DrumRefNoKickHat);
+    CHECK_FALSE(processor.drumReference().has_value());
+}
+
+TEST_CASE("a voice instance does not take a drum clip", "[midi-import-plugin][drum-reference]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Voice");
+    auto settings = processor.instanceSettings();
+    settings.role = InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    TempMidi midi(drumBytes(1));
+    REQUIRE(processor.importVoice(midi.file));
+    REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::UseHub);
+    CHECK_FALSE(processor.drumReference().has_value());
+    CHECK_FALSE(processor.removeDrumReference());
+}
+
+TEST_CASE("the drum reference can be taken out and does not come back", "[midi-import-plugin][drum-reference]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+    TempMidi midi(drumBytes(1));
+    REQUIRE(processor.importVoice(midi.file, 0));
+    REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+    REQUIRE(processor.slotsSnapshot().slot(0)->pattern->rhythmRef.has_value());
+
+    REQUIRE(processor.removeDrumReference());
+    CHECK(processor.generationStatus() == GenerationStatus::DrumRefRemoved);
+    CHECK_FALSE(processor.drumReference().has_value());
+    const auto pattern = *processor.slotsSnapshot().slot(0)->pattern;
+    CHECK_FALSE(pattern.rhythmRef.has_value());
+    for (const auto& track : pattern.voices) {
+        CHECK(track.groove.templateId != "drum_reference");
+    }
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+    CHECK_FALSE(processor.slotsSnapshot().slot(0)->pattern->rhythmRef.has_value());
+}
+
+TEST_CASE("the editor shows the reference and its button takes it out", "[midi-import-plugin][drum-reference][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* button = dynamic_cast<juce::TextButton*>(findById(*editor, "drums_remove"));
+    REQUIRE(button != nullptr);
+    pumpFor(300);
+    CHECK_FALSE(button->isEnabled());
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+    TempMidi midi(drumBytes(1));
+    auto* row = dynamic_cast<juce::FileDragAndDropTarget*>(findById(*editor, "row_1"));
+    REQUIRE(row != nullptr);
+    row->filesDropped(juce::StringArray{midi.file.getFullPathName()}, 0, 0);
+    REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+    auto* label = dynamic_cast<juce::Label*>(findById(*editor, "status"));
+    REQUIRE(label != nullptr);
+    REQUIRE(pumpUntil([&] { return label->getText().contains("Drum-Referenz übernommen"); }));
+    CHECK(label->getText().contains("4 Kicks"));
+    CHECK(label->getText().contains("16 Hi-Hats"));
+    REQUIRE(pumpUntil([&] { return button->isEnabled(); }));
+    button->onClick();
+    CHECK_FALSE(processor.slotsSnapshot().slot(0)->pattern->rhythmRef.has_value());
+    REQUIRE(pumpUntil([&] { return label->getText().contains("entfernt"); }));
+}
+
+TEST_CASE("the drum mapping of the settings tells a rack's notes", "[midi-import-plugin][drum-reference]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::TemporaryFile file;
+    GlobalSettingsStore store(file.getFile());
+    REQUIRE(pumpUntil([&] { return store.ready(); }));
+    overrideGlobalSettings(&store);
+    struct Restore {
+        ~Restore() { overrideGlobalSettings(&mmtest::disabledSettings()); }
+    } restore;
+
+    InstrumentProcessor processor("Test");
+    TempMidi midi(drumBytes(1, 0, 60, 61)); // a kick on 60 and a hat on 61: not General MIDI
+    REQUIRE(processor.importVoice(midi.file, 0));
+    REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::DrumRefNoKickHat);
+
+    store.update([](mm::core::GlobalSettings& settings) { settings.drumMap = "60=kick, 61=closed_hat"; });
+    REQUIRE(processor.importVoice(midi.file, 0));
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::DrumRefStored; }));
+    CHECK(processor.drumReference()->kickSteps.count() == 4);
+    CHECK(processor.drumReference()->hatSteps.count() == 16);
 }

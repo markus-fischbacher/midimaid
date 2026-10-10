@@ -1,5 +1,7 @@
 #include "core/GlobalSettings.h"
 
+#include "core/DrumReference.h"
+
 #include <algorithm>
 #include <cctype>
 #include <nlohmann/json.hpp>
@@ -149,6 +151,7 @@ GlobalSettings sanitize(GlobalSettings settings) {
     if (!isValidDivision(settings.grid.division)) {
         settings.grid.division = defaults.grid.division;
     }
+    settings.drumMap = drumMappingToText(drumMappingFromText(settings.drumMap)); // only what can be read stays
     settings.ai = sanitize(std::move(settings.ai));
     return settings;
 }
@@ -192,6 +195,9 @@ GlobalSettings parseGlobalSettings(std::string_view text) {
     }
     boolean("gridTriplet", settings.grid.triplet);
     boolean("snapChromatic", settings.snapChromatic);
+    if (const auto it = root.find("drumMap"); it != root.end() && it->is_string()) {
+        settings.drumMap = it->get<std::string>();
+    }
     if (const auto it = root.find("ai"); it != root.end()) {
         settings.ai = parseAi(*it);
     }
@@ -209,6 +215,7 @@ std::string toJson(const GlobalSettings& input) {
     root["gridDivision"] = settings.grid.division;
     root["gridTriplet"] = settings.grid.triplet;
     root["snapChromatic"] = settings.snapChromatic;
+    root["drumMap"] = settings.drumMap;
     root["ai"] = aiToJson(settings.ai);
     return root.dump(2) + "\n";
 }

@@ -53,7 +53,11 @@ enum class GenerationStatus {
     ImportNoNotes,       ///< the file has no notes
     ImportUnreadable,    ///< the file is no usable MIDI file
     ImportApplied,       ///< the voice was imported; the other voices were not generated (another slot is selected)
-    DoneImportCut        ///< the other voices were generated around the imported one; the clip was cut to 16 bars
+    DoneImportCut,       ///< the other voices were generated around the imported one; the clip was cut to 16 bars
+    DrumRefApplied,      ///< a dropped drum clip became the drum reference of the slot (SPEC 3.14, D-179)
+    DrumRefStored,       ///< the same, but the slot is empty: the reference is used for the next generation
+    DrumRefNoKickHat,    ///< the drum clip has neither kick nor hat (by the mapping of the settings)
+    DrumRefRemoved       ///< the drum reference was taken out
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -127,6 +131,7 @@ public:
         uint32_t lengthBars = 0;
         uint64_t seed = 0;
         uint64_t winnerSeed = 0;
+        bool drumReference = false; ///< the pattern has a drum reference (SPEC 3.14)
         size_t historySize = 0;  ///< results kept for the slot (SPEC 3.6)
         size_t historyIndex = 0; ///< 0-based position of the entry the current pattern shows or is based on
         bool operator==(const SlotInfo&) const = default;
@@ -263,6 +268,11 @@ public:
     /// and the settings come from the analysis, the other voices are generated around it. One undo step for the import,
     /// one for the generation. A voice instance gets `UseHub`.
     bool importVoice(const juce::File& file, std::optional<size_t> voice = std::nullopt);
+    /// The drum reference that new and generated patterns take (SPEC 3.14: new slots take the one used last).
+    const std::optional<mm::core::RhythmReference>& drumReference() const { return drumReference_; }
+    /// Message thread: takes the drum reference out of the slot (selected one, or `slot`, 0-based) and forgets it, so
+    /// that the next generation does not bring it back. False for a voice instance.
+    bool removeDrumReference(std::optional<size_t> slot = std::nullopt);
     /// Message thread: the musician corrects the key of a slot with imported (locked) voices: the root and the scale
     /// are set, the progression is derived again from the locked voices. False for an unknown scale, a slot without
     /// locked voice, a voice instance.
@@ -306,6 +316,7 @@ private:
     void onImported(const ImportRequest& request, ImportOutcome outcome);
     bool startImport(const juce::File& file, std::optional<size_t> voice, bool apply);
     void applyImport(const ImportRequest& request, const mm::core::ImportPlan& plan);
+    void applyDrumReference(const ImportRequest& request, const mm::core::ImportPlan& plan);
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
     void updateSlotMode(); // message thread
@@ -381,6 +392,7 @@ private:
     int channelMember_ = mm::engine::GroupChannel::kNone; // message thread
     std::shared_ptr<GroupLink> groupLink_;
     std::optional<PendingImport> pendingImport_;
+    std::optional<mm::core::RhythmReference> drumReference_; ///< the last one dropped (message thread)
     bool importCut_ = false; ///< the import that started the running generation was cut to 16 bars
     MidiImportService importer_;  // before the generator: both are destroyed before the members they call into
     GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance

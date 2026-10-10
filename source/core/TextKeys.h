@@ -51,6 +51,11 @@ namespace mm::core::text {
     X(kButtonDuplicate, "button.duplicate")                                                                            \
     X(kButtonUndo, "button.undo")                                                                                      \
     X(kButtonRedo, "button.redo")                                                                                      \
+    X(kButtonDrumsRemove, "button.drumsRemove")                                                                        \
+    X(kStatusDrumApplied, "status.drumApplied")                                                                        \
+    X(kStatusDrumStored, "status.drumStored")                                                                          \
+    X(kStatusDrumNoKickHat, "status.drumNoKickHat")                                                                    \
+    X(kStatusDrumRemoved, "status.drumRemoved")                                                                        \
     X(kButtonHistoryBack, "button.historyBack")                                                                        \
     X(kButtonHistoryForward, "button.historyForward")                                                                  \
     X(kLabelStrength, "label.strength")                                                                                \
@@ -130,6 +135,8 @@ namespace mm::core::text {
     X(kConsentNone, "settings.consentNone")                                                                            \
     X(kToggleLogPrompts, "settings.logPrompts")                                                                        \
     X(kLogHint, "settings.logHint")                                                                                    \
+    X(kLabelDrumMap, "settings.drumMap")                                                                               \
+    X(kDrumMapHint, "settings.drumMapHint")                                                                            \
     X(kButtonClose, "button.close")                                                                                    \
     X(kStatusNoResult, "status.noResult")                                                                              \
     X(kStatusUseHub, "status.useHub")                                                                                  \

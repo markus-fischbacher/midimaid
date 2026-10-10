@@ -195,6 +195,13 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         updateStatus();
     };
     addChildComponent(redoButton_);
+    drumsButton_.setComponentID("drums_remove");
+    drumsButton_.setButtonText(tr(keys::kButtonDrumsRemove));
+    drumsButton_.onClick = [this] {
+        processor_.removeDrumReference(static_cast<size_t>(std::max(shownInfo_.slot, 1) - 1));
+        updateStatus();
+    };
+    addChildComponent(drumsButton_);
     historyBackButton_.setComponentID("history_back");
     historyBackButton_.setButtonText(tr(keys::kButtonHistoryBack));
     historyBackButton_.onClick = [this] {
@@ -494,6 +501,23 @@ void PlaceholderEditor::updateStatus() {
                              juce::dontSendNotification);
         break;
     }
+    case GenerationStatus::DrumRefApplied:
+    case GenerationStatus::DrumRefStored: {
+        const auto& ref = processor_.drumReference();
+        statusLabel_.setText(processor_.generationStatus() == GenerationStatus::DrumRefStored
+                                 ? tr(keys::kStatusDrumStored)
+                                 : tr(keys::kStatusDrumApplied,
+                                      {{"n", ref ? std::to_string(ref->kickSteps.count()) : "0"},
+                                       {"m", ref ? std::to_string(ref->hatSteps.count()) : "0"}}),
+                             juce::dontSendNotification);
+        break;
+    }
+    case GenerationStatus::DrumRefNoKickHat:
+        statusLabel_.setText(tr(keys::kStatusDrumNoKickHat), juce::dontSendNotification);
+        break;
+    case GenerationStatus::DrumRefRemoved:
+        statusLabel_.setText(tr(keys::kStatusDrumRemoved), juce::dontSendNotification);
+        break;
     case GenerationStatus::ImportApplied:
         statusLabel_.setText(tr(keys::kStatusImportApplied), juce::dontSendNotification);
         break;
@@ -597,7 +621,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
              &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_,
-             &expertButton_, &undoButton_, &redoButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
+             &expertButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -735,6 +759,7 @@ void PlaceholderEditor::varyVoice(std::optional<size_t> voice, std::optional<siz
 void PlaceholderEditor::updateActionButtons() {
     undoButton_.setEnabled(processor_.canUndo());
     redoButton_.setEnabled(processor_.canRedo());
+    drumsButton_.setEnabled(shownInfo_.drumReference || processor_.drumReference().has_value());
     const auto& info = shownInfo_;
     historyBackButton_.setEnabled(info.historyIndex > 0 && info.historySize > 0);
     historyForwardButton_.setEnabled(info.historyIndex + 1 < info.historySize);
@@ -1015,7 +1040,9 @@ void PlaceholderEditor::resized() {
     undoButton_.setBounds(historyBar.removeFromLeft(110));
     historyBar.removeFromLeft(8);
     redoButton_.setBounds(historyBar.removeFromLeft(110));
-    historyBar.removeFromLeft(32);
+    historyBar.removeFromLeft(8);
+    drumsButton_.setBounds(historyBar.removeFromLeft(110));
+    historyBar.removeFromLeft(24);
     historyBackButton_.setBounds(historyBar.removeFromLeft(40));
     historyLabel_.setBounds(historyBar.removeFromLeft(120));
     historyForwardButton_.setBounds(historyBar.removeFromLeft(40));

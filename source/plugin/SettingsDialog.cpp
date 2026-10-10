@@ -48,6 +48,21 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     makeLabel(tokensLabel_, keys::kLabelMaxTokens);
     makeLabel(levelLabel_, keys::kLabelSchemaLevel);
     makeLabel(consentLabel_, keys::kLabelConsent);
+    makeLabel(drumMapLabel_, keys::kLabelDrumMap);
+    drumMapHint_.setText(tr(keys::kDrumMapHint), juce::dontSendNotification);
+    drumMapHint_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
+    addAndMakeVisible(drumMapHint_);
+    drumMapEditor_.setComponentID("drumMap");
+    drumMapEditor_.setInputRestrictions(400);
+    drumMapEditor_.setText(toJuce(settings_().get().drumMap), false);
+    const auto applyDrumMap = [this] {
+        const auto text = drumMapEditor_.getText().toStdString();
+        settings_().update([&](mm::core::GlobalSettings& value) { value.drumMap = text; }); // sanitised there
+        drumMapEditor_.setText(toJuce(settings_().get().drumMap), false);
+    };
+    drumMapEditor_.onReturnKey = applyDrumMap;
+    drumMapEditor_.onFocusLost = applyDrumMap;
+    addAndMakeVisible(drumMapEditor_);
 
     providerBox_.setComponentID("provider");
     providerBox_.onChange = [this] {
@@ -312,6 +327,8 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {nullptr, {&consentList_}, {}, 22},
              {nullptr, {&logPromptsToggle_}, {}, 28},
              {nullptr, {&logHint_}, {}, 22},
+             {&drumMapLabel_, {&drumMapEditor_}, {}, 28},
+             {nullptr, {&drumMapHint_}, {}, 22},
              {nullptr, {&closeButton_}, {}, 30}};
 
     fillProviders();

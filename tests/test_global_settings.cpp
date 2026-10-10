@@ -88,3 +88,16 @@ TEST_CASE("sanitize brings invalid values into range", "[global-settings]") {
     // writing sanitizes, too
     CHECK(parseGlobalSettings(toJson(settings)) == sanitize(settings));
 }
+
+TEST_CASE("the drum mapping line is kept, cleaned and survives writing", "[global-settings]") {
+    GlobalSettings settings;
+    CHECK(settings.drumMap.empty());
+    settings.drumMap = "60=kick, 61=closed_hat";
+    CHECK(parseGlobalSettings(toJson(settings)).drumMap == "60=kick, 61=closed_hat");
+    // what cannot be read is cleaned out, also from a file
+    GlobalSettings messy;
+    messy.drumMap = " 60 = kick ; 999=kick,x=ride, 61=ride";
+    CHECK(sanitize(messy).drumMap == "60=kick, 61=ride");
+    CHECK(parseGlobalSettings("{\"version\":1,\"drumMap\":\"60=kick;70=tuba\"}").drumMap == "60=kick");
+    CHECK(parseGlobalSettings("{\"version\":1,\"drumMap\":5}").drumMap.empty());
+}
