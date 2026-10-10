@@ -209,8 +209,8 @@ Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set 
 - [x] Performance-Messung gegen SPEC §11
 - [ ] Instrument-Presets pro Rolle (Live und Logic, nur eigene Instrumente, SPEC §12)
 - [ ] DAW-Vorlagen: Live-Set mit Gruppenspuren, Logic-Patches (SPEC §8.6)
-- [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5)
-- [ ] Nutzerhandbuch (kurz)
+- [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5) – Text steht (D-188), der Hilfe-Dialog im Plugin und die Bestätigung in der DAW (H46) fehlen
+- [x] Nutzerhandbuch (kurz)
 - [ ] Vollständige manuelle Testmatrix (Anhang, v1.0-Zeilen)
 - [x] Determinismus-Gesamttest: Pattern speichern, Referenz-Set ändern, Projekt neu laden, Ausgabe
       bitgenau vergleichen (FEATURES.md W7)
