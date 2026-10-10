@@ -76,6 +76,46 @@ namespace mm::core::text {
     X(kAiReasonNetwork, "ai.reason.network")                                                                           \
     X(kAiReasonTimeout, "ai.reason.timeout")                                                                           \
     X(kAiReasonInvalid, "ai.reason.invalid")                                                                           \
+    X(kButtonSettings, "button.settings")                                                                              \
+    X(kSettingsTitle, "settings.title")                                                                                \
+    X(kLabelProvider, "settings.provider")                                                                             \
+    X(kProviderOffline, "settings.providerOffline")                                                                    \
+    X(kLabelKey, "settings.key")                                                                                       \
+    X(kKeyHint, "settings.keyHint")                                                                                    \
+    X(kButtonKeySave, "button.keySave")                                                                                \
+    X(kButtonKeyRemove, "button.keyRemove")                                                                            \
+    X(kKeyStored, "settings.keyStored")                                                                                \
+    X(kKeyMissing, "settings.keyMissing")                                                                              \
+    X(kKeyNotRequired, "settings.keyNotRequired")                                                                      \
+    X(kKeyMemoryOnly, "settings.keyMemoryOnly")                                                                        \
+    X(kKeySaved, "settings.keySaved")                                                                                  \
+    X(kKeySaveFailed, "settings.keySaveFailed")                                                                        \
+    X(kKeyRemoved, "settings.keyRemoved")                                                                              \
+    X(kLabelBaseUrl, "settings.baseUrl")                                                                               \
+    X(kLabelModel, "settings.model")                                                                                   \
+    X(kButtonLoadModels, "button.loadModels")                                                                          \
+    X(kModelsLoaded, "settings.modelsLoaded")                                                                          \
+    X(kModelsNone, "settings.modelsNone")                                                                              \
+    X(kLabelTimeout, "settings.timeout")                                                                               \
+    X(kLabelMaxTokens, "settings.maxTokens")                                                                           \
+    X(kLabelSchemaLevel, "settings.schemaLevel")                                                                       \
+    X(kLevelDefault, "settings.levelDefault")                                                                          \
+    X(kLevelEnforced, "settings.levelEnforced")                                                                        \
+    X(kLevelJson, "settings.levelJson")                                                                                \
+    X(kLevelPrompt, "settings.levelPrompt")                                                                            \
+    X(kButtonTestConnection, "button.testConnection")                                                                  \
+    X(kTestRunning, "settings.testRunning")                                                                            \
+    X(kTestOk, "settings.testOk")                                                                                      \
+    X(kTestOkLowered, "settings.testOkLowered")                                                                        \
+    X(kTestFailed, "settings.testFailed")                                                                              \
+    X(kLabelConsent, "settings.consent")                                                                               \
+    X(kConsentToggle, "settings.consentToggle")                                                                        \
+    X(kConsentLocal, "settings.consentLocal")                                                                          \
+    X(kConsentList, "settings.consentList")                                                                            \
+    X(kConsentNone, "settings.consentNone")                                                                            \
+    X(kToggleLogPrompts, "settings.logPrompts")                                                                        \
+    X(kLogHint, "settings.logHint")                                                                                    \
+    X(kButtonClose, "button.close")                                                                                    \
     X(kStatusNoResult, "status.noResult")                                                                              \
     X(kStatusUseHub, "status.useHub")                                                                                  \
     X(kStatusForwarded, "status.forwarded")                                                                            \

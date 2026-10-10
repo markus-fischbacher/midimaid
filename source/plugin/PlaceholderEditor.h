@@ -74,7 +74,9 @@ private:
     juce::TextButton historyBackButton_;
     juce::TextButton historyForwardButton_;
     juce::Label historyLabel_;
-    juce::TextEditor promptEditor_; // hub: what the AI is asked for (D-168)
+    juce::TextEditor promptEditor_;        // hub: what the AI is asked for (D-168)
+    juce::TextButton settingsButton_;      // opens the settings dialog
+    juce::TextButton errorSettingsButton_; // in the error bar: to the settings (invalid key, model)
     juce::TextButton retryButton_;
     juce::TextButton offlineButton_;
     juce::ToggleButton autoOfflineButton_;

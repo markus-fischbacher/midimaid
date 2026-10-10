@@ -2,9 +2,11 @@
 
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
+#include "plugin/AiText.h"
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
+#include "plugin/SettingsDialog.h"
 
 namespace mm::plugin {
 
@@ -260,6 +262,15 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(promptEditor_);
 
+    settingsButton_.setButtonText(tr(keys::kButtonSettings));
+    settingsButton_.setComponentID("settings");
+    settingsButton_.onClick = [] { SettingsDialog::show(); };
+    addChildComponent(settingsButton_);
+    errorSettingsButton_.setButtonText(tr(keys::kButtonSettings));
+    errorSettingsButton_.setComponentID("errorSettings");
+    errorSettingsButton_.onClick = [] { SettingsDialog::show(); };
+    addChildComponent(errorSettingsButton_);
+
     retryButton_.setButtonText(tr(keys::kButtonRetry));
     retryButton_.setComponentID("retry");
     retryButton_.onClick = [this] {
@@ -393,42 +404,12 @@ PlaceholderEditor::~PlaceholderEditor() {
 
 namespace {
 
-/// What went wrong, in words for the status bar (SPEC 7.9): the status of the provider, the HTTP code if there was one.
+/// What went wrong, in words for the status bar (SPEC 7.9).
 juce::String aiFailureReason(const GenerationReport& report) {
-    using mm::ai::AiStatus;
     if (report.outcome == mm::ai::AiOutcome::Invalid) {
         return tr(keys::kAiReasonInvalid);
     }
-    std::string_view key = keys::kAiReasonNetwork;
-    switch (report.status) {
-    case AiStatus::AuthFailed:
-        key = keys::kAiReasonAuth;
-        break;
-    case AiStatus::ModelNotFound:
-        key = keys::kAiReasonModel;
-        break;
-    case AiStatus::RateLimited:
-        key = keys::kAiReasonRate;
-        break;
-    case AiStatus::ServerError:
-        key = keys::kAiReasonServer;
-        break;
-    case AiStatus::BadRequest:
-        key = keys::kAiReasonBad;
-        break;
-    case AiStatus::Timeout:
-        key = keys::kAiReasonTimeout;
-        break;
-    case AiStatus::NetworkError:
-    case AiStatus::Cancelled:
-    case AiStatus::Ok:
-        break;
-    }
-    auto text = tr(key);
-    if (report.httpStatus != 0) {
-        text += " (HTTP " + juce::String(report.httpStatus) + ")";
-    }
-    return text;
+    return aiStatusText(report.status, report.httpStatus);
 }
 
 } // namespace
@@ -525,6 +506,11 @@ void PlaceholderEditor::updateStatus() {
          std::initializer_list<juce::Component*>{&retryButton_, &offlineButton_, &autoOfflineButton_}) {
         component->setVisible(failed);
     }
+    // A wrong key or model is solved in the settings (SPEC 7.9: "API key invalid -> settings").
+    const auto& report = processor_.lastReport();
+    errorSettingsButton_.setVisible(
+        failed && report.outcome == mm::ai::AiOutcome::ProviderError &&
+        (report.status == mm::ai::AiStatus::AuthFailed || report.status == mm::ai::AiStatus::ModelNotFound));
     autoOfflineButton_.setToggleState(processor_.autoOffline(), juce::dontSendNotification);
     generateButton_.setButtonText(
         tr(processor_.generatingWithAi() ? keys::kButtonCancelGeneration : keys::kButtonGenerate));
@@ -545,8 +531,8 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
-             &infoLabel_, &promptEditor_, &expertButton_, &undoButton_, &redoButton_, &historyBackButton_,
-             &historyForwardButton_, &historyLabel_}) {
+             &infoLabel_, &promptEditor_, &settingsButton_, &expertButton_, &undoButton_, &redoButton_,
+             &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -822,6 +808,10 @@ void PlaceholderEditor::resized() {
         dragHandle_->setBounds(area.removeFromBottom(56).reduced(16));
     }
     auto roles = area.removeFromTop(48).reduced(16, 10);
+    if (!voiceLayout_) { // the voice UI is compact: the settings belong to the hub
+        settingsButton_.setBounds(roles.removeFromRight(120));
+        roles.removeFromRight(8);
+    }
     takeOverButton_.setBounds(roles.removeFromRight(120));
     roles.removeFromRight(8);
     followBox_.setBounds(roles.removeFromRight(150));
@@ -882,6 +872,8 @@ void PlaceholderEditor::resized() {
     offlineButton_.setBounds(statusRow.removeFromRight(140).reduced(0, 6));
     statusRow.removeFromRight(8);
     retryButton_.setBounds(statusRow.removeFromRight(140).reduced(0, 6));
+    statusRow.removeFromRight(8);
+    errorSettingsButton_.setBounds(statusRow.removeFromRight(120).reduced(0, 6));
     statusLabel_.setBounds(statusRow);
     infoLabel_.setBounds(area.removeFromBottom(28).reduced(16, 0));
     auto historyBar = area.removeFromBottom(32).reduced(16, 2);
