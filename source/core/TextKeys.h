@@ -77,6 +77,8 @@ namespace mm::core::text {
     X(kStatusImportNotFourFour, "status.importNotFourFour")                                                            \
     X(kStatusImportNoNotes, "status.importNoNotes")                                                                    \
     X(kStatusImportUnreadable, "status.importUnreadable")                                                              \
+    X(kStatusImportApplied, "status.importApplied")                                                                    \
+    X(kStatusDoneImportCut, "status.doneImportCut")                                                                    \
     X(kStatusGeneratingAi, "status.generatingAi")                                                                      \
     X(kStatusAiFailed, "status.aiFailed")                                                                              \
     X(kStatusCancelled, "status.cancelled")                                                                            \

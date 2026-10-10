@@ -81,6 +81,8 @@
   "status.importNotFourFour": "Nur 4/4 wird importiert: Die Datei hat eine andere Taktart",
   "status.importNoNotes": "Die MIDI-Datei enthält keine Noten",
   "status.importUnreadable": "Die Datei konnte nicht als MIDI gelesen werden",
+  "status.importApplied": "Stimme importiert, gesperrt; zum Ergänzen der anderen Stimmen Slot wählen und generieren",
+  "status.doneImportCut": "Fertig um die importierte Stimme; vom Import zählen nur die ersten 16 Takte",
   "status.generatingAi": "Die KI erzeugt …",
   "status.aiFailed": "KI-Anfrage fehlgeschlagen: {reason}",
   "status.cancelled": "Abgebrochen: der Slot bleibt unverändert",

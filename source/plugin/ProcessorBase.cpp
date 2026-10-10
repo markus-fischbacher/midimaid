@@ -3,6 +3,7 @@
 #include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
+#include "core/VoiceImport.h"
 #include "core/SlotBankJson.h"
 #include "core/TextKeys.h"
 #include "core/Variation.h"
@@ -479,6 +480,14 @@ bool ProcessorBase::refine(const std::string& instruction, std::optional<size_t>
 }
 
 bool ProcessorBase::importMidi(const juce::File& file, std::optional<size_t> voice) {
+    return startImport(file, voice, false);
+}
+
+bool ProcessorBase::importVoice(const juce::File& file, std::optional<size_t> voice) {
+    return startImport(file, voice, true);
+}
+
+bool ProcessorBase::startImport(const juce::File& file, std::optional<size_t> voice, bool apply) {
     const auto extension = file.getFileExtension().toLowerCase();
     if (extension != ".mid" && extension != ".midi") {
         generationStatus_ = GenerationStatus::ImportUnreadable;
@@ -486,6 +495,7 @@ bool ProcessorBase::importMidi(const juce::File& file, std::optional<size_t> voi
     }
     ImportRequest request;
     request.file = file;
+    request.apply = apply;
     request.slot = std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
     {
         const juce::ScopedLock lock(slotsLock_);
@@ -513,6 +523,10 @@ void ProcessorBase::onImported(const ImportRequest& request, ImportOutcome outco
         generationStatus_ = GenerationStatus::ImportNotFourFour;
         return;
     }
+    if (request.apply) {
+        applyImport(request, outcome.plan);
+        return;
+    }
     PendingImport pending;
     pending.voice = request.voice;
     pending.slot = request.slot;
@@ -520,6 +534,71 @@ void ProcessorBase::onImported(const ImportRequest& request, ImportOutcome outco
     pending.plan = std::move(outcome.plan);
     generationStatus_ = pending.plan.truncated ? GenerationStatus::ImportReadCut : GenerationStatus::ImportRead;
     pendingImport_ = std::move(pending);
+}
+
+void ProcessorBase::applyImport(const ImportRequest& request, const mm::core::ImportPlan& plan) {
+    mm::core::GenerationSettings settings;
+    bool isVoice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+        settings = settings_.generation;
+    }
+    if (isVoice) {
+        generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
+        return;
+    }
+    const auto* style = styles_.findOrFallback(settings.styleId);
+    if (style == nullptr) {
+        generationStatus_ = GenerationStatus::NoResult;
+        return;
+    }
+    const auto index = static_cast<size_t>(request.slot);
+    std::optional<mm::core::Pattern> imported;
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto* slot = bank.slot(index);
+        std::optional<mm::core::Pattern> before = slot != nullptr ? slot->pattern : std::nullopt;
+        const size_t cursor = slot != nullptr ? slot->cursor : 0;
+        auto next = mm::core::importVoice(*style, before, request.voice, plan);
+        if (next && bank.setResult(index, *next)) {
+            undo_.recordResult(index, std::move(before), cursor, *bank.slot(index)->pattern);
+            imported = std::move(next);
+        }
+    });
+    if (!imported) {
+        generationStatus_ = GenerationStatus::NoResult;
+        return;
+    }
+    // The key of the slot is the one found (SPEC 3.18); the musician can correct it.
+    auto next = instanceSettings();
+    next.generation.root = imported->context.root;
+    next.generation.scaleId = imported->context.scaleId;
+    next.generation.lengthBars = imported->lengthBars;
+    setInstanceSettings(next);
+    generationStatus_ = GenerationStatus::ImportApplied;
+    if (index == static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1)) {
+        generate(); // the other voices, around the imported one
+        importCut_ = plan.truncated && generationStatus_ == GenerationStatus::Generating;
+    }
+}
+
+bool ProcessorBase::correctKey(mm::core::PitchClass root, const std::string& scaleId, std::optional<size_t> slotChoice) {
+    const size_t index =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    const bool corrected = editNotes(index, [&](mm::core::Pattern& pattern) {
+        if (pattern.context.root == root && pattern.context.scaleId == scaleId) {
+            return size_t{0}; // nothing to correct
+        }
+        return mm::core::correctImportedKey(pattern, root, scaleId) ? size_t{1} : size_t{0};
+    });
+    if (corrected) {
+        auto next = instanceSettings();
+        next.generation.root = root;
+        next.generation.scaleId = scaleId;
+        setInstanceSettings(next);
+    }
+    return corrected;
 }
 
 ProcessorBase::RefineTargets ProcessorBase::refineTargets(std::optional<size_t> slotChoice) const {
@@ -790,10 +869,12 @@ void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern p
             discarded = true;
         }
     });
-    generationStatus_ = discarded    ? GenerationStatus::NoResult
-                        : job.refine ? GenerationStatus::Refined
-                        : kept       ? GenerationStatus::DoneLocked
-                                     : GenerationStatus::Done;
+    generationStatus_ = discarded               ? GenerationStatus::NoResult
+                        : job.refine            ? GenerationStatus::Refined
+                        : kept && importCut_    ? GenerationStatus::DoneImportCut
+                        : kept                  ? GenerationStatus::DoneLocked
+                                                : GenerationStatus::Done;
+    importCut_ = false;
 }
 
 std::vector<std::string> ProcessorBase::slotLoadProblems() const {

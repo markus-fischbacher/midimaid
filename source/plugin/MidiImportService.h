@@ -14,6 +14,7 @@ struct ImportRequest {
     juce::File file;
     size_t voice = 0; ///< 0-based voice of the pattern the clip is meant for
     int slot = 0;     ///< 0-based slot, kept from the moment of the drop
+    bool apply = false; ///< put the voice into the slot once it is read (SPEC 3.18), else only read it
 };
 
 struct ImportOutcome {

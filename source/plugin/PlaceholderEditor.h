@@ -43,6 +43,7 @@ private:
     void startRefine();
     void syncFields(const mm::core::InstanceSettings& settings);
     void rebuildRows(size_t count);
+    void correctSlotKey(const mm::core::InstanceSettings& settings);
     /// Hands the grid and the pitch snapping to every roll of the hub UI.
     void applyEditSettings();
     /// Track focus (D-159): the voice that has the whole height, 0 for all.

@@ -176,8 +176,9 @@ mit Wahlmöglichkeit, und die Wiedergabe läuft ungestört weiter.
 - [x] Analyse: Tonart- und Skalenerkennung, Akkordfolge aus Akkorden bzw. Bass-Grundtönen, Rhythmus,
       Register; tonartunabhängige Speicherung; Testkorpus mit Zielwerten (SPEC §3.20, §12)
   - Stand: fertig (D-177, P4-B): Tonart ≥ 95 % (Grundton) und ≥ 92 % (Grundton und Skala, wo der Inhalt sie zeigt) am Korpus; Grenzen dort.
-- [ ] Eigene Stimme importieren: Ersetzen, Sperre, harmonischer Kontext, übrige Stimmen passend
+- [x] Eigene Stimme importieren: Ersetzen, Sperre, harmonischer Kontext, übrige Stimmen passend
       generieren, „Sperre lösen“, Grenzen (nur 4/4, Länge, höchstens 16 Takte) (SPEC §3.18)
+  - Stand: fertig (D-178, P4-C): Drop ersetzt und sperrt die Stimme, Tonart und Akkorde aus der Analyse, übrige Stimmen werden um sie erzeugt, Tonart-Korrektur über die Boxen; Host-Check H38. Aus der Voice-Instanz reicht der Drop nichts an den Hub weiter (D-178, offen).
 - [ ] Drum-Referenz per Clip/.mid: GM-Zuordnung plus Liste in den Einstellungen, `custom`-Kick-Raster,
       Hat-Groove, Akzente; kein doppelter Swing (SPEC §3.14, §3.9)
 - [ ] Referenzen v1.0: ein Set pro Stil, Massen-Import (Dateien, Ordner, Clips), Rolle beim Import
