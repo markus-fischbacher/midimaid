@@ -1249,7 +1249,7 @@ möglich, aus der Modellliste des Anbieters geladen (bei Ollama die installierte
   zu kopieren; sie haben Vorrang vor den allgemeinen Beispielen der Vorlage
 
 ### 7.5 Robustheit und Kosten
-- Timeouts: Cloud 30 s, Ollama 120 s (einstellbar), Abbruch-Knopf in der UI
+- Timeouts: Cloud 30 s, lokale Anbieter (Ollama, LM Studio) 600 s (einstellbar; D-174: Denkmodelle brauchen mehrere Minuten, die Anfrage ist jederzeit abbrechbar), Abbruch-Knopf in der UI
 - Wiederholung mit Backoff bei 429 und 5xx (max. 2), keine Wiederholung bei 401 und 400
 - Klare Fehlermeldungen (Key ungültig, Modell nicht gefunden, Ollama nicht erreichbar …)
 - [v1.1] Token-Verbrauch und **geschätzte Kosten** der letzten Anfrage und der Sitzung anzeigen

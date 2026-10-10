@@ -33,6 +33,12 @@ mm_warn_sources(test_http_client.cpp)
 target_link_libraries(mm_net_tests PRIVATE mm_plugin_common Threads::Threads Catch2::Catch2WithMain)
 target_compile_definitions(mm_net_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
+# Practice test with a real provider (ROADMAP P3-G): built with the tests, but hidden from ctest ([.live], needs a backend).
+add_executable(mm_live_tests test_ai_live.cpp)
+mm_warn_sources(test_ai_live.cpp)
+target_link_libraries(mm_live_tests PRIVATE mm_plugin_common Threads::Threads Catch2::Catch2WithMain)
+target_compile_definitions(mm_live_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
+
 list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
 include(Catch)
 catch_discover_tests(mm_core_tests)

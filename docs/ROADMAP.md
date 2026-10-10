@@ -149,7 +149,7 @@ Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
 - [x] Anthropic-Provider (native API, Structured Outputs) (D-169, P3-D; Test mit echtem Schlüssel in P3-G)
 - [x] OpenAI-kompatibler Provider mit Voreinstellungen (OpenAI, Ollama, LM Studio, OpenRouter) und
       Fähigkeitsstufe pro Backend; Verbindungstest stuft nur herab (SPEC §7.2)
-  - Stand: fertig (D-169, P3-D); die Stufen ziehen mit `models.json` in P3-E um, Test mit echten Anbietern in P3-G.
+  - Stand: fertig (D-169, P3-D); die Stufen ziehen mit `models.json` in P3-E um, Test mit echten Anbietern in P3-G (D-174: LM Studio läuft, Cloud mit H35).
 - [ ] Antwort-Schema v1 (v1.0-Felder, Stufen, Oktave, Progressionen, Motive bei über 8 Takten), Parser und
       Validierung, ein Reparaturversuch, Nachfrage bei Fehlschlag (SPEC §7.3)
   - Stand: Schema, Parser, Umwandlung in ein Pattern (D-165, P3-A), Reparaturversuch und Motiv-Wiederholung bei 16 Takten (D-167, P3-C1) fertig. Die Nachfrage bei Fehlschlag (Erneut, Offline, Abbrechen) ist in der Oberfläche (D-168, P3-C2). Offen: das Formen des Motivs nach Phrasenrolle.
