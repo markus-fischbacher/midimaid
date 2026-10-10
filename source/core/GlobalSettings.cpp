@@ -1,9 +1,141 @@
 #include "core/GlobalSettings.h"
 
 #include <algorithm>
+#include <cctype>
 #include <nlohmann/json.hpp>
 
 namespace mm::core {
+
+namespace {
+
+constexpr size_t kMaxIdBytes = 64;
+constexpr size_t kMaxModelBytes = 200;
+constexpr size_t kMaxUrlBytes = 500;
+constexpr size_t kMaxProviders = 16;
+
+bool validId(const std::string& id) {
+    return !id.empty() && id.size() <= kMaxIdBytes &&
+           std::all_of(id.begin(), id.end(), [](unsigned char c) { return std::isalnum(c) || c == '_' || c == '-'; });
+}
+
+/// Cuts at a UTF-8 character boundary.
+std::string cut(std::string text, size_t limit) {
+    if (text.size() > limit) {
+        size_t at = limit;
+        while (at > 0 && (static_cast<unsigned char>(text[at]) & 0xC0) == 0x80) {
+            --at;
+        }
+        text.resize(at);
+    }
+    return text;
+}
+
+AiProviderSettings sanitize(AiProviderSettings settings) {
+    settings.model = cut(std::move(settings.model), kMaxModelBytes);
+    settings.baseUrl = cut(std::move(settings.baseUrl), kMaxUrlBytes);
+    if (settings.timeoutSeconds != 0) {
+        settings.timeoutSeconds = std::clamp(settings.timeoutSeconds, 5, 600);
+    }
+    if (settings.maxTokens != 0) {
+        settings.maxTokens = std::clamp(settings.maxTokens, 256, 64000);
+    }
+    if (settings.schemaLevel != "enforced" && settings.schemaLevel != "json" && settings.schemaLevel != "prompt") {
+        settings.schemaLevel.clear();
+    }
+    return settings;
+}
+
+AiSettings sanitize(AiSettings settings) {
+    if (!settings.activeProvider.empty() && !validId(settings.activeProvider)) {
+        settings.activeProvider.clear();
+    }
+    std::map<std::string, AiProviderSettings> providers;
+    for (auto& [id, value] : settings.providers) {
+        if (validId(id) && providers.size() < kMaxProviders) {
+            providers[id] = sanitize(std::move(value));
+        }
+    }
+    settings.providers = std::move(providers);
+    std::set<std::string> consent;
+    for (const auto& id : settings.cloudConsent) {
+        if (validId(id) && consent.size() < kMaxProviders) {
+            consent.insert(id);
+        }
+    }
+    settings.cloudConsent = std::move(consent);
+    return settings;
+}
+
+AiSettings parseAi(const nlohmann::json& node) {
+    using nlohmann::json;
+    AiSettings ai;
+    if (!node.is_object()) {
+        return ai;
+    }
+    if (const auto it = node.find("activeProvider"); it != node.end() && it->is_string()) {
+        ai.activeProvider = it->get<std::string>();
+    }
+    if (const auto it = node.find("logPrompts"); it != node.end() && it->is_boolean()) {
+        ai.logPrompts = it->get<bool>();
+    }
+    if (const auto it = node.find("cloudConsent"); it != node.end() && it->is_array()) {
+        for (const auto& entry : *it) {
+            if (entry.is_string()) {
+                ai.cloudConsent.insert(entry.get<std::string>());
+            }
+        }
+    }
+    if (const auto it = node.find("providers"); it != node.end() && it->is_object()) {
+        for (const auto& [id, value] : it->items()) {
+            if (!value.is_object()) {
+                continue;
+            }
+            AiProviderSettings provider;
+            const auto text = [&](const char* key, std::string& out) {
+                if (const auto field = value.find(key); field != value.end() && field->is_string()) {
+                    out = field->get<std::string>();
+                }
+            };
+            const auto number = [&](const char* key, int& out) {
+                if (const auto field = value.find(key); field != value.end() && field->is_number_integer()) {
+                    const auto n = field->get<long long>();
+                    if (n >= 0 && n <= 1000000) {
+                        out = static_cast<int>(n);
+                    }
+                }
+            };
+            text("model", provider.model);
+            text("baseUrl", provider.baseUrl);
+            text("schemaLevel", provider.schemaLevel);
+            number("timeoutSeconds", provider.timeoutSeconds);
+            number("maxTokens", provider.maxTokens);
+            ai.providers[id] = provider;
+        }
+    }
+    return ai;
+}
+
+nlohmann::json aiToJson(const AiSettings& ai) {
+    using nlohmann::json;
+    json node;
+    node["activeProvider"] = ai.activeProvider;
+    node["logPrompts"] = ai.logPrompts;
+    node["cloudConsent"] = json::array();
+    for (const auto& id : ai.cloudConsent) {
+        node["cloudConsent"].push_back(id);
+    }
+    node["providers"] = json::object();
+    for (const auto& [id, provider] : ai.providers) {
+        node["providers"][id] = {{"model", provider.model},
+                                 {"baseUrl", provider.baseUrl},
+                                 {"timeoutSeconds", provider.timeoutSeconds},
+                                 {"maxTokens", provider.maxTokens},
+                                 {"schemaLevel", provider.schemaLevel}};
+    }
+    return node;
+}
+
+} // namespace
 
 GlobalSettings sanitize(GlobalSettings settings) {
     const GlobalSettings defaults;
@@ -17,6 +149,7 @@ GlobalSettings sanitize(GlobalSettings settings) {
     if (!isValidDivision(settings.grid.division)) {
         settings.grid.division = defaults.grid.division;
     }
+    settings.ai = sanitize(std::move(settings.ai));
     return settings;
 }
 
@@ -59,7 +192,10 @@ GlobalSettings parseGlobalSettings(std::string_view text) {
     }
     boolean("gridTriplet", settings.grid.triplet);
     boolean("snapChromatic", settings.snapChromatic);
-    return settings;
+    if (const auto it = root.find("ai"); it != root.end()) {
+        settings.ai = parseAi(*it);
+    }
+    return sanitize(std::move(settings));
 }
 
 std::string toJson(const GlobalSettings& input) {
@@ -73,6 +209,7 @@ std::string toJson(const GlobalSettings& input) {
     root["gridDivision"] = settings.grid.division;
     root["gridTriplet"] = settings.grid.triplet;
     root["snapChromatic"] = settings.snapChromatic;
+    root["ai"] = aiToJson(settings.ai);
     return root.dump(2) + "\n";
 }
 

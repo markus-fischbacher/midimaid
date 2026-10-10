@@ -53,6 +53,7 @@ private:
         std::optional<int> variationStrength;
         std::optional<mm::core::EditGrid> grid;
         std::optional<bool> snapChromatic;
+        std::optional<mm::core::AiSettings> ai;
         bool any() const;
         void apply(mm::core::GlobalSettings& settings) const;
     };

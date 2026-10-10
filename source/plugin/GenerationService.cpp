@@ -1,6 +1,7 @@
 #include "plugin/GenerationService.h"
 
 #include "core/PatternGenerator.h"
+#include "plugin/AppLog.h"
 
 #include <chrono>
 
@@ -28,6 +29,48 @@ mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atom
     request.scaleId = job.settings.scaleId;
     request.cancel = cancel;
     return request;
+}
+
+const char* outcomeName(mm::ai::AiOutcome outcome) {
+    switch (outcome) {
+    case mm::ai::AiOutcome::Success:
+        return "ok";
+    case mm::ai::AiOutcome::ProviderError:
+        return "provider-error";
+    case mm::ai::AiOutcome::Invalid:
+        return "invalid-answer";
+    case mm::ai::AiOutcome::Cancelled:
+        return "cancelled";
+    }
+    return "?";
+}
+
+/// The log line of one AI request (SPEC 10): metadata only. The texts follow only with "Prompts protokollieren".
+void logAiResult(const GenerationJob& job, const mm::ai::AiGenerateResult& result, long long milliseconds) {
+    auto& log = AppLog::instance();
+    juce::String line = "generate provider=" + juce::String(job.provider->info().id) +
+                        " model=" + juce::String(job.model) + " outcome=" + outcomeName(result.outcome) +
+                        " duration=" + juce::String(milliseconds) + "ms" +
+                        " requests=" + juce::String(result.requests) + " tokens=" + juce::String(result.inputTokens) +
+                        "/" + juce::String(result.outputTokens);
+    if (result.outcome == mm::ai::AiOutcome::Success) {
+        line += " score=" + juce::String(result.score) + (result.belowMinScore ? " below-min" : "") +
+                (result.repaired ? " repaired" : "") +
+                " dropped=" + juce::String(static_cast<int>(result.droppedNotes)) +
+                " clamped=" + juce::String(static_cast<int>(result.clampedValues));
+    } else if (result.outcome == mm::ai::AiOutcome::ProviderError) {
+        line += " status=" + juce::String(static_cast<int>(result.status)) +
+                " http=" + juce::String(result.httpStatus) + " message=" + juce::String(result.error);
+    } else if (result.outcome == mm::ai::AiOutcome::Invalid) {
+        line += " schema-error=" + juce::String(result.error);
+    }
+    log.write(result.outcome == mm::ai::AiOutcome::Success || result.outcome == mm::ai::AiOutcome::Cancelled
+                  ? LogLevel::Info
+                  : LogLevel::Warning,
+              "ai", line);
+    log.writeContent("ai", "system prompt", juce::String::fromUTF8(result.systemPrompt.c_str()));
+    log.writeContent("ai", "user prompt", juce::String::fromUTF8(result.userPrompt.c_str()));
+    log.writeContent("ai", "answer", juce::String::fromUTF8(result.lastAnswer.c_str()));
 }
 
 } // namespace
@@ -85,7 +128,12 @@ void GenerationService::request(const GenerationJob& job) {
                 input.createdUnixMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                           std::chrono::system_clock::now().time_since_epoch())
                                           .count();
+                const auto started = std::chrono::steady_clock::now();
                 auto result = mm::ai::generateWithAi(*job.provider, input, cancel);
+                logAiResult(
+                    job, result,
+                    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started)
+                        .count());
                 report.outcome = result.outcome;
                 report.status = result.status;
                 report.httpStatus = result.httpStatus;

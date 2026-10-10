@@ -12,7 +12,9 @@ namespace {
 
 using nlohmann::json;
 
-std::string lowerHost(const std::string& url) {
+} // namespace
+
+std::string urlHost(const std::string& url) {
     const auto schemeEnd = url.find("://");
     if (schemeEnd == std::string::npos) {
         return {};
@@ -36,6 +38,14 @@ std::string lowerHost(const std::string& url) {
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return authority;
 }
+
+bool isLocalUrl(const std::string& url) {
+    const auto host = urlHost(url);
+    return host == "localhost" || host == "127.0.0.1" || host == "[::1]" ||
+           (host.size() > 10 && host.substr(host.size() - 10) == ".localhost");
+}
+
+namespace {
 
 bool startsWith(const std::string& text, const std::string& prefix) {
     return text.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), text.begin());
@@ -121,14 +131,11 @@ std::optional<std::string> checkUrl(const std::string& url, bool sendsKey) {
         return std::string("the address must start with https:// or http://");
     }
     if (http && sendsKey) {
-        const auto host = lowerHost(url);
-        const bool loopback = host == "localhost" || host == "127.0.0.1" || host == "[::1]" ||
-                              (host.size() > 10 && host.substr(host.size() - 10) == ".localhost");
-        if (!loopback) {
+        if (!isLocalUrl(url)) {
             return std::string("a key is not sent over http to another computer: use https://");
         }
     }
-    if (lowerHost(url).empty()) {
+    if (urlHost(url).empty()) {
         return std::string("the address has no host");
     }
     return std::nullopt;
