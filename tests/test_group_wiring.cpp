@@ -979,17 +979,39 @@ TEST_CASE("a window opened after the state was loaded starts at the saved size",
     CHECK(editor->getTransform().mat00 == Catch::Approx(2.0f));
 }
 
+namespace {
+
+/// The playhead clock under the control of the test: the age of a reading no longer depends on how fast the machine
+/// is (a loaded CI runner took more than the 0.25 s a reading may be old).
+struct FakePlayheadClock {
+    FakePlayheadClock() {
+        seconds().store(1000.0);
+        mm::plugin::ProcessorBase::setPlayheadClock(&read);
+    }
+    ~FakePlayheadClock() { mm::plugin::ProcessorBase::setPlayheadClock(nullptr); }
+    static std::atomic<double>& seconds() {
+        static std::atomic<double> value{1000.0};
+        return value;
+    }
+    static double read() { return seconds().load(); }
+    static void advance(double by) { seconds().store(seconds().load() + by); }
+};
+
+} // namespace
+
 TEST_CASE("the processor reports the host position as long as the transport plays and blocks keep coming",
           "[group-wiring][playhead]") {
     Quiet quiet;
+    FakePlayheadClock clock;
     Instance instance("Head");
     CHECK_FALSE(instance.processor.playheadPpq().has_value()); // nothing processed yet
     instance.setPpq(8.0);
     instance.step();
     auto position = instance.processor.playheadPpq();
     REQUIRE(position.has_value());
-    CHECK(*position >= 8.0);
-    CHECK(*position < 8.0 + 0.5); // the tempo runs it forward a little from the block start
+    CHECK(*position == Catch::Approx(8.0)); // read in the instant of the block
+    FakePlayheadClock::advance(0.1);
+    CHECK(*instance.processor.playheadPpq() == Catch::Approx(8.2)); // 120 BPM: the tempo runs it forward
 
     instance.setPlaying(false);
     instance.step();
@@ -1012,13 +1034,14 @@ TEST_CASE("the processor reports the host position as long as the transport play
     instance.setPpq(3.0);
     instance.step();
     REQUIRE(instance.processor.playheadPpq().has_value());
-    juce::Thread::sleep(400); // no block for a while: the instance does not process
+    FakePlayheadClock::advance(0.4); // no block for a while: the instance does not process
     CHECK_FALSE(instance.processor.playheadPpq().has_value());
 }
 
 TEST_CASE("the piano roll rows of the hub show the playhead in the playing slot and hide it when the transport stops",
           "[group-wiring][editor][playhead]") {
     Quiet quiet;
+    FakePlayheadClock clock;
     Instance hub("Hub");
     hub.setRole(InstanceRole::Hub);
     hub.processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, marked(36))); }); // one bar, slot 1
@@ -1044,11 +1067,10 @@ TEST_CASE("the piano roll rows of the hub show the playhead in the playing slot 
     REQUIRE(waitFor([&] { hub.step(); return !rolls().empty() && rolls()[0]->patternTicks() == 3840; }));
     drive(6);
     for (auto* roll : rolls()) {
-        REQUIRE(roll->playheadTick().has_value());
-        const double expected = std::fmod(hub.ppq() * 960.0, 3840.0);
-        // within the last blocks and the time the editor's timer waits: a little behind or ahead of the block
-        CHECK(*roll->playheadTick() >= expected - 400.0);
-        CHECK(*roll->playheadTick() <= expected + 400.0);
+        // the position of the last block, read in the instant it was written (the block started 0.02 PPQ ago); no
+        // further block comes, so the editor's timer ends up exactly there
+        const double expected = std::fmod((hub.ppq() - 0.02) * 960.0, 3840.0);
+        CHECK(waitFor([&] { return roll->playheadTick() && std::abs(*roll->playheadTick() - expected) <= 2.0; }));
     }
 
     // another slot is playing: no line in the rows of slot 1
@@ -1072,6 +1094,7 @@ TEST_CASE("the piano roll rows of the hub show the playhead in the playing slot 
 
 TEST_CASE("the roll of the voice window shows the playhead too", "[group-wiring][editor][playhead]") {
     Quiet quiet;
+    FakePlayheadClock clock;
     Instance voice("Voice");
     voice.setRole(InstanceRole::Voice);
     voice.processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, marked(36))); });
@@ -1088,10 +1111,8 @@ TEST_CASE("the roll of the voice window shows the playhead too", "[group-wiring]
         voice.step();
         pumpMessages(20);
     }
-    REQUIRE(roll->playheadTick().has_value());
-    const double expected = std::fmod(voice.ppq() * 960.0, 3840.0);
-    CHECK(*roll->playheadTick() >= expected - 400.0);
-    CHECK(*roll->playheadTick() <= expected + 400.0);
+    const double expected = std::fmod((voice.ppq() - 0.02) * 960.0, 3840.0);
+    CHECK(waitFor([&] { return roll->playheadTick() && std::abs(*roll->playheadTick() - expected) <= 2.0; }));
     voice.setPlaying(false);
     voice.step();
     CHECK(waitFor([&] { return !roll->playheadTick().has_value(); }, 2000));
