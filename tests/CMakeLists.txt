@@ -4,7 +4,7 @@ target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJEC
                                                   MIDIMAID_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
 
 find_package(Threads REQUIRED)
-add_executable(mm_ai_tests test_ai_schema.cpp test_ai_mock.cpp test_ai_prompt.cpp test_ai_compact.cpp test_ai_generation.cpp)
+add_executable(mm_ai_tests test_ai_schema.cpp test_ai_mock.cpp test_ai_prompt.cpp test_ai_compact.cpp test_ai_generation.cpp test_ai_http.cpp)
 target_link_libraries(mm_ai_tests PRIVATE mm_ai Threads::Threads Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_ai_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
@@ -25,10 +25,16 @@ mm_warn_sources(test_processor_glue.cpp test_generation.cpp test_group_wiring.cp
 target_compile_definitions(mm_plugin_glue_tests PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catch2WithMain)
 
+add_executable(mm_net_tests test_http_client.cpp)
+mm_warn_sources(test_http_client.cpp)
+target_link_libraries(mm_net_tests PRIVATE mm_plugin_common Threads::Threads Catch2::Catch2WithMain)
+target_compile_definitions(mm_net_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
+
 list(APPEND CMAKE_MODULE_PATH "${Catch2_SOURCE_DIR}/extras")
 include(Catch)
 catch_discover_tests(mm_core_tests)
 catch_discover_tests(mm_ai_tests)
+catch_discover_tests(mm_net_tests)
 catch_discover_tests(mm_mmgen_tests)
 catch_discover_tests(mm_plugin_tests)
 catch_discover_tests(mm_engine_tests)
