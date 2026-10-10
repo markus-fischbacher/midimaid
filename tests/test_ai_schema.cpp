@@ -457,6 +457,7 @@ TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]"
     // a motif that does not divide the pattern is cut at the end of the pattern
     answer["voices"][0]["motif_bars"] = 5;
     answer["voices"][0]["notes"] = json::array({{{"step", 0}, {"degree", 1}, {"len", 4}},
+                                                {{"step", 4}, {"degree", 2}, {"len", 60}}, // long: shortened in the last statement
                                                 {{"step", 64}, {"degree", 3}, {"len", 16}}, // bar 5 of the motif
                                                 {{"step", 76}, {"degree", 5}, {"len", 8}}});
     result = buildFrom(answer, style, 16);
@@ -465,8 +466,9 @@ TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]"
     {
         const auto& cut = result.pattern.voices[0].notes;
         // statements start at bars 0, 5, 10 and 15: the last one has room for bar 1 only
-        CHECK(cut.size() == 3 + 3 + 3 + 1);
-        CHECK(cut.back().startTick == 15 * kTicksPerBar);
+        CHECK(cut.size() == 4 + 4 + 4 + 2);
+        CHECK(cut.back().startTick == 244 * 240);
+        CHECK(cut.back().startTick + cut.back().lengthTicks == 16 * kTicksPerBar); // shortened to the end
         for (const auto& note : cut) {
             CHECK(note.startTick + note.lengthTicks <= 16 * kTicksPerBar);
         }
