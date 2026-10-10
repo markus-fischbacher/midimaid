@@ -16,6 +16,7 @@
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/PlaceholderEditor.h"
+#include "plugin/ReferenceStore.h"
 
 #include <algorithm>
 #include <set>
@@ -27,6 +28,22 @@ namespace {
 constexpr int kReturnCollectIntervalMs = 250;
 /// Upper bound of the bytes one block can write: the engine's event capacity, with room for the event header.
 constexpr size_t kMidiBufferBytes = mm::engine::MidiEventList::kCapacity * 12;
+
+/// Puts the reference set of the job's style into the job (SPEC 3.20, message thread): the entries for the copy
+/// protection, the progressions and the set id always, the examples only for an AI job whose provider may get them
+/// (a provider on this computer, or one the musician agreed to, D-86).
+void addReferences(GenerationJob& job, bool withExamples, bool providerIsLocal) {
+    const auto set = referenceStore().get(job.settings.styleId);
+    job.references = mm::core::referenceEffectOf(set);
+    job.examples.clear();
+    if (!withExamples || job.provider == nullptr) {
+        return;
+    }
+    const auto& consent = globalSettings().get().ai.cloudConsent;
+    if (providerIsLocal || consent.count(job.provider->info().id) != 0) {
+        job.examples = mm::core::personalExamples(set, job.settings.energyPct);
+    }
+}
 
 } // namespace
 
@@ -406,6 +423,7 @@ void ProcessorBase::generate() {
         job.timeoutSeconds = backend.timeoutSeconds;
         job.maxTokens = backend.maxTokens;
     }
+    addReferences(job, true, !backend.cloud);
     startJob(std::move(job));
 }
 
@@ -477,6 +495,7 @@ bool ProcessorBase::refine(const std::string& instruction, std::optional<size_t>
     job.timeoutSeconds = backend.timeoutSeconds;
     job.maxTokens = backend.maxTokens;
     job.refine = std::move(request);
+    addReferences(job, false, !backend.cloud); // a refinement sends the pattern, no examples; the set only protects
     startJob(std::move(job));
     return true;
 }

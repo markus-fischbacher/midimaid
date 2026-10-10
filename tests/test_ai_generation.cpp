@@ -491,3 +491,146 @@ TEST_CASE("a 16-bar answer is a motif that is repeated over the pattern", "[ai][
                                     [](const Note& n) { return n.startTick >= 14 * kTicksPerBar; });
     CHECK(last > 0);
 }
+
+// ---- the musician's own style (SPEC 3.20, D-86, D-87) ---------------------------------------------------------
+
+namespace {
+
+PersonalExample bassExample() {
+    PersonalExample example;
+    example.role = TrackRole::Bass;
+    example.root = 9;
+    example.scaleId = "natural_minor";
+    example.bars = 2;
+    example.notes = {{0, 0, 2}, {4, 7, 2}, {8, 12, 1}};
+    return example;
+}
+
+/// The reference entry of every voice with a distinctive line of the pattern.
+std::vector<ReferenceEntry> entriesOf(const Pattern& pattern) {
+    std::vector<ReferenceEntry> entries;
+    for (const auto& track : pattern.voices) {
+        ReferenceEntry entry;
+        entry.role = track.role;
+        entry.bars = pattern.lengthBars;
+        entry.notes = track.notes;
+        entries.push_back(entry);
+    }
+    return entries;
+}
+
+bool anyDistinctive(const std::vector<ReferenceEntry>& entries) {
+    return std::any_of(entries.begin(), entries.end(), [](const ReferenceEntry& e) { return isDistinctive(e); });
+}
+
+} // namespace
+
+TEST_CASE("the examples text names the role, length, key and the notes, and asks not to copy", "[ai][prompt][reference]") {
+    CHECK(personalExamplesText({}).empty());
+    PersonalExample melody = bassExample();
+    melody.role = TrackRole::Melody;
+    melody.bars = 1;
+    melody.root = 0;
+    melody.scaleId = "dorian";
+    melody.notes = {{3, -2, 4}};
+    const auto text = personalExamplesText({bassExample(), melody});
+    CHECK(contains(text, "The musician's own style"));
+    CHECK(contains(text, "do not copy"));
+    CHECK(contains(text, "precedence"));
+    CHECK(contains(text, "- bass, 2 bars, A natural_minor: 0:0/2 4:7/2 8:12/1\n"));
+    CHECK(contains(text, "- melody, 1 bar, C dorian: 3:-2/4\n"));
+}
+
+TEST_CASE("the examples go into the request prompt, and without them nothing of it is there", "[ai][generate][reference]") {
+    const auto style = shipped();
+    auto input = inputFor(style);
+    MockProvider without;
+    without.enqueueText(answerFor(algorithmic(style, 5), style));
+    REQUIRE(generateWithAi(without, input, CancellationToken()).outcome == AiOutcome::Success);
+    CHECK_FALSE(contains(without.requests()[0].userPrompt, "own style"));
+    CHECK_FALSE(contains(without.requests()[0].userPrompt, "{{"));
+
+    input.examples = {bassExample()};
+    MockProvider with;
+    with.enqueueText(answerFor(algorithmic(style, 5), style));
+    REQUIRE(generateWithAi(with, input, CancellationToken()).outcome == AiOutcome::Success);
+    const std::string user = with.requests()[0].userPrompt;
+    CHECK(contains(user, "- bass, 2 bars, A natural_minor: 0:0/2 4:7/2 8:12/1"));
+    CHECK_FALSE(contains(user, "{{"));
+    // the wish stays last, quoted
+    CHECK(user.find("own style") < user.find("<<<dark rolling bass>>>"));
+}
+
+TEST_CASE("the set id comes back in the pattern of the answer", "[ai][generate][reference]") {
+    const auto style = shipped();
+    auto input = inputFor(style);
+    MockProvider none;
+    none.enqueueText(answerFor(algorithmic(style, 5), style));
+    CHECK(generateWithAi(none, input, CancellationToken()).pattern.info.referenceSetId.empty());
+    input.referenceSetId = "default";
+    MockProvider some;
+    some.enqueueText(answerFor(algorithmic(style, 5), style));
+    CHECK(generateWithAi(some, input, CancellationToken()).pattern.info.referenceSetId == "default");
+}
+
+TEST_CASE("an answer that copies the set is shown under the minimum, not refused", "[ai][generate][reference]") {
+    const auto style = shipped();
+    Pattern source;
+    std::vector<ReferenceEntry> entries;
+    for (uint64_t seed = 1; seed <= 60 && !anyDistinctive(entries); ++seed) {
+        source = algorithmic(style, seed);
+        entries = entriesOf(source);
+    }
+    REQUIRE(anyDistinctive(entries));
+    const auto text = answerFor(source, style);
+    auto input = inputFor(style);
+
+    MockProvider plain;
+    plain.enqueueText(text);
+    const auto free = generateWithAi(plain, input, CancellationToken());
+    REQUIRE(free.outcome == AiOutcome::Success);
+    CHECK_FALSE(free.copyFlagged);
+
+    input.referenceSet = entries;
+    MockProvider guarded;
+    guarded.enqueueText(text);
+    const auto flagged = generateWithAi(guarded, input, CancellationToken());
+    REQUIRE(flagged.outcome == AiOutcome::Success); // not refused
+    CHECK(flagged.copyFlagged);
+    CHECK(flagged.belowMinScore);
+    CHECK(flagged.score == free.score); // the rating itself does not change
+    CHECK(flagged.requests == 1);
+
+    // an inactive set protects nothing
+    for (auto& entry : input.referenceSet) {
+        entry.active = false;
+    }
+    MockProvider inactive;
+    inactive.enqueueText(text);
+    const auto off = generateWithAi(inactive, input, CancellationToken());
+    CHECK_FALSE(off.copyFlagged);
+    CHECK(off.belowMinScore == free.belowMinScore);
+}
+
+TEST_CASE("a locked voice of the slot is not held against the answer", "[ai][generate][reference]") {
+    const auto style = shipped();
+    Pattern current;
+    std::vector<ReferenceEntry> entries;
+    for (uint64_t seed = 1; seed <= 60 && !anyDistinctive(entries); ++seed) {
+        current = algorithmic(style, seed);
+        entries = entriesOf(current);
+    }
+    REQUIRE(anyDistinctive(entries));
+    // the answer repeats the pattern; both voices of `current` are locked, so nothing generated can be a copy
+    for (auto& track : current.voices) {
+        track.lock = LockFlags{true, true, true};
+    }
+    MockProvider mock;
+    mock.enqueueText(answerFor(current, style));
+    auto input = inputFor(style);
+    input.lockedFrom = current;
+    input.referenceSet = entries;
+    const auto result = generateWithAi(mock, input, CancellationToken());
+    REQUIRE(result.outcome == AiOutcome::Success);
+    CHECK_FALSE(result.copyFlagged);
+}

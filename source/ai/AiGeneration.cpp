@@ -5,6 +5,7 @@
 #include "ai/PhraseShaping.h"
 #include "core/Archetype.h"
 #include "core/Constraints.h"
+#include "core/CopyProtection.h"
 #include "core/Quality.h"
 
 #include <algorithm>
@@ -96,6 +97,7 @@ ExchangeAttempt makePattern(const std::string& text, const AiGenerateInput& inpu
             return attempt;
         }
     }
+    pattern.info.referenceSetId = input.referenceSetId;
     attempt.pattern = std::move(pattern);
     attempt.ok = true;
     return attempt;
@@ -111,6 +113,7 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
     }
     GeneratePromptInput promptInput = input.prompt;
     promptInput.style = input.style;
+    promptInput.examples = input.examples;
     if (input.lockedFrom) {
         const Pattern& locked = *input.lockedFrom;
         promptInput.lengthBars = locked.lengthBars;
@@ -138,12 +141,13 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
     const std::string providerId = provider.info().id;
     return runExchange(
         provider, *prompt, request, *input.style, input.prompt.energyPct, input.prompt.creativityPct,
-        [&](const std::string& answer) { return makePattern(answer, input, providerId); }, token);
+        [&](const std::string& answer) { return makePattern(answer, input, providerId); }, token, input.referenceSet);
 }
 
 AiGenerateResult runExchange(IAiProvider& provider, const Prompt& prompt, AiRequest request,
                              const mm::core::StyleProfile& style, int energyPct, int creativityPct,
-                             const MakeAttempt& makeAttempt, const CancellationToken& token) {
+                             const MakeAttempt& makeAttempt, const CancellationToken& token,
+                             const std::vector<mm::core::ReferenceEntry>& reference) {
     using namespace mm::core;
     AiGenerateResult result;
     result.systemPrompt = prompt.system;
@@ -189,6 +193,10 @@ AiGenerateResult runExchange(IAiProvider& provider, const Prompt& prompt, AiRequ
             result.score = std::clamp(overallScore(scores, style.quality, creativityPct), 0, 100);
             attempt.pattern.qualityScore = static_cast<uint8_t>(result.score);
             result.belowMinScore = result.score < style.quality.minScore;
+            if (!reference.empty() && checkCopyProtection(attempt.pattern, reference).violated) {
+                result.copyFlagged = true;
+                result.belowMinScore = true; // shown under the minimum, not refused (SPEC 4.4)
+            }
             result.pattern = std::move(attempt.pattern);
             return result;
         }

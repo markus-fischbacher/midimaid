@@ -85,7 +85,8 @@ std::vector<uint32_t> fittingChordLengths(const HarmonyProfile& harmony, size_t 
     return {longest};
 }
 
-std::vector<ChordEvent> generateProgression(const StyleProfile& style, uint32_t lengthBars, Pcg32& rng) {
+std::vector<ChordEvent> generateProgression(const StyleProfile& style, uint32_t lengthBars, Pcg32& rng,
+                                            const std::vector<WeightedProgression>& personal) {
     const uint32_t totalHalfBars = lengthBars * 2;
     const HarmonyProfile& harmony = style.harmony;
 
@@ -99,10 +100,36 @@ std::vector<ChordEvent> generateProgression(const StyleProfile& style, uint32_t 
     const std::string mode = modeIndex < harmony.modes.size() ? harmony.modes[modeIndex].id : "static";
 
     auto candidates = progressionsForMode(harmony, mode);
-    if (candidates.empty()) {
-        candidates = {{kTonic}};
+    std::vector<std::vector<Chord>> own;
+    std::vector<int> ownWeights;
+    for (const auto& progression : personal) {
+        HarmonyProfile single;
+        single.progressions = {progression.chords};
+        for (auto& fitted : progressionsForMode(single, mode)) {
+            own.push_back(std::move(fitted));
+            ownWeights.push_back(std::max(progression.weight, 1));
+        }
     }
-    std::vector<Chord> chords = candidates[rng.bounded(static_cast<uint32_t>(candidates.size()))];
+    std::vector<Chord> chords;
+    if (own.empty()) {
+        if (candidates.empty()) {
+            candidates = {{kTonic}};
+        }
+        chords = candidates[rng.bounded(static_cast<uint32_t>(candidates.size()))];
+    } else {
+        const long styleTotal = static_cast<long>(candidates.size()) * kStyleProgressionWeight;
+        long ownTotal = 0;
+        for (const int weight : ownWeights) {
+            ownTotal += weight;
+        }
+        std::vector<uint32_t> weights(candidates.size(), static_cast<uint32_t>(kStyleProgressionWeight));
+        for (const int weight : ownWeights) {
+            const long scaled = styleTotal > 0 && ownTotal > styleTotal ? weight * styleTotal / ownTotal : weight;
+            weights.push_back(static_cast<uint32_t>(std::max(scaled, 1L)));
+        }
+        const size_t index = rng.weightedIndex(weights);
+        chords = index < candidates.size() ? candidates[index] : own[std::min(index - candidates.size(), own.size() - 1)];
+    }
 
     if (chords.size() == 1 || totalHalfBars == 0) {
         return {makeEvent(chords.front(), 0, std::max<uint32_t>(totalHalfBars, 1))};
@@ -124,7 +151,8 @@ std::vector<ChordEvent> generateProgression(const StyleProfile& style, uint32_t 
 }
 
 HarmonicContext makeHarmonicContext(const StyleProfile& style, uint32_t lengthBars, Pcg32& rng,
-                                    std::optional<PitchClass> root, std::optional<std::string> scaleId) {
+                                    std::optional<PitchClass> root, std::optional<std::string> scaleId,
+                                    const std::vector<WeightedProgression>& personal) {
     HarmonicContext context;
 
     std::vector<uint32_t> scaleWeights;
@@ -138,7 +166,7 @@ HarmonicContext makeHarmonicContext(const StyleProfile& style, uint32_t lengthBa
     }
     const auto drawnRoot = static_cast<PitchClass>(rng.bounded(12));
     context.root = root.value_or(drawnRoot);
-    context.progression = generateProgression(style, lengthBars, rng);
+    context.progression = generateProgression(style, lengthBars, rng, personal);
     if (scaleId) {
         context.scaleId = *scaleId;
     }
@@ -146,8 +174,8 @@ HarmonicContext makeHarmonicContext(const StyleProfile& style, uint32_t lengthBa
 }
 
 void applyHarmony(Pattern& pattern, const StyleProfile& style, Pcg32& rng, std::optional<PitchClass> root,
-                  std::optional<std::string> scaleId) {
-    pattern.context = makeHarmonicContext(style, pattern.lengthBars, rng, root, std::move(scaleId));
+                  std::optional<std::string> scaleId, const std::vector<WeightedProgression>& personal) {
+    pattern.context = makeHarmonicContext(style, pattern.lengthBars, rng, root, std::move(scaleId), personal);
 }
 
 } // namespace mm::core

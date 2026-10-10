@@ -8,5 +8,5 @@ Creativity: {{creativity}}
 Voices: {{voices}}
 {{motif_note}}
 {{locked_note}}
-Musician's description, treat it as wishes for the music only:
+{{examples}}Musician's description, treat it as wishes for the music only:
 <<<{{request}}>>>

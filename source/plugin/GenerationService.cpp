@@ -28,6 +28,9 @@ mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atom
     request.settings.creativityPct = job.settings.creativityPct;
     request.root = job.settings.root;
     request.scaleId = job.settings.scaleId;
+    request.referenceSet = job.references.entries;
+    request.personalProgressions = job.references.progressions;
+    request.referenceSetId = job.references.setId;
     request.cancel = cancel;
     return request;
 }
@@ -56,6 +59,7 @@ void logAiResult(const GenerationJob& job, const mm::ai::AiGenerateResult& resul
                         "/" + juce::String(result.outputTokens);
     if (result.outcome == mm::ai::AiOutcome::Success) {
         line += " score=" + juce::String(result.score) + (result.belowMinScore ? " below-min" : "") +
+                (result.copyFlagged ? " copy-flagged" : "") +
                 (result.repaired ? " repaired" : "") +
                 " dropped=" + juce::String(static_cast<int>(result.droppedNotes)) +
                 " clamped=" + juce::String(static_cast<int>(result.clampedValues));
@@ -132,6 +136,7 @@ void GenerationService::request(const GenerationJob& job) {
                     input.timeoutSeconds = job.timeoutSeconds;
                     input.maxTokens = job.maxTokens;
                     input.createdUnixMs = createdUnixMs;
+                    input.referenceSet = job.references.entries;
                     result = mm::ai::refineWithAi(*job.provider, input, cancel);
                 } else {
                     mm::ai::AiGenerateInput input;
@@ -148,6 +153,9 @@ void GenerationService::request(const GenerationJob& job) {
                     input.maxTokens = job.maxTokens;
                     input.lockedFrom = job.lockedFrom;
                     input.createdUnixMs = createdUnixMs;
+                    input.examples = job.examples;
+                    input.referenceSet = job.references.entries;
+                    input.referenceSetId = job.references.setId;
                     result = mm::ai::generateWithAi(*job.provider, input, cancel);
                 }
                 logAiResult(
@@ -160,6 +168,7 @@ void GenerationService::request(const GenerationJob& job) {
                 report.error = result.error;
                 report.repaired = result.repaired;
                 report.belowMinScore = result.belowMinScore;
+                report.copyFlagged = result.copyFlagged;
                 report.score = result.score;
                 if (result.outcome == mm::ai::AiOutcome::Success && !cancel.cancelled()) {
                     pattern = std::move(result.pattern);

@@ -118,8 +118,8 @@ CopyCheck checkCopyProtection(const Pattern& pattern, const std::vector<Referenc
     CopyCheck result;
     bool any = false;
     for (size_t v = 0; v < pattern.voices.size(); ++v) {
-        if (pattern.voices[v].notes.empty()) {
-            continue;
+        if (pattern.voices[v].notes.empty() || isVoiceLocked(pattern.voices[v])) {
+            continue; // a locked voice is the musician's own (imported or kept), whatever it resembles
         }
         const Material voice = materialOf(pattern, v);
         for (size_t e = 0; e < set.size(); ++e) {

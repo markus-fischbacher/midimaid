@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Pattern.h"
+#include "core/ReferenceProfile.h"
 #include "core/StyleProfile.h"
 
 #include <cstddef>
@@ -74,7 +75,14 @@ struct GeneratePromptInput {
     /// for, which the answer must keep. Empty: nothing is locked.
     std::vector<std::string> lockedRoles;
     std::vector<std::string> fixedProgression;
+    /// Pieces of the musician's own style (SPEC 3.20, 7.4): at most `kMaxPersonalExamples`, shown as "the musician's
+    /// style" and ahead of every other example. The caller leaves them out when the provider has no consent (D-86).
+    std::vector<mm::core::PersonalExample> examples;
 };
+
+/// The prompt text for the musician's examples (empty for none): one line per example with the role, the length, the key
+/// and the notes as `step:semitones/length`, and the instruction to pick the style up without copying it.
+std::string personalExamplesText(const std::vector<mm::core::PersonalExample>& examples);
 
 /// The request for "Generate" with an AI provider (SPEC 7.4). Nullopt without a style.
 std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, const GeneratePromptInput& input);

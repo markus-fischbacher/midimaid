@@ -247,7 +247,7 @@ AiGenerateResult refineWithAi(IAiProvider& provider, const AiRefineInput& input,
     request.maxTokens = input.maxTokens;
     request.timeoutSeconds = input.timeoutSeconds;
     return runExchange(provider, *prompt, request, *input.style, input.energyPct, input.creativityPct, makeAttempt,
-                       token);
+                       token, input.referenceSet);
 }
 
 } // namespace mm::ai

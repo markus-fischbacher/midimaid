@@ -170,6 +170,7 @@ void AiConnection::refresh() {
                 choice = choiceFrom(it->second);
             }
             settings.provider = provider;
+            settings.cloud = entry->cloud;
             settings.model = mm::ai::effectiveModel(*entry, choice);
             settings.timeoutSeconds = mm::ai::effectiveTimeout(*entry, choice);
             settings.maxTokens = mm::ai::effectiveMaxTokens(choice);

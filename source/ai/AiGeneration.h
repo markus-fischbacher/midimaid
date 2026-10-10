@@ -23,6 +23,11 @@ struct AiGenerateInput {
     /// stay, the answer only writes the other voices.
     std::optional<mm::core::Pattern> lockedFrom;
     int64_t createdUnixMs = 0;
+    /// The musician's own examples for the prompt (empty: none, or no consent of this provider, D-86) and the active
+    /// entries of the reference set for the copy protection of the answer (SPEC 3.20, D-87).
+    std::vector<mm::core::PersonalExample> examples;
+    std::vector<mm::core::ReferenceEntry> referenceSet;
+    std::string referenceSetId; ///< stored in the pattern when a set was active (empty: none)
 };
 
 enum class AiOutcome {
@@ -41,6 +46,7 @@ struct AiGenerateResult {
     bool repaired = false;      ///< the first answer was unusable and the second one worked
     int score = 0;              ///< the quality rating (0-100) of the pattern
     bool belowMinScore = false; ///< the score is under the minimum of the style (SPEC 4.4): shown, not refused
+    bool copyFlagged = false;   ///< the answer is too close to an entry of the set (D-87): `belowMinScore` is set too
     int requests = 0;           ///< how many requests were sent (1 or 2)
     int inputTokens = 0;
     int outputTokens = 0;
