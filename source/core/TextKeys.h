@@ -162,6 +162,31 @@ namespace mm::core::text {
     X(kReferencesRoleBass, "references.role.bass")                                                                 \
     X(kReferencesRoleMelody, "references.role.melody")                                                             \
     X(kReferencesWeight, "references.weight")                                                                      \
+    X(kButtonLibrary, "button.library")                                                                            \
+    X(kLibraryTitle, "library.title")                                                                              \
+    X(kLibrarySaveSlot, "library.saveSlot")                                                                        \
+    X(kLibrarySaveSet, "library.saveSet")                                                                          \
+    X(kLibraryLoad, "library.load")                                                                                \
+    X(kLibraryRename, "library.rename")                                                                            \
+    X(kLibraryRemove, "library.remove")                                                                            \
+    X(kLibraryRemoveConfirm, "library.removeConfirm")                                                              \
+    X(kLibraryExport, "library.export")                                                                            \
+    X(kLibraryImport, "library.import")                                                                            \
+    X(kLibraryNameHint, "library.nameHint")                                                                        \
+    X(kLibraryEmpty, "library.empty")                                                                              \
+    X(kLibraryInfoPattern, "library.infoPattern")                                                                  \
+    X(kLibraryInfoSet, "library.infoSet")                                                                          \
+    X(kLibrarySummary, "library.summary")                                                                          \
+    X(kStatusLibrarySaved, "status.librarySaved")                                                                  \
+    X(kStatusLibrarySetSaved, "status.librarySetSaved")                                                            \
+    X(kStatusLibraryNothing, "status.libraryNothing")                                                              \
+    X(kStatusLibraryFull, "status.libraryFull")                                                                    \
+    X(kStatusLibraryLoaded, "status.libraryLoaded")                                                                \
+    X(kStatusLibrarySetLoaded, "status.librarySetLoaded")                                                          \
+    X(kStatusLibraryLoadFailed, "status.libraryLoadFailed")                                                        \
+    X(kStatusLibraryImported, "status.libraryImported")                                                            \
+    X(kStatusLibraryExported, "status.libraryExported")                                                            \
+    X(kStatusLibraryExportFailed, "status.libraryExportFailed")                                                    \
     X(kButtonClose, "button.close")                                                                                    \
     X(kStatusNoResult, "status.noResult")                                                                              \
     X(kStatusUseHub, "status.useHub")                                                                                  \

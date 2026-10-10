@@ -78,6 +78,7 @@ private:
     juce::TextButton undoButton_;
     juce::TextButton redoButton_;
     juce::TextButton referencesButton_;
+    juce::TextButton libraryButton_;
     juce::TextButton drumsButton_;
     juce::TextButton historyBackButton_;
     juce::TextButton historyForwardButton_;

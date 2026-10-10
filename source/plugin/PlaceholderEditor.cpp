@@ -6,6 +6,7 @@
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
+#include "plugin/LibraryDialog.h"
 #include "plugin/ReferencesDialog.h"
 #include "plugin/SettingsDialog.h"
 
@@ -300,6 +301,10 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
                                style != nullptr ? juce::String::fromUTF8(style->nameDe.c_str()) : juce::String(id));
     };
     addChildComponent(referencesButton_);
+    libraryButton_.setButtonText(tr(keys::kButtonLibrary));
+    libraryButton_.setComponentID("library");
+    libraryButton_.onClick = [this] { LibraryDialog::show(processor_, processor_.libraryAliveFlag()); };
+    addChildComponent(libraryButton_);
     errorSettingsButton_.setButtonText(tr(keys::kButtonSettings));
     errorSettingsButton_.setComponentID("errorSettings");
     errorSettingsButton_.onClick = [] { SettingsDialog::show(); };
@@ -531,6 +536,18 @@ void PlaceholderEditor::updateStatus() {
     case GenerationStatus::ImportApplied:
         statusLabel_.setText(tr(keys::kStatusImportApplied), juce::dontSendNotification);
         break;
+    case GenerationStatus::LibrarySaved:
+    case GenerationStatus::LibrarySetSaved:
+    case GenerationStatus::LibraryNothingToSave:
+    case GenerationStatus::LibraryFull:
+    case GenerationStatus::LibraryLoaded:
+    case GenerationStatus::LibrarySetLoaded:
+    case GenerationStatus::LibraryLoadFailed:
+    case GenerationStatus::LibraryImported:
+    case GenerationStatus::LibraryExported:
+    case GenerationStatus::LibraryExportFailed:
+        statusLabel_.setText(tr(libraryStatusKey(processor_.generationStatus())), juce::dontSendNotification);
+        break;
     case GenerationStatus::ImportNotFourFour:
         statusLabel_.setText(tr(keys::kStatusImportNotFourFour), juce::dontSendNotification);
         break;
@@ -630,7 +647,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
-             &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_,
+             &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
              &expertButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
@@ -976,6 +993,8 @@ void PlaceholderEditor::resized() {
         settingsButton_.setBounds(roles.removeFromRight(120));
         roles.removeFromRight(8);
         referencesButton_.setBounds(roles.removeFromRight(110));
+        roles.removeFromRight(8);
+        libraryButton_.setBounds(roles.removeFromRight(110));
         roles.removeFromRight(8);
     }
     takeOverButton_.setBounds(roles.removeFromRight(120));
