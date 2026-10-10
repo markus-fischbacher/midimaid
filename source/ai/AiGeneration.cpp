@@ -2,6 +2,7 @@
 
 #include "ai/AiExchange.h"
 #include "ai/PatternCompact.h"
+#include "ai/PhraseShaping.h"
 #include "core/Archetype.h"
 #include "core/Constraints.h"
 #include "core/Quality.h"
@@ -60,6 +61,15 @@ ExchangeAttempt makePattern(const std::string& text, const AiGenerateInput& inpu
         return attempt;
     }
     Pattern pattern = built.pattern;
+    const bool fromMotif = context.lengthBars > 8 && std::any_of(draft.voices.begin(), draft.voices.end(),
+                                                                 [](const AiVoiceDraft& v) { return v.motifBars; });
+    if (fromMotif) {
+        // The phrases were tiled from the motif: give each its role (SPEC 3.7).
+        ArchetypeSettings settings;
+        settings.energyPct = input.prompt.energyPct;
+        settings.creativityPct = input.prompt.creativityPct;
+        shapePhrasesByRole(pattern, *input.style, settings);
+    }
 
     if (locked != nullptr) {
         pattern.phrases = locked->phrases;

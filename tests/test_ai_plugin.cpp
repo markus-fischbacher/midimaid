@@ -652,3 +652,120 @@ TEST_CASE("the voice layout has no refine controls", "[ai-plugin][refine][editor
     REQUIRE(button != nullptr);
     CHECK(pumpUntil([&] { return !button->isVisible(); }));
 }
+
+namespace {
+
+/// A valid but poor answer for 2 bars: the bass only on the kick steps with different notes and no repetition, the
+/// melody on every 16th with notes drawn without a motif, all of one length. It scores under the minimum of the style
+/// (50 for Peak Time).
+std::string noisyAnswer() {
+    uint32_t state = 12345;
+    const auto next = [&state](uint32_t range) {
+        state = state * 1664525u + 1013904223u;
+        return (state >> 16) % range;
+    };
+    std::string voices;
+    for (const char* role : {"bass", "melody"}) {
+        const bool bass = std::string(role) == "bass";
+        std::string notes;
+        for (int step = 0; step < 32; step += bass ? 4 : 1) {
+            notes += std::string(notes.empty() ? "" : ",") + R"({"step":)" + std::to_string(step) + R"(,"degree":)" +
+                     std::to_string(1 + next(7)) + R"(,"alt":)" + std::to_string(int(next(3)) - 1) + R"(,"octave":)" +
+                     std::to_string(bass ? 0 : int(next(3)) - 1) + R"(,"len":1,"vel":127})";
+        }
+        voices += std::string(voices.empty() ? "" : ",") + R"({"role":")" + role + R"(","notes":[)" + notes + "]}";
+    }
+    return R"({"schema_version":1,"context":{"root":"A","scale":"natural_minor","progression":["i"]},"voices":[)" +
+           voices + "]}";
+}
+
+juce::Label* statusLabelOf(juce::AudioProcessorEditor& editor) {
+    return dynamic_cast<juce::Label*>(findById(editor, "status"));
+}
+
+} // namespace
+
+TEST_CASE("an AI result under the minimum of the style is delivered and the status shows its rating",
+          "[ai-plugin][quality][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    auto settings = processor.instanceSettings();
+    settings.generation.lengthBars = 2;
+    processor.setInstanceSettings(settings);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* label = statusLabelOf(*editor);
+    REQUIRE(label != nullptr);
+
+    auto provider = mock();
+    provider->enqueueText(noisyAnswer());
+    ScopedAiBackend backend(backendWith(provider));
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(processor.generationStatus() == GenerationStatus::Done);
+    REQUIRE(processor.lastReport().belowMinScore);
+    CHECK_FALSE(slotEmpty(processor)); // shown and kept, not refused
+    CHECK(processor.lastReport().score == processor.slotsSnapshot().slot(0)->pattern->qualityScore);
+    const auto firstScore = processor.lastReport().score;
+    const auto score = std::to_string(firstScore);
+    REQUIRE(pumpUntil([&] { return label->getText().contains("Qualit"); }));
+    CHECK(label->getText().contains(score));
+
+    // the same for a refinement
+    const auto first = *processor.slotsSnapshot().slot(0)->pattern;
+    provider->enqueueText(noisyAnswer());
+    REQUIRE(processor.refine("noisier"));
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(processor.generationStatus() == GenerationStatus::Refined);
+    REQUIRE(processor.lastReport().belowMinScore);
+    REQUIRE(pumpUntil([&] { return label->getText().contains("Qualit"); }));
+    CHECK(label->getText().contains(std::to_string(processor.lastReport().score)));
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices != first.voices);
+    CHECK(processor.lastReport().score == processor.slotsSnapshot().slot(0)->pattern->qualityScore);
+}
+
+TEST_CASE("a good AI result shows the plain done message", "[ai-plugin][quality][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* label = statusLabelOf(*editor);
+    REQUIRE(label != nullptr);
+    auto provider = mock();
+    provider->enqueueText(validAnswer(processor));
+    ScopedAiBackend backend(backendWith(provider));
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(processor.generationStatus() == GenerationStatus::Done);
+    if (!processor.lastReport().belowMinScore) {
+        REQUIRE(pumpUntil([&] { return !label->getText().isEmpty(); }));
+        CHECK_FALSE(label->getText().contains("Qualit"));
+    }
+}
+
+TEST_CASE("the creativity slider reaches the temperature and the prompt, for generating and refining",
+          "[ai-plugin][creativity]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    for (const int creativity : {90, 10}) {
+        auto settings = processor.instanceSettings();
+        settings.generation.creativityPct = creativity;
+        settings.generation.lengthBars = 2;
+        processor.setInstanceSettings(settings);
+        auto provider = mock();
+        provider->enqueueText(validAnswer(processor, 5, 2));
+        ScopedAiBackend backend(backendWith(provider));
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return finished(processor); }));
+        REQUIRE(processor.generationStatus() == GenerationStatus::Done);
+        const auto pattern = *processor.slotsSnapshot().slot(0)->pattern;
+        provider->enqueueText(mm::ai::patternToSchemaJson(pattern, processor.styles().find("peak_time"), true)->json);
+        REQUIRE(processor.refine("anything"));
+        REQUIRE(pumpUntil([&] { return finished(processor); }));
+        REQUIRE(provider->requestCount() == 2);
+        for (const auto& request : provider->requests()) {
+            CHECK(request.temperature == creativity / 100.0);
+            CHECK(request.userPrompt.find(std::to_string(creativity) + " percent") != std::string::npos);
+            CHECK(request.userPrompt.find(creativity > 50 ? "experimental" : "stay close to the style") !=
+                  std::string::npos);
+        }
+    }
+}
