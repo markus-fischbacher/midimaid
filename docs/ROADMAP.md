@@ -212,7 +212,7 @@ Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set 
 - [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5)
 - [ ] Nutzerhandbuch (kurz)
 - [ ] Vollständige manuelle Testmatrix (Anhang, v1.0-Zeilen)
-- [ ] Determinismus-Gesamttest: Pattern speichern, Referenz-Set ändern, Projekt neu laden, Ausgabe
+- [x] Determinismus-Gesamttest: Pattern speichern, Referenz-Set ändern, Projekt neu laden, Ausgabe
       bitgenau vergleichen (FEATURES.md W7)
 
 **Abnahme v1.0:** Alle Phasen-Abnahmen erfüllt, Testmatrix v1.0 grün, eine Woche Einsatz in eigenen
