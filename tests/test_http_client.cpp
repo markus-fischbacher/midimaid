@@ -145,6 +145,26 @@ TEST_CASE("a server that never answers ends with a timeout", "[net]") {
     CHECK(std::chrono::steady_clock::now() - start < 6s);
 }
 
+TEST_CASE("a slow answer is not cut off by the connection timeout", "[net]") {
+    // A local model can think for a long time before the first byte: only the time of the whole request counts.
+    FakeHttpServer server([](const FakeRequest&) { return FakeReply{200, R"({"ok":true})", {}, 2500, false}; });
+    mm::plugin::JuceHttpClient client;
+    auto request = requestTo(server);
+    request.connectTimeoutSeconds = 1;
+    request.timeoutSeconds = 20;
+    const auto response = client.send(request, CancellationToken());
+    CHECK(response.error == HttpError::None);
+    CHECK(response.status == 200);
+}
+
+TEST_CASE("a timeout of the system is reported as a timeout, not as a missing connection", "[net]") {
+    FakeHttpServer server([](const FakeRequest&) { return FakeReply{200, "{}", {}, 20000, false}; });
+    mm::plugin::JuceHttpClient client;
+    auto request = requestTo(server);
+    request.timeoutSeconds = 2;
+    CHECK(client.send(request, CancellationToken()).error == HttpError::Timeout);
+}
+
 TEST_CASE("an answer that stops half way is an error, not a short answer", "[net]") {
     FakeHttpServer server([](const FakeRequest&) {
         FakeReply reply;
@@ -157,7 +177,38 @@ TEST_CASE("an answer that stops half way is an error, not a short answer", "[net
     auto request = requestTo(server);
     request.timeoutSeconds = 1;
     const auto response = client.send(request, CancellationToken());
+    INFO("error=" << static_cast<int>(response.error) << " status=" << response.status
+                  << " body=" << response.body.size());
     CHECK(response.error == HttpError::Timeout);
+}
+
+TEST_CASE("a chunked answer arrives complete", "[net]") {
+    const std::string body(1234, 'y');
+    FakeHttpServer server([&](const FakeRequest&) {
+        FakeReply reply;
+        reply.body = body;
+        reply.chunked = true;
+        return reply;
+    });
+    mm::plugin::JuceHttpClient client;
+    const auto response = client.send(requestTo(server), CancellationToken());
+    CHECK(response.error == HttpError::None);
+    CHECK(response.status == 200);
+    CHECK(response.body == body);
+}
+
+TEST_CASE("an answer that is cut off by the server is a connection error, not a timeout", "[net]") {
+    FakeHttpServer server([](const FakeRequest&) {
+        FakeReply reply;
+        reply.body = std::string(1000, 'x');
+        reply.partialBytes = 100;
+        reply.delayMs = 300; // then the server hangs up
+        return reply;
+    });
+    mm::plugin::JuceHttpClient client;
+    auto request = requestTo(server);
+    request.timeoutSeconds = 20;
+    CHECK(client.send(request, CancellationToken()).error == HttpError::Connection);
 }
 
 TEST_CASE("a cancel ends the open connection at once", "[net]") {

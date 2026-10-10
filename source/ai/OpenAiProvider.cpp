@@ -31,8 +31,16 @@ std::string firstContent(const json& answer) {
         return {};
     }
     const auto& message = choice["message"];
-    if (message.contains("content") && message["content"].is_string()) {
+    if (message.contains("content") && message["content"].is_string() &&
+        !message["content"].get<std::string>().empty()) {
         return message["content"].get<std::string>();
+    }
+    // Reasoning models behind LM Studio and others can put the whole answer, structured output included, into the
+    // reasoning field and leave `content` empty. The parser decides whether it is a usable answer.
+    for (const char* field : {"reasoning_content", "reasoning"}) {
+        if (message.contains(field) && message[field].is_string() && !message[field].get<std::string>().empty()) {
+            return message[field].get<std::string>();
+        }
     }
     return {};
 }
