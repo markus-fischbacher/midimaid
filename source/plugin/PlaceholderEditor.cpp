@@ -126,6 +126,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
                 [&](mm::core::GlobalSettings& global) { global.startRoot = *next.generation.root; });
         }
         processor_.setInstanceSettings(next);
+        correctSlotKey(next);
     };
     addChildComponent(keyBox_);
 
@@ -233,6 +234,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
                 [&](mm::core::GlobalSettings& global) { global.startScaleId = *next.generation.scaleId; });
         }
         processor_.setInstanceSettings(next);
+        correctSlotKey(next);
     };
     addChildComponent(scaleBox_);
 
@@ -466,13 +468,15 @@ void PlaceholderEditor::updateStatus() {
         break;
     case GenerationStatus::Done:
     case GenerationStatus::DoneLocked:
+    case GenerationStatus::DoneImportCut:
     case GenerationStatus::Refined: {
         // An AI result under the minimum of the style is shown and kept (SPEC 4.4): the rating is part of the message.
         const auto& report = processor_.lastReport();
         const auto status = processor_.generationStatus();
-        const std::string_view done = status == GenerationStatus::Refined      ? keys::kStatusRefined
-                                      : status == GenerationStatus::DoneLocked ? keys::kStatusDoneLocked
-                                                                               : keys::kStatusDone;
+        const std::string_view done = status == GenerationStatus::Refined          ? keys::kStatusRefined
+                                      : status == GenerationStatus::DoneImportCut  ? keys::kStatusDoneImportCut
+                                      : status == GenerationStatus::DoneLocked     ? keys::kStatusDoneLocked
+                                                                                   : keys::kStatusDone;
         statusLabel_.setText(report.usedAi && report.belowMinScore
                                  ? tr(keys::kStatusBelowQuality, {{"score", std::to_string(report.score)}})
                                  : tr(done),
@@ -490,6 +494,9 @@ void PlaceholderEditor::updateStatus() {
                              juce::dontSendNotification);
         break;
     }
+    case GenerationStatus::ImportApplied:
+        statusLabel_.setText(tr(keys::kStatusImportApplied), juce::dontSendNotification);
+        break;
     case GenerationStatus::ImportNotFourFour:
         statusLabel_.setText(tr(keys::kStatusImportNotFourFour), juce::dontSendNotification);
         break;
@@ -743,6 +750,15 @@ void PlaceholderEditor::updateActionButtons() {
     varyAllButton_.setEnabled(anyFilled);
 }
 
+void PlaceholderEditor::correctSlotKey(const mm::core::InstanceSettings& settings) {
+    // A slot with a locked voice keeps it: the key the musician picks then corrects the harmony found for it
+    // (SPEC 3.18); without a locked voice the key only applies to the next generation.
+    if (settings.generation.root && settings.generation.scaleId) {
+        processor_.correctKey(*settings.generation.root, *settings.generation.scaleId);
+    }
+    updateStatus();
+}
+
 void PlaceholderEditor::rebuildRows(size_t count) {
     rows_.clear();
     for (size_t i = 0; i < count; ++i) {
@@ -755,7 +771,7 @@ void PlaceholderEditor::rebuildRows(size_t count) {
         };
         row->onAction = [this] { updateStatus(); };
         row->onMidiDropped = [this](int voice, const juce::File& file) {
-            processor_.importMidi(file, static_cast<size_t>(voice - 1));
+            processor_.importVoice(file, static_cast<size_t>(voice - 1));
             updateStatus();
         };
         addAndMakeVisible(*row);
@@ -773,7 +789,7 @@ bool PlaceholderEditor::isInterestedInFileDrag(const juce::StringArray& files) {
 
 void PlaceholderEditor::filesDropped(const juce::StringArray& files, int, int) {
     if (const auto file = firstMidiFile(files); voiceLayout_ && file != juce::File()) {
-        processor_.importMidi(file);
+        processor_.importVoice(file);
         updateStatus();
     }
 }

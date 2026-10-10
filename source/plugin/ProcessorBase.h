@@ -51,7 +51,9 @@ enum class GenerationStatus {
     ImportReadCut,       ///< the same, but the clip is longer than 16 bars: only the first 16 count
     ImportNotFourFour,   ///< the file has a time signature other than 4/4: no import
     ImportNoNotes,       ///< the file has no notes
-    ImportUnreadable     ///< the file is no usable MIDI file
+    ImportUnreadable,    ///< the file is no usable MIDI file
+    ImportApplied,       ///< the voice was imported; the other voices were not generated (another slot is selected)
+    DoneImportCut        ///< the other voices were generated around the imported one; the clip was cut to 16 bars
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -256,6 +258,15 @@ public:
     /// False for a file that cannot be a MIDI file by its name. A voice instance imports for its own voice.
     bool importMidi(const juce::File& file, std::optional<size_t> voice = std::nullopt);
     const std::optional<PendingImport>& pendingImport() const { return pendingImport_; }
+    /// Message thread: like `importMidi`, and once the file is read the clip replaces the voice in the slot that was
+    /// selected at the drop (SPEC 3.18, D-178): locked in every dimension, the key, scale and progression of the slot
+    /// and the settings come from the analysis, the other voices are generated around it. One undo step for the import,
+    /// one for the generation. A voice instance gets `UseHub`.
+    bool importVoice(const juce::File& file, std::optional<size_t> voice = std::nullopt);
+    /// Message thread: the musician corrects the key of a slot with imported (locked) voices: the root and the scale
+    /// are set, the progression is derived again from the locked voices. False for an unknown scale, a slot without
+    /// locked voice, a voice instance.
+    bool correctKey(mm::core::PitchClass root, const std::string& scaleId, std::optional<size_t> slot = std::nullopt);
     /// Message thread: the pending import is used up (or dismissed).
     void clearPendingImport() { pendingImport_.reset(); }
     /// True when the last request was a refinement (message thread).
@@ -293,6 +304,8 @@ private:
     void startJob(GenerationJob job);
     void onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern);
     void onImported(const ImportRequest& request, ImportOutcome outcome);
+    bool startImport(const juce::File& file, std::optional<size_t> voice, bool apply);
+    void applyImport(const ImportRequest& request, const mm::core::ImportPlan& plan);
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
     void updateSlotMode(); // message thread
@@ -368,6 +381,7 @@ private:
     int channelMember_ = mm::engine::GroupChannel::kNone; // message thread
     std::shared_ptr<GroupLink> groupLink_;
     std::optional<PendingImport> pendingImport_;
+    bool importCut_ = false; ///< the import that started the running generation was cut to 16 bars
     MidiImportService importer_;  // before the generator: both are destroyed before the members they call into
     GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance
 
