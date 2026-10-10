@@ -36,6 +36,8 @@ private:
     void updateVoiceView();
     /// The hub UI: fields, slot strip, rows of the playing slot, info line.
     void updateFullView();
+    void updateRefineControls();
+    void startRefine();
     void syncFields(const mm::core::InstanceSettings& settings);
     void rebuildRows(size_t count);
     /// Hands the grid and the pitch snapping to every roll of the hub UI.
@@ -74,7 +76,10 @@ private:
     juce::TextButton historyBackButton_;
     juce::TextButton historyForwardButton_;
     juce::Label historyLabel_;
-    juce::TextEditor promptEditor_;        // hub: what the AI is asked for (D-168)
+    juce::TextEditor promptEditor_; // hub: what the AI is asked for (D-168)
+    juce::TextEditor refineEditor_; // hub: what to change in the pattern of the slot (SPEC 3.15, D-173)
+    juce::ComboBox refineScopeBox_; // hub: the whole pattern, one voice or one phrase
+    juce::TextButton refineButton_;
     juce::TextButton settingsButton_;      // opens the settings dialog
     juce::TextButton errorSettingsButton_; // in the error bar: to the settings (invalid key, model)
     juce::TextButton retryButton_;
@@ -90,6 +95,8 @@ private:
     std::vector<std::unique_ptr<VoiceRow>> rows_;
     std::vector<ProcessorBase::VoiceView> shownVoices_;
     ProcessorBase::SlotInfo shownInfo_;
+    ProcessorBase::RefineTargets shownTargets_;
+    bool refinePending_ = false; // a refinement was started and its text stays until it is done
     juce::Label infoLabel_;
     juce::TextButton takeOverButton_;
     juce::TextButton generateButton_;

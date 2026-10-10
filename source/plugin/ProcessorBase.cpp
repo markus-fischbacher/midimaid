@@ -414,8 +414,88 @@ void ProcessorBase::startJob(GenerationJob job) {
     generator_.request(job);
 }
 
+bool ProcessorBase::refine(const std::string& instruction, std::optional<size_t> voice, std::optional<size_t> phrase,
+                           std::optional<size_t> slotChoice) {
+    bool isVoice;
+    GenerationJob job;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+        job.settings = settings_.generation;
+    }
+    if (isVoice) {
+        generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
+        return false;
+    }
+    const auto text = juce::String(instruction).trim().toStdString();
+    const auto backend = AiBackend::instance().get();
+    if (text.empty()) {
+        generationStatus_ = GenerationStatus::NothingToRefine;
+        return false;
+    }
+    if (backend.provider == nullptr) {
+        generationStatus_ = GenerationStatus::RefineNeedsAi;
+        return false;
+    }
+    job.slot = slotChoice ? static_cast<int>(*slotChoice)
+                          : std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
+    RefineRequest request;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        const auto* slot = slots_.slot(static_cast<size_t>(job.slot));
+        if (slot == nullptr || !slot->pattern) {
+            generationStatus_ = GenerationStatus::NothingToRefine;
+            return false;
+        }
+        request.pattern = *slot->pattern;
+    }
+    const auto& pattern = request.pattern;
+    if (voice && *voice >= pattern.voices.size()) {
+        generationStatus_ = GenerationStatus::NothingToRefine;
+        return false;
+    }
+    const bool allLocked =
+        voice ? mm::core::isVoiceLocked(pattern.voices[*voice])
+              : std::all_of(pattern.voices.begin(), pattern.voices.end(),
+                            [](const mm::core::Track& track) { return mm::core::isVoiceLocked(track); });
+    if (allLocked) {
+        generationStatus_ = GenerationStatus::RefineAllLocked;
+        return false;
+    }
+    request.instruction = text;
+    request.voice = voice;
+    request.phrase = phrase;                // `refineWithAi` ignores it next to a voice or when it is out of range
+    job.settings.styleId = pattern.styleId; // the pattern keeps the style it was made in
+    job.provider = backend.provider;
+    job.templates = &embeddedPrompts();
+    job.model = backend.model;
+    job.timeoutSeconds = backend.timeoutSeconds;
+    job.maxTokens = backend.maxTokens;
+    job.refine = std::move(request);
+    startJob(std::move(job));
+    return true;
+}
+
+ProcessorBase::RefineTargets ProcessorBase::refineTargets(std::optional<size_t> slotChoice) const {
+    RefineTargets targets;
+    const size_t index =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    const juce::ScopedLock lock(slotsLock_);
+    const auto* slot = slots_.slot(index);
+    if (slot != nullptr && slot->pattern) {
+        for (const auto& track : slot->pattern->voices) {
+            targets.voices.push_back(track.role);
+        }
+        for (const auto& phrase : slot->pattern->phrases) {
+            targets.phrases.emplace_back(phrase.startBar, phrase.lengthBars);
+        }
+    }
+    return targets;
+}
+
 void ProcessorBase::generateOffline() {
-    if (!lastJob_) {
+    if (!lastJob_ || lastJob_->refine) { // a refinement has no offline form
         return;
     }
     auto job = *lastJob_;
@@ -587,7 +667,7 @@ bool ProcessorBase::browseHistory(bool back, std::optional<size_t> slotChoice) {
 void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
     if (!pattern) {
         const bool aiFailed = lastReport_.usedAi && lastReport_.outcome != mm::ai::AiOutcome::Cancelled;
-        if (aiFailed && autoOffline_) {
+        if (aiFailed && autoOffline_ && !job.refine) {
             generateOffline();
             return;
         }
@@ -617,6 +697,11 @@ void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern p
     editSlots([&](mm::core::SlotBank& bank) {
         const auto index = static_cast<size_t>(job.slot);
         const auto* slot = bank.slot(index);
+        if (job.refine && (slot == nullptr || !slot->pattern || slot->pattern->lengthBars != pattern.lengthBars ||
+                           slot->pattern->voices.size() != pattern.voices.size())) {
+            discarded = true; // the slot was emptied or replaced while the AI worked: the answer no longer fits
+            return;
+        }
         // Locked voices survive whatever happened while the job ran (SPEC 3.5): they are put back from the slot as it
         // is now. A result that no longer fits them (another length or number of voices) is dropped.
         if (slot != nullptr && slot->pattern && mm::core::hasLockedVoice(*slot->pattern)) {
@@ -659,9 +744,10 @@ void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern p
             discarded = true;
         }
     });
-    generationStatus_ = discarded ? GenerationStatus::NoResult
-                        : kept    ? GenerationStatus::DoneLocked
-                                  : GenerationStatus::Done;
+    generationStatus_ = discarded    ? GenerationStatus::NoResult
+                        : job.refine ? GenerationStatus::Refined
+                        : kept       ? GenerationStatus::DoneLocked
+                                     : GenerationStatus::Done;
 }
 
 std::vector<std::string> ProcessorBase::slotLoadProblems() const {

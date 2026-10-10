@@ -40,8 +40,12 @@ enum class GenerationStatus {
     Renewed,
     NothingToRenew,
     RenewLocked,
-    AiFailed,           ///< the AI request failed or gave nothing usable; `lastReport()` says why (SPEC 7.9)
-    GenerationCancelled ///< the musician cancelled the request
+    AiFailed,            ///< the AI request failed or gave nothing usable; `lastReport()` says why (SPEC 7.9)
+    GenerationCancelled, ///< the musician cancelled the request
+    Refined,             ///< a refinement was applied (SPEC 3.15)
+    NothingToRefine,     ///< no pattern in the slot, or no instruction
+    RefineAllLocked,     ///< every voice in the scope is locked
+    RefineNeedsAi        ///< refining asks the AI and none is set up
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -217,6 +221,24 @@ public:
     /// longer fit (D-160). False at the ends, for an empty history and in a voice instance.
     bool historyBack(std::optional<size_t> slot = std::nullopt);
     bool historyForward(std::optional<size_t> slot = std::nullopt);
+    /// Message thread: refines the pattern of the slot with the AI (SPEC 3.15, D-173): the pattern, the style, the
+    /// locks and the last 5 refinements of the slot go with the `instruction`. `voice` or `phrase` (0-based) limit the
+    /// scope. Runs in the background like "Generate" (cancel, retry); the result is a history entry and an undo step
+    /// and plays at the next bar line. There is no offline refinement. False, with the status telling why, for a voice
+    /// instance, an empty slot or instruction, a scope that is all locked and when no AI provider is set up.
+    /// `slot` (0-based) names another slot than the selected one.
+    bool refine(const std::string& instruction, std::optional<size_t> voice = std::nullopt,
+                std::optional<size_t> phrase = std::nullopt, std::optional<size_t> slot = std::nullopt);
+    /// What a refinement of the slot can aim at: its voices (roles, in pattern order) and its phrases (start bar and
+    /// length in bars). Empty for an empty slot. Message thread.
+    struct RefineTargets {
+        std::vector<mm::core::VoiceRole> voices;
+        std::vector<std::pair<uint32_t, uint32_t>> phrases;
+        bool operator==(const RefineTargets&) const = default;
+    };
+    RefineTargets refineTargets(std::optional<size_t> slot = std::nullopt) const;
+    /// True when the last request was a refinement (message thread).
+    bool lastJobIsRefine() const { return lastJob_ && lastJob_->refine; }
     /// How many notes the last successful `vary` changed.
     size_t lastVariationChanges() const { return lastVariationChanges_; }
     /// Group (SPEC 6.5, D-141): where this instance stands, how many voices a hub has, and the offer to take over a

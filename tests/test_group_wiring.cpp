@@ -838,9 +838,9 @@ TEST_CASE("the editor of a voice is the compact voice UI, other roles get the hu
     CHECK(child<juce::TextButton>(*editor, "openHub")->isVisible());
 
     voice.setRole(InstanceRole::Solo);
-    REQUIRE(waitFor([&] { return editor->getHeight() == 680; })); // the editor's timer notices the new role
+    REQUIRE(waitFor([&] { return editor->getHeight() == 720; })); // the editor's timer notices the new role
     CHECK(editor->getWidth() == 1000);
-    CHECK(editor->getHeight() == 680);
+    CHECK(editor->getHeight() == 720);
     CHECK_FALSE(child<juce::ToggleButton>(*editor, "mute")->isVisible());
     CHECK_FALSE(child<juce::Component>(*editor, "roll")->isVisible());
 
@@ -851,7 +851,7 @@ TEST_CASE("the editor of a voice is the compact voice UI, other roles get the hu
     Instance solo("Solo");
     std::unique_ptr<juce::AudioProcessorEditor> soloEditor(solo.processor.createEditor());
     CHECK(soloEditor->getWidth() == 1000);
-    CHECK(soloEditor->getHeight() == 680);
+    CHECK(soloEditor->getHeight() == 720);
     CHECK_FALSE(child<juce::Component>(*soloEditor, "roll")->isVisible());
 }
 

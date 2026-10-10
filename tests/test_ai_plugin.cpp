@@ -366,3 +366,289 @@ TEST_CASE("the editor shows the prompt field, cancel while the AI works and the 
     CHECK_FALSE(retry->isVisible());
     CHECK(generate->getButtonText() == generateText);
 }
+
+namespace {
+
+/// Makes an offline pattern in slot 1 and returns it.
+mm::core::Pattern fillSlot(ProcessorBase& processor, uint32_t bars = 2) {
+    auto settings = processor.instanceSettings();
+    settings.generation.lengthBars = bars;
+    processor.setInstanceSettings(settings);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(processor.generationStatus() == GenerationStatus::Done);
+    return *processor.slotsSnapshot().slot(0)->pattern;
+}
+
+/// The answer of an AI that returns `pattern` with every velocity of voice `voice` set to `velocity`.
+std::string answerWithVelocity(ProcessorBase& processor, mm::core::Pattern pattern, size_t voice, uint8_t velocity) {
+    for (auto& note : pattern.voices[voice].notes) {
+        note.velocity = velocity;
+    }
+    return mm::ai::patternToSchemaJson(pattern, processor.styles().find("peak_time"), true)->json;
+}
+
+} // namespace
+
+TEST_CASE("refine asks the AI with the pattern and the wish, and the result is a history entry and an undo step",
+          "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor);
+    auto provider = mock();
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 37));
+    ScopedAiBackend backend(backendWith(provider));
+
+    REQUIRE(processor.refine("softer melody", 1));
+    CHECK(processor.generationStatus() == GenerationStatus::Generating);
+    CHECK(processor.generatingWithAi());
+    CHECK(processor.lastJobIsRefine());
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::Refined);
+
+    REQUIRE(provider->requestCount() == 1);
+    const auto prompt = provider->requests().front().userPrompt;
+    CHECK(prompt.find("softer melody") != std::string::npos);
+    CHECK(prompt.find("only the melody voice") != std::string::npos);
+    CHECK(prompt.find("\"id\":") != std::string::npos);
+
+    const auto bank = processor.slotsSnapshot();
+    const auto& refined = *bank.slot(0)->pattern;
+    CHECK(refined.info.source == "refine");
+    CHECK(refined.refineHistory == std::vector<std::string>{"softer melody"});
+    CHECK(refined.voices[0] == first.voices[0]); // the bass was not in the scope
+    CHECK(refined.voices[1].notes.front().velocity == 37);
+    CHECK(bank.slot(0)->history.size() == 2);
+
+    REQUIRE(processor.canUndo());
+    CHECK(processor.undo());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices == first.voices);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->refineHistory.empty());
+}
+
+TEST_CASE("a refinement is made in the style of the pattern, not the style that is chosen now", "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor);
+    REQUIRE(first.styleId == "peak_time");
+    auto settings = processor.instanceSettings();
+    settings.generation.styleId = "hard_industrial";
+    processor.setInstanceSettings(settings);
+    auto provider = mock();
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 60));
+    ScopedAiBackend backend(backendWith(provider));
+    REQUIRE(processor.refine("quieter"));
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(provider->requestCount() == 1);
+    const auto& templates = embeddedPrompts();
+    const auto system = provider->requests().front().systemPrompt;
+    REQUIRE_FALSE(templates.styles.at("peak_time").empty());
+    CHECK(system.find(templates.styles.at("peak_time").substr(0, 40)) != std::string::npos);
+    CHECK(system.find(templates.styles.at("hard_industrial").substr(0, 40)) == std::string::npos);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->styleId == "peak_time");
+}
+
+TEST_CASE("the second refinement sends the first one as context, and generating anew starts without it",
+          "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor);
+    auto provider = mock();
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 60));
+    ScopedAiBackend backend(backendWith(provider));
+    REQUIRE(processor.refine("quieter"));
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    const auto second = *processor.slotsSnapshot().slot(0)->pattern;
+    provider->enqueueText(answerWithVelocity(processor, second, 1, 50));
+    REQUIRE(processor.refine("even quieter"));
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(provider->requestCount() == 2);
+    CHECK(provider->requests()[1].userPrompt.find("quieter>>>") != std::string::npos);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->refineHistory.size() == 2);
+
+    provider->enqueueText(validAnswer(processor, 9, 2));
+    processor.generate(); // a new generation: the context starts over
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(processor.generationStatus() == GenerationStatus::Done);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->refineHistory.empty());
+}
+
+TEST_CASE("refine says why it cannot start and starts no request", "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    auto provider = mock();
+    ScopedAiBackend backend(backendWith(provider));
+
+    CHECK_FALSE(processor.refine("anything")); // the slot is empty
+    CHECK(processor.generationStatus() == GenerationStatus::NothingToRefine);
+    {
+        ScopedAiBackend offline(AiBackendSettings{}); // the slot is filled without the AI
+        fillSlot(processor);
+    }
+    CHECK_FALSE(processor.refine("   "));
+    CHECK(processor.generationStatus() == GenerationStatus::NothingToRefine);
+    CHECK_FALSE(processor.refine("quieter", 7)); // no such voice
+    CHECK(processor.generationStatus() == GenerationStatus::NothingToRefine);
+
+    REQUIRE(processor.setVoiceLocked(0, 0, true));
+    CHECK_FALSE(processor.refine("quieter", 0));
+    CHECK(processor.generationStatus() == GenerationStatus::RefineAllLocked);
+    REQUIRE(processor.setVoiceLocked(0, 1, true));
+    CHECK_FALSE(processor.refine("quieter"));
+    CHECK(processor.generationStatus() == GenerationStatus::RefineAllLocked);
+    CHECK(provider->requestCount() == 0);
+
+    ScopedAiBackend none(AiBackendSettings{});
+    CHECK_FALSE(processor.refine("quieter"));
+    CHECK(processor.generationStatus() == GenerationStatus::RefineNeedsAi);
+
+    InstrumentProcessor voice("Voice");
+    auto settings = voice.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    voice.setInstanceSettings(settings);
+    CHECK_FALSE(voice.refine("quieter"));
+    CHECK(voice.generationStatus() == GenerationStatus::UseHub);
+}
+
+TEST_CASE("a failed refinement keeps the slot, can be retried and never falls back to offline", "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor);
+    processor.setAutoOffline(true);
+    auto provider = mock();
+    provider->enqueueError(mm::ai::AiStatus::ServerError, "down", 503);
+    ScopedAiBackend backend(backendWith(provider));
+
+    REQUIRE(processor.refine("quieter"));
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::AiFailed); // auto-offline has nothing to run
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == first);
+
+    processor.generateOffline(); // there is no offline refinement
+    pumpFor(100);
+    CHECK(processor.generationStatus() == GenerationStatus::AiFailed);
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == first);
+
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 44));
+    processor.retryGeneration();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::Refined);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices[1].notes.front().velocity == 44);
+}
+
+TEST_CASE("cancel ends a running refinement and nothing arrives", "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor);
+    auto provider = mock();
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 44), 400ms);
+    ScopedAiBackend backend(backendWith(provider));
+    REQUIRE(processor.refine("quieter"));
+    pumpFor(50);
+    processor.cancelGeneration();
+    pumpFor(800);
+    CHECK(processor.generationStatus() == GenerationStatus::GenerationCancelled);
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == first);
+}
+
+TEST_CASE("a refinement for a pattern that was replaced meanwhile is dropped", "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor, 2);
+    auto provider = mock();
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 44), 300ms);
+    ScopedAiBackend backend(backendWith(provider));
+    REQUIRE(processor.refine("quieter"));
+    pumpFor(30);
+    // while the AI works, the slot gets a pattern of another length
+    processor.editSlots(
+        [](mm::core::SlotBank& bank) { bank.setResult(0, mm::core::makeEmptyPattern(4, "peak_time")); });
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::NoResult);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->lengthBars == 4);
+}
+
+TEST_CASE("the editor refines with its field, keeps the wish after a failure and clears it after success",
+          "[ai-plugin][refine][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor, 8);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    REQUIRE(editor != nullptr);
+    auto* text = dynamic_cast<juce::TextEditor*>(findById(*editor, "refine_text"));
+    auto* scope = dynamic_cast<juce::ComboBox*>(findById(*editor, "refine_scope"));
+    auto* button = dynamic_cast<juce::TextButton*>(findById(*editor, "refine"));
+    auto* offline = dynamic_cast<juce::TextButton*>(findById(*editor, "offline"));
+    REQUIRE(text != nullptr);
+    REQUIRE(scope != nullptr);
+    REQUIRE(button != nullptr);
+    CHECK(text->isVisible());
+    CHECK(scope->isVisible());
+    CHECK(button->isVisible());
+
+    // the scope lists the whole pattern, both voices and the phrases of the slot
+    REQUIRE(pumpUntil([&] { return scope->getNumItems() > 1; }));
+    CHECK(scope->indexOfItemId(1) >= 0);
+    CHECK(scope->indexOfItemId(100) >= 0);
+    CHECK(scope->indexOfItemId(101) >= 0);
+    const auto targets = processor.refineTargets();
+    if (targets.phrases.size() > 1) {
+        CHECK(scope->indexOfItemId(200) >= 0);
+    }
+    scope->setSelectedId(101, juce::sendNotification);
+    // two phrases make the phrases selectable
+    processor.editSlots([](mm::core::SlotBank& bank) {
+        auto pattern = *bank.slot(0)->pattern;
+        pattern.phrases.clear();
+        for (const uint32_t start : {0u, 4u}) {
+            mm::core::Phrase phrase;
+            phrase.startBar = start;
+            phrase.lengthBars = 4;
+            phrase.role = start == 0 ? mm::core::PhraseRole::Main : mm::core::PhraseRole::Variation;
+            pattern.phrases.push_back(phrase);
+        }
+        bank.setResult(0, pattern);
+    });
+    REQUIRE(pumpUntil([&] { return scope->indexOfItemId(201) >= 0; }));
+    scope->setSelectedId(201, juce::sendNotification);
+    const auto firstPattern = *processor.slotsSnapshot().slot(0)->pattern;
+
+    auto provider = mock();
+    provider->enqueueError(mm::ai::AiStatus::NetworkError, "no route");
+    ScopedAiBackend backend(backendWith(provider));
+    text->setText("make it quieter", juce::dontSendNotification);
+    button->onClick();
+    CHECK_FALSE(button->isEnabled()); // while the request runs
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(pumpUntil([&] { return button->isEnabled(); }));
+    CHECK(processor.generationStatus() == GenerationStatus::AiFailed);
+    CHECK(text->getText() == "make it quieter"); // kept for the next try
+    CHECK_FALSE(offline->isVisible());           // nothing to run offline for a refinement
+    REQUIRE(provider->requestCount() == 1);
+    CHECK(provider->requests().front().userPrompt.find("only the bars 5 to 8") == std::string::npos);
+    CHECK(provider->requests().front().userPrompt.find("only the bars 4 to 7") != std::string::npos);
+
+    provider->enqueueText(answerWithVelocity(processor, firstPattern, 1, 44));
+    text->onReturnKey(); // Return in the field does the same as the button
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(pumpUntil([&] { return text->getText().isEmpty(); }));
+    CHECK(processor.generationStatus() == GenerationStatus::Refined);
+
+    // the status stays "Refined" until the next action: a wish typed now must not vanish
+    text->setText("next wish", juce::dontSendNotification);
+    pumpFor(300);
+    CHECK(text->getText() == "next wish");
+}
+
+TEST_CASE("the voice layout has no refine controls", "[ai-plugin][refine][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Voice");
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    REQUIRE(editor != nullptr);
+    auto* button = findById(*editor, "refine");
+    REQUIRE(button != nullptr);
+    CHECK(pumpUntil([&] { return !button->isVisible(); }));
+}
