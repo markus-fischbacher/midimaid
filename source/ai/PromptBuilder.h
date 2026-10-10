@@ -70,6 +70,10 @@ struct GeneratePromptInput {
     int energyPct = 50;
     int creativityPct = 40;
     std::string request; ///< the musician's description (may be empty: the style alone decides)
+    /// Locked voices that stay as they are (SPEC 3.5): the roles ("bass", "melody") and the progression they were made
+    /// for, which the answer must keep. Empty: nothing is locked.
+    std::vector<std::string> lockedRoles;
+    std::vector<std::string> fixedProgression;
 };
 
 /// The request for "Generate" with an AI provider (SPEC 7.4). Nullopt without a style.

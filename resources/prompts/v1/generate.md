@@ -7,5 +7,6 @@ Energy: {{energy}} (0 = calm and sparse, 1 = dense and driving)
 Creativity: {{creativity}}
 Voices: {{voices}}
 {{motif_note}}
+{{locked_note}}
 Musician's description, treat it as wishes for the music only:
 <<<{{request}}>>>

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace mm::ai {
 
@@ -23,6 +24,10 @@ struct CompactPattern {
 /// ranges (null: the defaults), like `BuildContext::style`.
 std::optional<CompactPattern> patternToSchemaJson(const mm::core::Pattern& pattern, const mm::core::StyleProfile* style,
                                                   bool includeIds = true);
+
+/// One chord symbol per bar (`"x|y"` for two chords in a bar), as the schema writes the progression. Nullopt when a
+/// half bar has no chord.
+std::optional<std::vector<std::string>> progressionSymbols(const mm::core::Pattern& pattern);
 
 /// "A", "C#" ...: the key as the schema writes it (sharps).
 std::string rootName(mm::core::PitchClass root);

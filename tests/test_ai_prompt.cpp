@@ -49,7 +49,7 @@ TEST_CASE("the shipped templates are all there and only use placeholders the bui
     const auto t = templates();
     const std::set<std::string> system = {"schema", "style"};
     const std::set<std::string> generate = {"bars",       "last_step", "key",        "scale",  "energy",
-                                            "creativity", "voices",    "motif_note", "request"};
+                                            "creativity", "voices",    "motif_note", "locked_note", "request"};
     const std::set<std::string> refine = {"bars",       "last_step", "scope",   "locked",     "energy",
                                           "creativity", "history",   "pattern", "instruction"};
     for (const auto& name : placeholdersOf(t.system)) {

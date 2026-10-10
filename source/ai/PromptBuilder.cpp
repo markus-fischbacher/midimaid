@@ -230,6 +230,13 @@ std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, cons
                        "of 4, 8 or 16, `role`) that covers all bars without gaps; the plugin builds the phrases "
                        "from your motif."
                  : "";
+    request["locked_note"] = "";
+    if (!input.lockedRoles.empty()) {
+        request["locked_note"] = "These voices are locked and stay exactly as they are: " + join(input.lockedRoles, ", ") +
+                                 ". Return them with an empty `notes` list and write only the other voices to fit them. "
+                                 "Keep this progression (one entry per bar): " +
+                                 join(input.fixedProgression, ", ") + ".";
+    }
     const auto text = sanitizeUserText(input.request);
     request["request"] = text.empty() ? "(none: let the style decide)" : text;
     prompt.user = renderTemplate(templates.generate, request);
