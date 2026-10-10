@@ -456,10 +456,13 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     processor_.updateExport();
     applyStoredSettings();
     updateStatus();  // chooses the layout and the size
+    playheadTicker_.tick = [this] { updatePlayhead(); };
+    playheadTicker_.startTimerHz(30);
     startTimerHz(4); // keep the exported tempo equal to the DAW tempo and the status line current
 }
 
 PlaceholderEditor::~PlaceholderEditor() {
+    playheadTicker_.stopTimer();
     stopTimer();
 }
 
@@ -702,6 +705,21 @@ void PlaceholderEditor::showSlotMenu(int slot, juce::Point<int> where) {
                                updateStatus();
                            }
                        });
+}
+
+void PlaceholderEditor::updatePlayhead() {
+    const auto ppq = processor_.playheadPpq();
+    if (voiceLayout_) {
+        const auto ticks = static_cast<uint32_t>(rollView_.layout().bars) * mm::core::kTicksPerBar;
+        rollView_.setPlayheadTick(ppq ? mm::core::playheadTick(*ppq, ticks) : std::nullopt);
+        return;
+    }
+    const int playing = ppq ? processor_.playingSlotInfo().slot : 0;
+    for (auto& row : rows_) {
+        auto& roll = row->roll();
+        const bool here = ppq && row->slotIndex() + 1 == playing;
+        roll.setPlayheadTick(here ? mm::core::playheadTick(*ppq, roll.patternTicks()) : std::nullopt);
+    }
 }
 
 void PlaceholderEditor::applyScale() {

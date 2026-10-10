@@ -747,6 +747,11 @@ void EditableRoll::paint(juce::Graphics& g) {
                 g.fillPath(diamond);
             }
         }
+        if (playheadTick_ && haveView_ && patternTicks_ > 0) {
+            const auto x = static_cast<float>(geo.tickToX(*playheadTick_)) + static_cast<float>(origin.x);
+            g.setColour(juce::Colours::white.withAlpha(alpha * 0.9f));
+            g.drawLine(x, static_cast<float>(origin.y), x, static_cast<float>(area.getBottom() + laneHeight()), 1.5f);
+        }
         if (mode_ == Mode::Rubber && dragged_) {
             const auto band = juce::Rectangle<float>(
                 static_cast<float>(pressPoint_.x) + static_cast<float>(origin.x), static_cast<float>(pressPoint_.y),

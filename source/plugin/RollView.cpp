@@ -1,7 +1,11 @@
 #include "plugin/RollView.h"
 
+#include "core/Pattern.h"
 #include "core/TextKeys.h"
 #include "plugin/EmbeddedTranslation.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace mm::plugin {
 
@@ -22,6 +26,15 @@ void RollView::setDimmed(bool dimmed) {
 void RollView::setAccent(juce::Colour accent) {
     accent_ = accent;
     repaint();
+}
+
+void RollView::setPlayheadTick(std::optional<double> tick) {
+    const bool moved = tick.has_value() != playheadTick_.has_value() ||
+                       (tick && std::abs(*tick - *playheadTick_) >= 1.0);
+    if (moved) {
+        playheadTick_ = tick;
+        repaint();
+    }
 }
 
 void RollView::paint(juce::Graphics& g) {
@@ -50,6 +63,13 @@ void RollView::paint(juce::Graphics& g) {
                                            std::max(note.height * bounds.getHeight() - 1.0f, 2.0f));
         g.setColour(accent_.withAlpha(alpha * velocity));
         g.fillRoundedRectangle(rect, 2.0f);
+    }
+
+    if (playheadTick_ && !empty_) {
+        const double length = static_cast<double>(std::max<uint32_t>(layout_.bars, 1) * mm::core::kTicksPerBar);
+        const float x = bounds.getX() + width * static_cast<float>(*playheadTick_ / length);
+        g.setColour(juce::Colours::white.withAlpha(alpha * 0.9f));
+        g.drawLine(x, bounds.getY() + 1.0f, x, bounds.getBottom() - 1.0f, 1.5f);
     }
 
     g.setColour(juce::Colours::white.withAlpha(0.6f));

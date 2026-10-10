@@ -40,6 +40,9 @@ private:
     /// Switches between the voice UI and the placeholder layout (size and visible controls).
     void applyLayout(bool voiceLayout);
     void applyScale();
+    /// The playhead of the piano rolls (30 times a second): the host position as a line in the roll of the slot that
+    /// plays, in the hub rows and in the voice window.
+    void updatePlayhead();
     /// The menu of the slot actions at `where` (screen position) for the slot (1-based), SPEC 3.10.
     void showSlotMenu(int slot, juce::Point<int> where);
     void updateVoiceView();
@@ -66,6 +69,10 @@ private:
     void saveEditSettings();
 
     ProcessorBase& processor_;
+    struct PlayheadTicker : juce::Timer {
+        std::function<void()> tick;
+        void timerCallback() override { tick(); }
+    } playheadTicker_;
     juce::ComboBox roleBox_;
     juce::ComboBox voiceBox_;
     juce::ComboBox followBox_;

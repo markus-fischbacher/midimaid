@@ -11,6 +11,7 @@
 #include "engine/GroupSync.h"
 #include "engine/PatternHandover.h"
 #include "engine/PatternPlayer.h"
+#include "engine/PlayheadMeter.h"
 #include "engine/SlotPublisher.h"
 #include "plugin/StateMigration.h"
 #include "plugin/GenerationService.h"
@@ -154,6 +155,13 @@ public:
         bool operator==(const SlotInfo&) const = default;
     };
     SlotInfo playingSlotInfo() const;
+    /// The host position in PPQ now, for the playhead of the piano roll (SPEC 8.1); none while the transport stands,
+    /// without position data or when this instance does not process. Any thread except the audio thread.
+    std::optional<double> playheadPpq() const;
+    /// The clock of the playhead in seconds, a steady one (default: the system's). Tests replace it to make the age of
+    /// a reading independent of the speed of the machine; none restores the default. Process-wide.
+    using PlayheadClock = double (*)();
+    static void setPlayheadClock(PlayheadClock clock);
     /// True when this instance is silent because of a mute switch: its own, or (for a voice) the hub's. Any thread.
     bool mutedByOwnSwitch() const;
     bool mutedByHub() const;
@@ -418,6 +426,7 @@ private:
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;
     std::atomic<double> lastBpm_{120.0};
+    mm::engine::PlayheadMeter playhead_;
     MidiExporter exporter_;
     struct ExportKey {
         uint64_t origin = 0;

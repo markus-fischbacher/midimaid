@@ -3,6 +3,7 @@
 #include "core/RollLayout.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 namespace mm::plugin {
 
@@ -15,6 +16,10 @@ public:
     /// A muted voice is drawn dim.
     void setDimmed(bool dimmed);
     void setAccent(juce::Colour accent);
+    /// The tick of the playhead inside the pattern (`mm::core::playheadTick`), none while nothing plays here. Repaints
+    /// only when the line moves.
+    void setPlayheadTick(std::optional<double> tick);
+    std::optional<double> playheadTick() const { return playheadTick_; }
 
     void paint(juce::Graphics& g) override;
 
@@ -26,6 +31,7 @@ protected:
     bool empty_ = true;
     bool dimmed_ = false;
     juce::Colour accent_{0xff4fc3a1};
+    std::optional<double> playheadTick_;
 };
 
 } // namespace mm::plugin
