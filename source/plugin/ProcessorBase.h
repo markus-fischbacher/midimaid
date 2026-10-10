@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Library.h"
 #include "core/InstanceSettings.h"
 #include "core/ParameterRegister.h"
 #include "core/RollEdit.h"
@@ -58,7 +59,17 @@ enum class GenerationStatus {
     DrumRefApplied,      ///< a dropped drum clip became the drum reference of the slot (SPEC 3.14, D-179)
     DrumRefStored,       ///< the same, but the slot is empty: the reference is used for the next generation
     DrumRefNoKickHat,    ///< the drum clip has neither kick nor hat (by the mapping of the settings)
-    DrumRefRemoved       ///< the drum reference was taken out
+    DrumRefRemoved,      ///< the drum reference was taken out
+    LibrarySaved,        ///< the slot was saved in the library (SPEC 3.12, D-184)
+    LibrarySetSaved,     ///< all slots were saved as a set
+    LibraryNothingToSave, ///< the slot (or every slot) is empty
+    LibraryFull,         ///< the library holds `kMaxLibraryEntries` entries
+    LibraryLoaded,       ///< an entry was put into a slot
+    LibrarySetLoaded,    ///< a set was put into the slots it holds
+    LibraryLoadFailed,   ///< the entry is gone or cannot be read
+    LibraryImported,     ///< a MIDI file became a library entry
+    LibraryExported,     ///< an entry was written as a MIDI file
+    LibraryExportFailed  ///< the entry cannot be exported (a set, no notes, unreadable, no write access)
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -278,6 +289,19 @@ public:
     /// are set, the progression is derived again from the locked voices. False for an unknown scale, a slot without
     /// locked voice, a voice instance.
     bool correctKey(mm::core::PitchClass root, const std::string& scaleId, std::optional<size_t> slot = std::nullopt);
+    /// The library (SPEC 3.12, D-184), message thread, hub and solo only (a voice instance says `UseHub`). The outcome
+    /// is the generation status (`Library...`). Saving works on the slot (default: the active one) and a set on all.
+    /// A flag that turns false when this instance is destroyed: a library window that outlives the editor checks it.
+    std::shared_ptr<bool> libraryAliveFlag() const { return libraryAlive_; }
+    bool saveToLibrary(const std::string& name, std::optional<size_t> slot = std::nullopt);
+    bool saveSetToLibrary(const std::string& name);
+    /// Reads the entry in the background and puts it into a slot (a pattern; default: the active slot) or into the
+    /// slots a set holds (the others stay). Both are results: the pattern that was there stays in the history.
+    bool loadFromLibrary(const std::string& id, std::optional<size_t> slot = std::nullopt);
+    /// Writes the pattern entry as a .mid file at the DAW tempo, in the background.
+    bool exportLibraryEntry(const std::string& id, const juce::File& target);
+    /// Reads a MIDI file in the background and saves it as a library entry (a pattern with the file as a locked voice).
+    bool importMidiToLibrary(const juce::File& file);
     /// Message thread: the pending import is used up (or dismissed).
     void clearPendingImport() { pendingImport_.reset(); }
     /// True when the last request was a refinement (message thread).
@@ -314,6 +338,9 @@ private:
     void fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pattern, size_t voiceIndex) const;
     void startJob(GenerationJob job);
     void onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern);
+    bool isHubOrSolo() const;
+    void applyLibraryEntry(size_t index, mm::core::LibraryLoadResult loaded);
+    void saveImportedToLibrary(const ImportRequest& request, const mm::core::ImportPlan& plan);
     void onImported(const ImportRequest& request, ImportOutcome outcome);
     bool startImport(const juce::File& file, std::optional<size_t> voice, bool apply);
     void applyImport(const ImportRequest& request, const mm::core::ImportPlan& plan);
@@ -392,6 +419,7 @@ private:
     std::shared_ptr<GroupLink> groupLink_;
     std::optional<PendingImport> pendingImport_;
     std::optional<mm::core::RhythmReference> drumReference_; ///< the last one dropped (message thread)
+    std::shared_ptr<bool> libraryAlive_ = std::make_shared<bool>(true); ///< callbacks of the library check it
     bool importCut_ = false; ///< the import that started the running generation was cut to 16 bars
     MidiImportService importer_;  // before the generator: both are destroyed before the members they call into
     GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance

@@ -15,6 +15,7 @@
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
+#include "plugin/LibraryStore.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ReferenceStore.h"
 #include "plugin/StateMigration.h"
@@ -143,6 +144,7 @@ void ProcessorBase::applyStartKey() {
 }
 
 ProcessorBase::~ProcessorBase() {
+    *libraryAlive_ = false;
     groupLink_->detach();                              // first: from here on no registry callback reaches this instance
     onGroupStatusChanged(mm::core::GroupStatus::Solo); // gives the channel slot back
 }
@@ -545,6 +547,10 @@ void ProcessorBase::onImported(const ImportRequest& request, ImportOutcome outco
         generationStatus_ = GenerationStatus::ImportNotFourFour;
         return;
     }
+    if (request.toLibrary) {
+        saveImportedToLibrary(request, outcome.plan);
+        return;
+    }
     if (request.apply) {
         // A drum clip is no voice: it becomes the drum reference (SPEC 3.14).
         if (mm::core::suggestRole(outcome.plan.notes) == mm::core::TrackRole::Drums) {
@@ -662,6 +668,170 @@ void ProcessorBase::applyImport(const ImportRequest& request, const mm::core::Im
         generate(); // the other voices, around the imported one
         importCut_ = plan.truncated && generationStatus_ == GenerationStatus::Generating;
     }
+}
+
+bool ProcessorBase::isHubOrSolo() const {
+    const juce::ScopedLock lock(slotsLock_);
+    return settings_.role != mm::core::InstanceRole::Voice;
+}
+
+bool ProcessorBase::saveToLibrary(const std::string& name, std::optional<size_t> slotChoice) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
+        return false;
+    }
+    const size_t index =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    std::optional<mm::core::Pattern> pattern;
+    std::string slotName;
+    uint8_t color = 0;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (const auto* slot = slots_.slot(index); slot != nullptr && slot->pattern) {
+            pattern = slot->pattern;
+            slotName = slot->name;
+            color = slot->color;
+        }
+    }
+    if (!pattern) {
+        generationStatus_ = GenerationStatus::LibraryNothingToSave;
+        return false;
+    }
+    const auto result = libraryStore().savePattern(name, *pattern, slotName, color);
+    generationStatus_ = result.error == LibraryStore::SaveError::None ? GenerationStatus::LibrarySaved
+                                                                      : GenerationStatus::LibraryFull;
+    return result.error == LibraryStore::SaveError::None;
+}
+
+bool ProcessorBase::saveSetToLibrary(const std::string& name) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    LibraryStore::SaveResult result;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        result = libraryStore().saveSet(name, slots_);
+    }
+    generationStatus_ = result.error == LibraryStore::SaveError::None   ? GenerationStatus::LibrarySetSaved
+                        : result.error == LibraryStore::SaveError::Full ? GenerationStatus::LibraryFull
+                                                                        : GenerationStatus::LibraryNothingToSave;
+    return result.error == LibraryStore::SaveError::None;
+}
+
+bool ProcessorBase::loadFromLibrary(const std::string& id, std::optional<size_t> slotChoice) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    const size_t index =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    if (!libraryStore().info(id)) {
+        generationStatus_ = GenerationStatus::LibraryLoadFailed;
+        return false;
+    }
+    const auto alive = libraryAlive_;
+    libraryStore().load(id, [this, alive, index](mm::core::LibraryLoadResult loaded) {
+        if (*alive) {
+            applyLibraryEntry(index, std::move(loaded));
+        }
+    });
+    return true;
+}
+
+void ProcessorBase::applyLibraryEntry(size_t index, mm::core::LibraryLoadResult loaded) {
+    if (!loaded.ok()) {
+        generationStatus_ = GenerationStatus::LibraryLoadFailed;
+        return;
+    }
+    const auto& entry = *loaded.entry;
+    const auto put = [&](mm::core::SlotBank& bank, size_t target, mm::core::SlotContent content) {
+        const auto* slot = bank.slot(target);
+        std::optional<mm::core::Pattern> before = slot != nullptr ? slot->pattern : std::nullopt;
+        const size_t cursor = slot != nullptr ? slot->cursor : 0;
+        if (bank.paste(target, content)) {
+            undo_.recordResult(target, std::move(before), cursor, *bank.slot(target)->pattern);
+            return true;
+        }
+        return false;
+    };
+    bool any = false;
+    editSlots([&](mm::core::SlotBank& bank) {
+        if (entry.pattern) {
+            mm::core::SlotContent content;
+            content.pattern = entry.pattern;
+            content.name = entry.slotName.value_or("");
+            content.color = entry.slotColor;
+            any = put(bank, index, std::move(content));
+        } else if (entry.set) {
+            for (size_t i = 0; i < mm::core::kSlotCount; ++i) {
+                if (const auto content = entry.set->copy(i); content && content->pattern) {
+                    any = put(bank, i, *content) || any;
+                }
+            }
+        }
+    });
+    generationStatus_ = !any                   ? GenerationStatus::LibraryLoadFailed
+                        : entry.set.has_value() ? GenerationStatus::LibrarySetLoaded
+                                                : GenerationStatus::LibraryLoaded;
+}
+
+bool ProcessorBase::exportLibraryEntry(const std::string& id, const juce::File& target) {
+    if (!libraryStore().info(id)) {
+        generationStatus_ = GenerationStatus::LibraryExportFailed;
+        return false;
+    }
+    const auto info = *libraryStore().info(id);
+    const auto* style = styles_.findOrFallback(info.styleId);
+    if (style == nullptr || info.kind != mm::core::LibraryKind::Pattern) {
+        generationStatus_ = GenerationStatus::LibraryExportFailed;
+        return false;
+    }
+    const auto alive = libraryAlive_;
+    libraryStore().exportMidi(id, *style, lastKnownBpm(), target, [this, alive](LibraryStore::ExportResult result) {
+        if (*alive) {
+            generationStatus_ = result == LibraryStore::ExportResult::Done ? GenerationStatus::LibraryExported
+                                                                          : GenerationStatus::LibraryExportFailed;
+        }
+    });
+    return true;
+}
+
+bool ProcessorBase::importMidiToLibrary(const juce::File& file) {
+    const auto extension = file.getFileExtension().toLowerCase();
+    if (extension != ".mid" && extension != ".midi") {
+        generationStatus_ = GenerationStatus::ImportUnreadable;
+        return false;
+    }
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    ImportRequest request;
+    request.file = file;
+    request.toLibrary = true;
+    importer_.request(request);
+    return true;
+}
+
+void ProcessorBase::saveImportedToLibrary(const ImportRequest& request, const mm::core::ImportPlan& plan) {
+    mm::core::GenerationSettings settings;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        settings = settings_.generation;
+    }
+    const auto* style = styles_.findOrFallback(settings.styleId);
+    const auto pattern = style != nullptr ? mm::core::importVoice(*style, std::nullopt, 0, plan) : std::nullopt;
+    if (!pattern) {
+        generationStatus_ = GenerationStatus::ImportUnreadable;
+        return;
+    }
+    const auto result = libraryStore().savePattern(request.file.getFileNameWithoutExtension().toStdString(), *pattern,
+                                                   "", 0);
+    generationStatus_ = result.error == LibraryStore::SaveError::None ? GenerationStatus::LibraryImported
+                                                                      : GenerationStatus::LibraryFull;
 }
 
 bool ProcessorBase::correctKey(mm::core::PitchClass root, const std::string& scaleId, std::optional<size_t> slotChoice) {

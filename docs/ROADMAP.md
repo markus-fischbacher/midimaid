@@ -196,7 +196,8 @@ eigener Referenzen tauchen typische eigene Progressionen auf, ohne dass eine Ref
 ## Phase 5 – Bibliothek und Persistenz
 - [x] Plugin-State mit Versionierung und Migration (SPEC §9.1)
   - Stand: fertig (D-183, P5-A); Host-Check H42.
-- [ ] Bibliothek: Speichern, Laden, Import und Export .mid
+- [x] Bibliothek: Speichern, Laden, Import und Export .mid
+  - Stand: fertig (D-184, P5-B); Host-Check H43.
 - [ ] Atomares Schreiben, Index
 
 **Abnahme:** DAW-Projekte stellen den Zustand exakt wieder her. Die Bibliothek übersteht Abstürze ohne
