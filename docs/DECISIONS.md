@@ -573,3 +573,15 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Prüfung der Messung:** Die Dateien sind alle verschieden (200 Einträge, keine übersprungen). Mutation: 150 ms Schlaf in `generatePattern` → Median 155 ms, Prüfung rot.
 - **Grenzen:** Die Analyse-Dateien sind klein (8 Takte, synthetisch); echte Dateien mit mehreren Spuren sind größer, der Abstand zur Grenze von 30 s ist aber sehr groß. „Laden des Plugins“ ist ohne Editor und ohne Host gemessen; die Zeit in der DAW (Scan, Editor öffnen) bleibt **Host-Check H45**. Die CPU-Last mit mehreren Instanzen im Hub-Betrieb und mit laufendem Editor ebenfalls (H45).
 
+### D-188 – Kurzhandbuch und Setup-Hilfe (Phase 6, P6-F/P6-G)
+
+- **Handbuch** (`docs/HANDBUCH.md`, Deutsch, kurz): Zweck, erster Klang, Oberfläche, Erzeugen/Variation/Neu/Verlauf/Sperren, KI (Anbieter, Schlüssel, Verfeinern, Fehlerverhalten, Zeitlimit), Piano-Roll, Import, Drum-Referenz, Referenzen mit Datenschutz, Bibliothek, Export, Automation, Hub, Dateiorte, Fehlertabelle. **Nur v1.0.** Knopfnamen stammen aus `de.json`; die Bedienung der Piano-Roll und der Experten-Modus wurden gegen den Code geprüft (Experte zeigt Seed, Raster, Triolen, Einrasten, „Variation (alle)“, Stärke; Duplizieren wirkt auf die Auswahl der Roll).
+- **Setup-Hilfe** (`docs/SETUP-HILFE.md`): neu sind die Abschnitte Live, Logic, andere Hosts und Aufnehmen mit Routing, Monitoring, Aufnahme, Freeze und Arrangement nach SPEC §6.5. Diese Abläufe sind **Annahmen, bis die DAW sie bestätigt** (Host-Check H46); sie stehen deshalb ausdrücklich als „geplant“ im Text.
+- **Offen:** (1) Der **Hilfe-Dialog im Plugin** (SPEC §6.5: Aufbau Schritt für Schritt, passend zum erkannten Host) ist nicht gebaut; die Roadmap-Zeile bleibt offen. (2) Der Hinweis „Kopplung nicht verfügbar“ bei getrennten Prozessen steht in der Doku, die UI zeigt bisher „Hub nicht gefunden“ mit Sandbox-Hinweis. (3) Das Handbuch hat keine Bilder; Screenshots kommen nach dem UI-Polish.
+
+### D-189 – Testmatrix vollständig und verknüpft (Phase 6, P6-G)
+
+- Die **Anhang-Tabelle** in `docs/ROADMAP.md` hat eine Spalte „Abgedeckt durch“: je Zeile die Host-Checks aus `docs/HOST-VERIFIKATION.md` (H1 bis H46) und die automatischen Tests (`[handover]`, `[determinism]`, `test_group_*` …). Neu sind die v1.0-Zeilen für Bibliothek, Referenzen, Neuöffnen mit geändertem Set, State-Migration, KI-Praxis, Validierung (pluginval, auval), Performance in der DAW und die nicht aktiven Parameter. v1.1-Zeilen bleiben und sind als „noch nicht umgesetzt“ markiert.
+- **Ausgefüllt** (✓ je Host) wird die Matrix **nur vom Entwickler in der DAW**; Claude trägt dort nichts ein. „Testmatrix v1.0 grün“ aus der Abnahme heißt: alle Zellen der v1.0-Zeilen sind gefüllt.
+- **Lücke:** Die Zeile „DAW-Vorlagen laden und sofort spielen“ hat noch keinen Gegenstand (die Vorlagen entstehen mit der Aufgabe „DAW-Vorlagen“); **Windows** (Live Win) ist mangels Build noch nirgends abgedeckt.
+
