@@ -194,7 +194,8 @@ dazu. Mit Drum-Referenz spart der Bass die echten Kicks aus und übernimmt den H
 eigener Referenzen tauchen typische eigene Progressionen auf, ohne dass eine Referenz kopiert wird.
 
 ## Phase 5 – Bibliothek und Persistenz
-- [ ] Plugin-State mit Versionierung und Migration (SPEC §9.1)
+- [x] Plugin-State mit Versionierung und Migration (SPEC §9.1)
+  - Stand: fertig (D-183, P5-A); Host-Check H42.
 - [ ] Bibliothek: Speichern, Laden, Import und Export .mid
 - [ ] Atomares Schreiben, Index
 
