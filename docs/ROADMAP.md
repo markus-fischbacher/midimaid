@@ -171,7 +171,8 @@ Ungültige Antworten führen nie zu unbrauchbarem MIDI. Ohne Netz erscheint eine
 mit Wahlmöglichkeit, und die Wiedergabe läuft ungestört weiter.
 
 ## Phase 4 – Lenkung: Stimme importieren, Drum-Referenz, Referenzen
-- [ ] MIDI aus der DAW (Clip/Region) und .mid annehmen (Drag-Ziel im Hub und in Voices)
+- [x] MIDI aus der DAW (Clip/Region) und .mid annehmen (Drag-Ziel im Hub und in Voices)
+  - Stand: Leser, Importplan und Drag-Ziele fertig (D-176, P4-A); angewendet wird der Import mit „Eigene Stimme importieren“ (P4-C); Host-Check H37.
 - [ ] Analyse: Tonart- und Skalenerkennung, Akkordfolge aus Akkorden bzw. Bass-Grundtönen, Rhythmus,
       Register; tonartunabhängige Speicherung; Testkorpus mit Zielwerten (SPEC §3.20, §12)
 - [ ] Eigene Stimme importieren: Ersetzen, Sperre, harmonischer Kontext, übrige Stimmen passend

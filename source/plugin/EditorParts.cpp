@@ -38,6 +38,17 @@ void DragHandle::mouseDrag(const juce::MouseEvent& event) {
                                                                [this] { dragging_ = false; });
 }
 
+juce::File firstMidiFile(const juce::StringArray& files) {
+    for (const auto& path : files) {
+        const juce::File file(path);
+        const auto extension = file.getFileExtension().toLowerCase();
+        if (extension == ".mid" || extension == ".midi") {
+            return file;
+        }
+    }
+    return {};
+}
+
 VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     : processor_(processor), voice_(voice), roll_(processor, voice), drag_(processor.midiExporter(), voice) {
     setComponentID("row_" + juce::String(voice));
@@ -153,6 +164,35 @@ void VoiceRow::setCollapsed(bool collapsed) {
 
 void VoiceRow::setFocused(bool focused) {
     focusButton_.setToggleState(focused, juce::dontSendNotification);
+}
+
+void VoiceRow::paintOverChildren(juce::Graphics& g) {
+    if (dropHighlight_) {
+        g.setColour(juce::Colour(0xff4fc3a1));
+        g.drawRect(getLocalBounds(), 2);
+    }
+}
+
+bool VoiceRow::isInterestedInFileDrag(const juce::StringArray& files) {
+    return firstMidiFile(files) != juce::File();
+}
+
+void VoiceRow::fileDragEnter(const juce::StringArray&, int, int) {
+    dropHighlight_ = true;
+    repaint();
+}
+
+void VoiceRow::fileDragExit(const juce::StringArray&) {
+    dropHighlight_ = false;
+    repaint();
+}
+
+void VoiceRow::filesDropped(const juce::StringArray& files, int, int) {
+    dropHighlight_ = false;
+    repaint();
+    if (const auto file = firstMidiFile(files); file != juce::File() && onMidiDropped) {
+        onMidiDropped(voice_, file);
+    }
 }
 
 void VoiceRow::resized() {

@@ -72,6 +72,11 @@ namespace mm::core::text {
     X(kStatusNothingToRefine, "status.nothingToRefine")                                                                \
     X(kStatusRefineAllLocked, "status.refineAllLocked")                                                                \
     X(kStatusRefineNeedsAi, "status.refineNeedsAi")                                                                    \
+    X(kStatusImportRead, "status.importRead")                                                                          \
+    X(kStatusImportCut, "status.importCut")                                                                            \
+    X(kStatusImportNotFourFour, "status.importNotFourFour")                                                            \
+    X(kStatusImportNoNotes, "status.importNoNotes")                                                                    \
+    X(kStatusImportUnreadable, "status.importUnreadable")                                                              \
     X(kStatusGeneratingAi, "status.generatingAi")                                                                      \
     X(kStatusAiFailed, "status.aiFailed")                                                                              \
     X(kStatusCancelled, "status.cancelled")                                                                            \
