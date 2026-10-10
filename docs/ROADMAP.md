@@ -154,7 +154,7 @@ Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
   - Stand: Schema, Parser und Umwandlung in ein Pattern fertig (D-165, P3-A). Offen: der Reparaturversuch und die Nachfrage (P3-C), die Ableitung der Phrasen aus einem Motiv bei 16 Takten (P3-C).
 - [ ] Zustimmung pro Cloud-Provider für Referenzen und importierte Stimmen; Logging ohne Prompts und
       Nutzerinhalte, Option „Prompts protokollieren“ (SPEC §3.20, §10)
-- [ ] Prompt-Vorlagen v1 (Generieren, Verfeinern) mit Stilregeln, Motivik und Anti-Klischee-Liste
+- [x] Prompt-Vorlagen v1 (Generieren, Verfeinern) mit Stilregeln, Motivik und Anti-Klischee-Liste (D-166; die Wirkung mit echten Modellen zeigt der Praxistest in P3-G, persönliche Beispiele kommen mit Phase 4)
 - [ ] KI-Ergebnisse durch Constraint-Schicht und Qualitätsbewertung, Anzeige bei Unterschreitung
 - [ ] Verfeinern per Prompt mit Kontext, Noten-IDs und Verlauf (SPEC §3.15)
 - [ ] Keychain-Wrapper macOS und Windows
