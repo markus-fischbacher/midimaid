@@ -301,3 +301,18 @@ TEST_CASE("the size of the window snaps to the nearest step of 75 to 200 percent
     CHECK(mm::core::kUiScaleSteps[std::size(mm::core::kUiScaleSteps) - 1] == 200);
 }
 
+
+TEST_CASE("the playhead tick is the song position modulo the pattern length", "[instance-core][playhead]") {
+    using mm::core::playheadTick;
+    constexpr uint32_t kFourBars = 4 * 3840;
+    CHECK(*playheadTick(0.0, kFourBars) == Catch::Approx(0.0));
+    CHECK(*playheadTick(4.0, kFourBars) == Catch::Approx(3840.0)); // one bar in
+    CHECK(*playheadTick(15.5, kFourBars) == Catch::Approx(14880.0));
+    CHECK(*playheadTick(16.0, kFourBars) == Catch::Approx(0.0)); // wraps with the pattern
+    CHECK(*playheadTick(17.5, kFourBars) == Catch::Approx(1440.0));
+    CHECK(*playheadTick(1.0, 3840) == Catch::Approx(960.0));
+    CHECK(*playheadTick(4.0, 3840) == Catch::Approx(0.0));
+    CHECK_FALSE(playheadTick(-0.5, kFourBars).has_value()); // count-in
+    CHECK_FALSE(playheadTick(1.0, 0).has_value());
+    CHECK_FALSE(playheadTick(std::nan(""), kFourBars).has_value());
+}

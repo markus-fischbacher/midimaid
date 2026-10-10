@@ -27,6 +27,8 @@ public:
     void setEditSettings(mm::core::EditGrid grid, mm::core::PitchSnap snap);
 
     const std::vector<mm::core::RollNote>& source() const { return source_; }
+    /// The length of the shown pattern in ticks, 0 while the roll shows none.
+    uint32_t patternTicks() const { return patternTicks_; }
     const std::set<uint32_t>& selection() const { return selection_; }
     const mm::core::RollViewport& viewport() const { return viewport_; }
     mm::core::RollGeometry geometry() const;

@@ -3,6 +3,7 @@
 #include "core/Pattern.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mm::core {
 
@@ -53,6 +54,13 @@ RollLayout layoutRoll(const std::vector<PatternNote>& notes, uint32_t lengthTick
         layout.notes.push_back(rect);
     }
     return layout;
+}
+
+std::optional<double> playheadTick(double ppq, uint32_t patternTicks) {
+    if (patternTicks == 0 || !(ppq >= 0.0)) {
+        return std::nullopt;
+    }
+    return std::fmod(ppq * kTicksPerQuarter, static_cast<double>(patternTicks));
 }
 
 } // namespace mm::core

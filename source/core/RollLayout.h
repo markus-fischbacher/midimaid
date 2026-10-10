@@ -3,6 +3,7 @@
 #include "core/PlaybackPattern.h"
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace mm::core {
@@ -30,5 +31,10 @@ struct RollLayout {
 /// plus one row above and below and is at least `minRows` rows high, centred on the notes (so a one-note pattern does
 /// not fill the view). It stays within 0 to 127. Empty notes give an empty layout around middle C. Pure function.
 RollLayout layoutRoll(const std::vector<PatternNote>& notes, uint32_t lengthTicks, int minRows = 12);
+
+/// The tick of the playhead inside a pattern of `patternTicks` for a host position in PPQ: the song position modulo the
+/// pattern length (the player restarts patterns at bar lines, SPEC 6.1). None for a negative position (count-in) or an
+/// empty pattern.
+std::optional<double> playheadTick(double ppq, uint32_t patternTicks);
 
 } // namespace mm::core

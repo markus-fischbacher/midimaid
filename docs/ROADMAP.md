@@ -208,6 +208,7 @@ Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set 
 - [ ] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen steht (D-190, H47); Theme und stufenloses Ziehen fehlen
 - [x] Performance-Messung gegen SPEC §11
 - [x] Slot-Aktionen: Kopieren, Einfügen, Leeren, Tauschen per Menü und Ziehen (SPEC §3.10, D-191)
+- [x] Playhead in der Piano-Roll, Hub und Voice-Fenster (D-192)
 - [ ] Instrument-Presets pro Rolle (Live und Logic, nur eigene Instrumente, SPEC §12)
 - [ ] DAW-Vorlagen: Live-Set mit Gruppenspuren, Logic-Patches (SPEC §8.6)
 - [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5) – Text steht (D-188), der Hilfe-Dialog im Plugin und die Bestätigung in der DAW (H46) fehlen

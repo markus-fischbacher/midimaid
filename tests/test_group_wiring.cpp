@@ -979,6 +979,124 @@ TEST_CASE("a window opened after the state was loaded starts at the saved size",
     CHECK(editor->getTransform().mat00 == Catch::Approx(2.0f));
 }
 
+TEST_CASE("the processor reports the host position as long as the transport plays and blocks keep coming",
+          "[group-wiring][playhead]") {
+    Quiet quiet;
+    Instance instance("Head");
+    CHECK_FALSE(instance.processor.playheadPpq().has_value()); // nothing processed yet
+    instance.setPpq(8.0);
+    instance.step();
+    auto position = instance.processor.playheadPpq();
+    REQUIRE(position.has_value());
+    CHECK(*position >= 8.0);
+    CHECK(*position < 8.0 + 0.5); // the tempo runs it forward a little from the block start
+
+    instance.setPlaying(false);
+    instance.step();
+    CHECK_FALSE(instance.processor.playheadPpq().has_value());
+
+    instance.setPlaying(true);
+    instance.setPpq(5.0);
+    instance.step();
+    REQUIRE(instance.processor.playheadPpq().has_value());
+    juce::AudioBuffer<float> audio(2, 480);
+    juce::MidiBuffer midi;
+    instance.processor.processBlockBypassed(audio, midi); // bypassed: no playhead
+    CHECK_FALSE(instance.processor.playheadPpq().has_value());
+
+    instance.setPlaying(true);
+    instance.setPpq(-2.0); // a count-in before the song start
+    instance.step();
+    CHECK_FALSE(instance.processor.playheadPpq().has_value());
+
+    instance.setPpq(3.0);
+    instance.step();
+    REQUIRE(instance.processor.playheadPpq().has_value());
+    juce::Thread::sleep(400); // no block for a while: the instance does not process
+    CHECK_FALSE(instance.processor.playheadPpq().has_value());
+}
+
+TEST_CASE("the piano roll rows of the hub show the playhead in the playing slot and hide it when the transport stops",
+          "[group-wiring][editor][playhead]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, marked(36))); }); // one bar, slot 1
+    hub.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    hub.setPpq(1.0);
+    const auto rolls = [&] {
+        std::vector<mm::plugin::EditableRoll*> found;
+        for (auto* component : editor->getChildren()) {
+            if (auto* row = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+                found.push_back(&row->roll());
+            }
+        }
+        return found;
+    };
+    const auto drive = [&](int steps) {
+        for (int i = 0; i < steps; ++i) {
+            hub.step();
+            pumpMessages(20);
+        }
+    };
+    drive(5);
+    REQUIRE(waitFor([&] { hub.step(); return !rolls().empty() && rolls()[0]->patternTicks() == 3840; }));
+    drive(6);
+    for (auto* roll : rolls()) {
+        REQUIRE(roll->playheadTick().has_value());
+        const double expected = std::fmod(hub.ppq() * 960.0, 3840.0);
+        // within the last blocks and the time the editor's timer waits: a little behind or ahead of the block
+        CHECK(*roll->playheadTick() >= expected - 400.0);
+        CHECK(*roll->playheadTick() <= expected + 400.0);
+    }
+
+    // another slot is playing: no line in the rows of slot 1
+    hub.setSlotParameter(2);
+    hub.setPpq(0.0);
+    drive(3);
+    hub.setPpq(8.0); // a jump: the new slot takes over at once, it is empty
+    drive(4);
+    for (auto* roll : rolls()) {
+        CHECK_FALSE(roll->playheadTick().has_value());
+    }
+
+    hub.setSlotParameter(1);
+    hub.setPpq(1.0);
+    drive(8);
+    REQUIRE(rolls()[0]->playheadTick().has_value());
+    hub.setPlaying(false);
+    hub.step();
+    REQUIRE(waitFor([&] { return !rolls()[0]->playheadTick().has_value(); }, 2000));
+}
+
+TEST_CASE("the roll of the voice window shows the playhead too", "[group-wiring][editor][playhead]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    voice.processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, marked(36))); });
+    voice.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* roll = child<mm::plugin::RollView>(*editor, "roll");
+    REQUIRE(roll != nullptr);
+    voice.setPpq(2.0); // half of the one-bar pattern
+    REQUIRE(waitFor([&] {
+        voice.step();
+        return roll->playheadTick().has_value();
+    }));
+    for (int i = 0; i < 8; ++i) {
+        voice.step();
+        pumpMessages(20);
+    }
+    REQUIRE(roll->playheadTick().has_value());
+    const double expected = std::fmod(voice.ppq() * 960.0, 3840.0);
+    CHECK(*roll->playheadTick() >= expected - 400.0);
+    CHECK(*roll->playheadTick() <= expected + 400.0);
+    voice.setPlaying(false);
+    voice.step();
+    CHECK(waitFor([&] { return !roll->playheadTick().has_value(); }, 2000));
+}
+
 TEST_CASE("the octave box sets the octave of the instance and shows it", "[group-wiring][editor]") {
     Quiet quiet;
     Instance voice("Voice");
@@ -3081,3 +3199,75 @@ TEST_CASE("a voice window has no level switch", "[settings][level][editor]") {
         CHECK_FALSE(find(*editor, id)->isVisible());
     }
 }
+
+namespace {
+
+/// The columns of the image in which the two renderings differ anywhere.
+std::vector<int> differingColumns(const juce::Image& a, const juce::Image& b) {
+    std::vector<int> columns;
+    for (int x = 0; x < a.getWidth(); ++x) {
+        for (int y = 0; y < a.getHeight(); ++y) {
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y)) {
+                columns.push_back(x);
+                break;
+            }
+        }
+    }
+    return columns;
+}
+
+} // namespace
+
+TEST_CASE("the read-only roll draws the playhead line where the tick is, and nothing without it",
+          "[group-wiring][playhead][paint]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::RollView view;
+    view.setBounds(0, 0, 800, 120);
+    view.setContent(mm::core::layoutRoll({}, 2 * mm::core::kTicksPerBar), "Slot 1 - Bass", false);
+    const auto plain = view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f);
+
+    view.setPlayheadTick(1920.0); // a quarter of two bars
+    const auto quarter = view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f);
+    auto columns = differingColumns(plain, quarter);
+    REQUIRE_FALSE(columns.empty());
+    CHECK(columns.front() >= 198);
+    CHECK(columns.back() <= 202);
+
+    view.setPlayheadTick(5760.0); // three quarters
+    columns = differingColumns(plain, view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f));
+    REQUIRE_FALSE(columns.empty());
+    CHECK(columns.front() >= 598);
+    CHECK(columns.back() <= 602);
+
+    view.setPlayheadTick(std::nullopt);
+    CHECK(differingColumns(plain, view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f)).empty());
+
+    // an empty slot shows no line, also with a position
+    view.setContent({}, "Slot 1 - Bass", true);
+    const auto emptyPlain = view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f);
+    view.setPlayheadTick(1920.0);
+    CHECK(differingColumns(emptyPlain, view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f)).empty());
+}
+
+TEST_CASE("the editable roll draws the playhead line at the tick, with the zoom of the window",
+          "[group-wiring][playhead][paint]") {
+    Quiet quiet;
+    RollRig rig;
+    const auto plain = rig.roll.createComponentSnapshot(rig.roll.getLocalBounds(), false, 1.0f);
+    const auto offsetFor = [&](double tick) {
+        rig.roll.setPlayheadTick(tick);
+        const auto columns = differingColumns(plain, rig.roll.createComponentSnapshot(rig.roll.getLocalBounds(), false, 1.0f));
+        REQUIRE_FALSE(columns.empty());
+        CHECK(columns.back() - columns.front() <= 3); // a thin line
+        return static_cast<double>(columns.front()) - rig.roll.geometry().tickToX(tick);
+    };
+    const double first = offsetFor(1920.0);
+    const double second = offsetFor(5760.0);
+    CHECK(second == Catch::Approx(first).margin(1.5)); // the same distance from the field edge at every tick
+    CHECK(first >= 0.0);
+    CHECK(first < 60.0); // the key gutter
+
+    rig.roll.setPlayheadTick(std::nullopt);
+    CHECK(differingColumns(plain, rig.roll.createComponentSnapshot(rig.roll.getLocalBounds(), false, 1.0f)).empty());
+}
+

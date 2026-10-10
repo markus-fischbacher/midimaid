@@ -94,6 +94,7 @@ bei einem 27B-Modell nimm mindestens 600.
   **Einrasten: Skala** hält dich in der Tonleiter, **Einrasten: Chromatisch** nicht.
 - **Akzent**, **Slide** und **Löschen** wirken auf die gewählten Noten.
 - **Fokus** (je Stimme) zeigt eine Stimme groß, die anderen als schmale Streifen.
+- Die **weiße senkrechte Linie** ist der Playhead: Sie zeigt, wo im Pattern gerade gespielt wird (in der Roll des spielenden Slots, im Hub und im Stimmen-Fenster). Steht der Transport, ist sie weg.
 - Jede Geste ist **ein** Rückgängig-Schritt und steht im **Verlauf**. Während der Wiedergabe kannst du bearbeiten; der
   Wechsel kommt zum nächsten Takt, ohne dass die Position springt.
 
