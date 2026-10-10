@@ -64,6 +64,14 @@ namespace mm::core::text {
     X(kButtonOffline, "button.offline")                                                                                \
     X(kToggleAutoOffline, "toggle.autoOffline")                                                                        \
     X(kPromptHint, "prompt.hint")                                                                                      \
+    X(kRefineHint, "refine.hint")                                                                                      \
+    X(kButtonRefine, "button.refine")                                                                                  \
+    X(kRefineScopeAll, "refine.scopeAll")                                                                              \
+    X(kRefineScopePhrase, "refine.scopePhrase")                                                                        \
+    X(kStatusRefined, "status.refined")                                                                                \
+    X(kStatusNothingToRefine, "status.nothingToRefine")                                                                \
+    X(kStatusRefineAllLocked, "status.refineAllLocked")                                                                \
+    X(kStatusRefineNeedsAi, "status.refineNeedsAi")                                                                    \
     X(kStatusGeneratingAi, "status.generatingAi")                                                                      \
     X(kStatusAiFailed, "status.aiFailed")                                                                              \
     X(kStatusCancelled, "status.cancelled")                                                                            \

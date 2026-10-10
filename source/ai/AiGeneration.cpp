@@ -1,5 +1,6 @@
 #include "ai/AiGeneration.h"
 
+#include "ai/AiExchange.h"
 #include "ai/PatternCompact.h"
 #include "core/Archetype.h"
 #include "core/Constraints.h"
@@ -14,21 +15,13 @@ namespace {
 
 using namespace mm::core;
 
-struct Attempt {
-    bool ok = false;
-    std::string error;
-    Pattern pattern;
-    size_t droppedNotes = 0;
-    size_t clampedValues = 0;
-};
-
 const char* roleName(VoiceRole role) {
     return role == VoiceRole::Bass ? "bass" : "melody";
 }
 
 /// Reads one answer and turns it into a finished pattern, or says what was wrong with it.
-Attempt makePattern(const std::string& text, const AiGenerateInput& input, const std::string& providerId) {
-    Attempt attempt;
+ExchangeAttempt makePattern(const std::string& text, const AiGenerateInput& input, const std::string& providerId) {
+    ExchangeAttempt attempt;
     const auto parsed = parseAiResponse(text);
     if (!parsed.ok) {
         attempt.error = parsed.error;
@@ -126,18 +119,27 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
         return result;
     }
 
-    result.systemPrompt = prompt->system;
-    result.userPrompt = prompt->user;
     AiRequest request;
     request.model = input.model;
-    request.systemPrompt = prompt->system;
-    request.userPrompt = prompt->user;
     request.schemaJson = schemaV1Json();
     request.temperature = std::clamp(input.prompt.creativityPct, 0, 100) / 100.0;
     request.maxTokens = input.maxTokens;
     request.timeoutSeconds = input.timeoutSeconds;
-
     const std::string providerId = provider.info().id;
+    return runExchange(
+        provider, *prompt, request, *input.style, input.prompt.energyPct, input.prompt.creativityPct,
+        [&](const std::string& answer) { return makePattern(answer, input, providerId); }, token);
+}
+
+AiGenerateResult runExchange(IAiProvider& provider, const Prompt& prompt, AiRequest request,
+                             const mm::core::StyleProfile& style, int energyPct, int creativityPct,
+                             const MakeAttempt& makeAttempt, const CancellationToken& token) {
+    using namespace mm::core;
+    AiGenerateResult result;
+    result.systemPrompt = prompt.system;
+    result.userPrompt = prompt.user;
+    request.systemPrompt = prompt.system;
+    request.userPrompt = prompt.user;
     std::string problem;
     for (int attemptNumber = 0; attemptNumber < 2; ++attemptNumber) {
         if (token.cancelled()) {
@@ -145,7 +147,7 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
             return result;
         }
         if (attemptNumber == 1) {
-            request.userPrompt = prompt->user + "\n\nYour previous answer could not be used: " + problem +
+            request.userPrompt = prompt.user + "\n\nYour previous answer could not be used: " + problem +
                                  "\nAnswer again with the complete JSON object only, following the schema exactly.";
         }
         const AiResult answer = provider.generate(request, token);
@@ -164,20 +166,19 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
             return result;
         }
         result.lastAnswer = answer.text;
-        Attempt attempt = makePattern(answer.text, input, providerId);
+        ExchangeAttempt attempt = makeAttempt(answer.text);
         if (attempt.ok) {
             result.outcome = AiOutcome::Success;
             result.repaired = attemptNumber == 1;
             result.droppedNotes = attempt.droppedNotes;
             result.clampedValues = attempt.clampedValues;
             ArchetypeSettings settings;
-            settings.energyPct = input.prompt.energyPct;
-            settings.creativityPct = input.prompt.creativityPct;
-            const auto scores =
-                scoreCriteria(attempt.pattern, qualityContextFor(attempt.pattern, *input.style, settings));
-            result.score = std::clamp(overallScore(scores, input.style->quality, input.prompt.creativityPct), 0, 100);
+            settings.energyPct = energyPct;
+            settings.creativityPct = creativityPct;
+            const auto scores = scoreCriteria(attempt.pattern, qualityContextFor(attempt.pattern, style, settings));
+            result.score = std::clamp(overallScore(scores, style.quality, creativityPct), 0, 100);
             attempt.pattern.qualityScore = static_cast<uint8_t>(result.score);
-            result.belowMinScore = result.score < input.style->quality.minScore;
+            result.belowMinScore = result.score < style.quality.minScore;
             result.pattern = std::move(attempt.pattern);
             return result;
         }

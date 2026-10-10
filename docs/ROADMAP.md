@@ -159,7 +159,7 @@ Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
 - [x] Prompt-Vorlagen v1 (Generieren, Verfeinern) mit Stilregeln, Motivik und Anti-Klischee-Liste (D-166; die Wirkung mit echten Modellen zeigt der Praxistest in P3-G, persönliche Beispiele kommen mit Phase 4)
 - [ ] KI-Ergebnisse durch Constraint-Schicht und Qualitätsbewertung, Anzeige bei Unterschreitung
   - Stand: Pipeline fertig (D-167, P3-C1: Constraints, Wertung, `belowMinScore`); Anzeige „unter Mindestwert“, Abbrechen-Knopf und Fehlerleiste sind im Plugin (D-168, P3-C2); Host-Check H32.
-- [ ] Verfeinern per Prompt mit Kontext, Noten-IDs und Verlauf (SPEC §3.15)
+- [x] Verfeinern per Prompt mit Kontext, Noten-IDs und Verlauf (SPEC §3.15; D-173, P3-F; Host-Check H34)
 - [x] Keychain-Wrapper macOS und Windows (D-170, P3-E1: macOS fertig; Windows außen vor, Speicher der Sitzung als Ersatz ohne Klartext)
 - [x] Einstellungsdialog inklusive Verbindungstest; `models.json` mit Empfehlungen (D-170, D-171, P3-E; Host-Check H33)
 - [ ] Kreativitäts-Regler: Abbildung auf Temperatur, Prompt und Algorithmus (SPEC §7.6)

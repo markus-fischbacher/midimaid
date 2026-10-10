@@ -1,5 +1,6 @@
 #include "plugin/GenerationService.h"
 
+#include "ai/AiRefine.h"
 #include "core/PatternGenerator.h"
 #include "plugin/AppLog.h"
 
@@ -48,9 +49,9 @@ const char* outcomeName(mm::ai::AiOutcome outcome) {
 /// The log line of one AI request (SPEC 10): metadata only. The texts follow only with "Prompts protokollieren".
 void logAiResult(const GenerationJob& job, const mm::ai::AiGenerateResult& result, long long milliseconds) {
     auto& log = AppLog::instance();
-    juce::String line = "generate provider=" + juce::String(job.provider->info().id) +
-                        " model=" + juce::String(job.model) + " outcome=" + outcomeName(result.outcome) +
-                        " duration=" + juce::String(milliseconds) + "ms" +
+    juce::String line = juce::String(job.refine ? "refine" : "generate") +
+                        " provider=" + juce::String(job.provider->info().id) + " model=" + juce::String(job.model) +
+                        " outcome=" + outcomeName(result.outcome) + " duration=" + juce::String(milliseconds) + "ms" +
                         " requests=" + juce::String(result.requests) + " tokens=" + juce::String(result.inputTokens) +
                         "/" + juce::String(result.outputTokens);
     if (result.outcome == mm::ai::AiOutcome::Success) {
@@ -112,24 +113,43 @@ void GenerationService::request(const GenerationJob& job) {
         if (style != nullptr && !cancel.cancelled()) {
             if (job.provider != nullptr && job.templates != nullptr) {
                 report.usedAi = true;
-                mm::ai::AiGenerateInput input;
-                input.style = style;
-                input.templates = job.templates;
-                input.prompt.lengthBars = job.settings.lengthBars;
-                input.prompt.root = job.settings.root;
-                input.prompt.scaleId = job.settings.scaleId;
-                input.prompt.energyPct = job.settings.energyPct;
-                input.prompt.creativityPct = job.settings.creativityPct;
-                input.prompt.request = job.settings.prompt;
-                input.model = job.model;
-                input.timeoutSeconds = job.timeoutSeconds;
-                input.maxTokens = job.maxTokens;
-                input.lockedFrom = job.lockedFrom;
-                input.createdUnixMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                          std::chrono::system_clock::now().time_since_epoch())
-                                          .count();
+                const auto createdUnixMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               std::chrono::system_clock::now().time_since_epoch())
+                                               .count();
                 const auto started = std::chrono::steady_clock::now();
-                auto result = mm::ai::generateWithAi(*job.provider, input, cancel);
+                mm::ai::AiGenerateResult result;
+                if (job.refine) {
+                    mm::ai::AiRefineInput input;
+                    input.style = style;
+                    input.templates = job.templates;
+                    input.pattern = job.refine->pattern;
+                    input.instruction = job.refine->instruction;
+                    input.voice = job.refine->voice;
+                    input.phrase = job.refine->phrase;
+                    input.energyPct = job.settings.energyPct;
+                    input.creativityPct = job.settings.creativityPct;
+                    input.model = job.model;
+                    input.timeoutSeconds = job.timeoutSeconds;
+                    input.maxTokens = job.maxTokens;
+                    input.createdUnixMs = createdUnixMs;
+                    result = mm::ai::refineWithAi(*job.provider, input, cancel);
+                } else {
+                    mm::ai::AiGenerateInput input;
+                    input.style = style;
+                    input.templates = job.templates;
+                    input.prompt.lengthBars = job.settings.lengthBars;
+                    input.prompt.root = job.settings.root;
+                    input.prompt.scaleId = job.settings.scaleId;
+                    input.prompt.energyPct = job.settings.energyPct;
+                    input.prompt.creativityPct = job.settings.creativityPct;
+                    input.prompt.request = job.settings.prompt;
+                    input.model = job.model;
+                    input.timeoutSeconds = job.timeoutSeconds;
+                    input.maxTokens = job.maxTokens;
+                    input.lockedFrom = job.lockedFrom;
+                    input.createdUnixMs = createdUnixMs;
+                    result = mm::ai::generateWithAi(*job.provider, input, cancel);
+                }
                 logAiResult(
                     job, result,
                     std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started)
@@ -144,7 +164,7 @@ void GenerationService::request(const GenerationJob& job) {
                 if (result.outcome == mm::ai::AiOutcome::Success && !cancel.cancelled()) {
                     pattern = std::move(result.pattern);
                 }
-            } else {
+            } else if (!job.refine) { // a refinement has no offline form: without a provider nothing comes out
                 const auto request = requestFor(job, cancel.flag());
                 auto result = job.lockedFrom ? mm::core::generatePatternAroundLocks(*style, request, *job.lockedFrom)
                                              : mm::core::generatePattern(*style, request);

@@ -14,6 +14,15 @@
 
 namespace mm::plugin {
 
+/// A refinement of the pattern of a slot (SPEC 3.15): the pattern as the slot held it when the musician asked, the wish
+/// and the scope (a voice or a phrase of that pattern; neither: all of it).
+struct RefineRequest {
+    mm::core::Pattern pattern;
+    std::string instruction;
+    std::optional<size_t> voice;
+    std::optional<size_t> phrase;
+};
+
 /// What one generation needs. Copied into the job; the worker touches nothing of the instance.
 struct GenerationJob {
     mm::core::GenerationSettings settings;
@@ -22,6 +31,9 @@ struct GenerationJob {
     /// The pattern of the slot when a voice of it is locked: the locked voices, the harmony and the length stay
     /// (SPEC 3.5, `generatePatternAroundLocks`). Empty: a new pattern.
     std::optional<mm::core::Pattern> lockedFrom;
+    /// A refinement instead of a new pattern: asks the AI to change `refine->pattern` (it needs a provider; there is no
+    /// offline refinement).
+    std::optional<RefineRequest> refine;
     /// With a provider the job asks the AI (SPEC 7); without, the offline generators run. Fixed at the request, so
     /// a later change of the backend does not touch a job that is running or waits for a retry.
     std::shared_ptr<mm::ai::IAiProvider> provider;

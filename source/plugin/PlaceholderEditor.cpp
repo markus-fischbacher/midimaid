@@ -262,6 +262,21 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(promptEditor_);
 
+    refineEditor_.setComponentID("refine_text");
+    refineEditor_.setMultiLine(false);
+    refineEditor_.setInputRestrictions(static_cast<int>(mm::core::kMaxPromptBytes));
+    refineEditor_.setTextToShowWhenEmpty(tr(keys::kRefineHint), juce::Colours::white.withAlpha(0.45f));
+    refineEditor_.onReturnKey = [this] { startRefine(); };
+    addChildComponent(refineEditor_);
+    refineScopeBox_.setComponentID("refine_scope");
+    refineScopeBox_.addItem(tr(keys::kRefineScopeAll), 1);
+    refineScopeBox_.setSelectedId(1, juce::dontSendNotification);
+    addChildComponent(refineScopeBox_);
+    refineButton_.setButtonText(tr(keys::kButtonRefine));
+    refineButton_.setComponentID("refine");
+    refineButton_.onClick = [this] { startRefine(); };
+    addChildComponent(refineButton_);
+
     settingsButton_.setButtonText(tr(keys::kButtonSettings));
     settingsButton_.setComponentID("settings");
     settingsButton_.onClick = [] { SettingsDialog::show(); };
@@ -466,6 +481,18 @@ void PlaceholderEditor::updateStatus() {
     case GenerationStatus::GenerationCancelled:
         statusLabel_.setText(tr(keys::kStatusCancelled), juce::dontSendNotification);
         break;
+    case GenerationStatus::Refined:
+        statusLabel_.setText(tr(keys::kStatusRefined), juce::dontSendNotification);
+        break;
+    case GenerationStatus::NothingToRefine:
+        statusLabel_.setText(tr(keys::kStatusNothingToRefine), juce::dontSendNotification);
+        break;
+    case GenerationStatus::RefineAllLocked:
+        statusLabel_.setText(tr(keys::kStatusRefineAllLocked), juce::dontSendNotification);
+        break;
+    case GenerationStatus::RefineNeedsAi:
+        statusLabel_.setText(tr(keys::kStatusRefineNeedsAi), juce::dontSendNotification);
+        break;
     case GenerationStatus::AllLocked:
         statusLabel_.setText(tr(keys::kStatusAllLocked), juce::dontSendNotification);
         break;
@@ -502,10 +529,18 @@ void PlaceholderEditor::updateStatus() {
         break;
     }
     const bool failed = processor_.generationStatus() == GenerationStatus::AiFailed && !voiceLayout_;
-    for (auto* component :
-         std::initializer_list<juce::Component*>{&retryButton_, &offlineButton_, &autoOfflineButton_}) {
-        component->setVisible(failed);
+    retryButton_.setVisible(failed);
+    // A refinement has no offline form (SPEC 3.15): only "Retry" and the settings help there.
+    offlineButton_.setVisible(failed && !processor_.lastJobIsRefine());
+    autoOfflineButton_.setVisible(failed && !processor_.lastJobIsRefine());
+    // The text of a refinement stays until it is applied, so a failure or a cancel keeps the wish for the next try.
+    if (processor_.generationStatus() == GenerationStatus::Refined && refinePending_) {
+        refineEditor_.clear();
     }
+    if (processor_.generationStatus() != GenerationStatus::Generating) {
+        refinePending_ = false;
+    }
+    refineButton_.setEnabled(processor_.generationStatus() != GenerationStatus::Generating);
     // A wrong key or model is solved in the settings (SPEC 7.9: "API key invalid -> settings").
     const auto& report = processor_.lastReport();
     errorSettingsButton_.setVisible(
@@ -531,8 +566,8 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
-             &infoLabel_, &promptEditor_, &settingsButton_, &expertButton_, &undoButton_, &redoButton_,
-             &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
+             &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_,
+             &expertButton_, &undoButton_, &redoButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -543,7 +578,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
         row->setVisible(!voiceLayout);
     }
     // The voice UI is compact (SPEC 8.1); the hub UI has the size of the standard window (SPEC 8.1).
-    setSize(voiceLayout ? 600 : 1000, voiceLayout ? 320 : 680);
+    setSize(voiceLayout ? 600 : 1000, voiceLayout ? 320 : 720);
     resized();
 }
 
@@ -705,7 +740,47 @@ void PlaceholderEditor::rebuildRows(size_t count) {
     resized();
 }
 
+void PlaceholderEditor::startRefine() {
+    const int id = refineScopeBox_.getSelectedId();
+    std::optional<size_t> voice;
+    std::optional<size_t> phrase;
+    if (id >= 200) {
+        phrase = static_cast<size_t>(id - 200);
+    } else if (id >= 100) {
+        voice = static_cast<size_t>(id - 100);
+    }
+    refinePending_ = processor_.refine(refineEditor_.getText().toStdString(), voice, phrase);
+    updateStatus();
+}
+
+void PlaceholderEditor::updateRefineControls() {
+    const auto targets = processor_.refineTargets();
+    if (targets == shownTargets_) {
+        return;
+    }
+    shownTargets_ = targets;
+    const int before = refineScopeBox_.getSelectedId();
+    refineScopeBox_.clear(juce::dontSendNotification);
+    refineScopeBox_.addItem(tr(keys::kRefineScopeAll), 1);
+    for (size_t i = 0; i < targets.voices.size(); ++i) {
+        refineScopeBox_.addItem(
+            tr(targets.voices[i] == mm::core::VoiceRole::Bass ? keys::kVoiceBass : keys::kVoiceMelody),
+            100 + static_cast<int>(i));
+    }
+    if (targets.phrases.size() > 1) { // one phrase over the whole pattern is the whole pattern
+        for (size_t i = 0; i < targets.phrases.size(); ++i) {
+            const auto [start, length] = targets.phrases[i];
+            refineScopeBox_.addItem(
+                tr(keys::kRefineScopePhrase, {{"n", std::to_string(start + 1)}, {"m", std::to_string(start + length)}}),
+                200 + static_cast<int>(i));
+        }
+    }
+    const bool stillThere = before != 0 && refineScopeBox_.indexOfItemId(before) >= 0;
+    refineScopeBox_.setSelectedId(stillThere ? before : 1, juce::dontSendNotification);
+}
+
 void PlaceholderEditor::updateFullView() {
+    updateRefineControls();
     syncFields(processor_.instanceSettings());
 
     // Slot strip: a filled slot is lighter, the selected one has the accent colour.
@@ -851,6 +926,12 @@ void PlaceholderEditor::resized() {
     styleBox_.setBounds(top);
 
     promptEditor_.setBounds(area.removeFromTop(40).reduced(16, 6));
+    auto refineRow = area.removeFromTop(40).reduced(16, 6);
+    refineButton_.setBounds(refineRow.removeFromRight(120));
+    refineRow.removeFromRight(8);
+    refineScopeBox_.setBounds(refineRow.removeFromRight(180));
+    refineRow.removeFromRight(8);
+    refineEditor_.setBounds(refineRow);
 
     auto sliders = area.removeFromTop(40).reduced(16, 6);
     const int half = sliders.getWidth() / 2;
