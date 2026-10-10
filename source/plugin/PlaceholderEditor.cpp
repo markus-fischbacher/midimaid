@@ -402,6 +402,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addAndMakeVisible(generateButton_);
 
+    statusLabel_.setComponentID("status");
     statusLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
     statusLabel_.setJustificationType(juce::Justification::centredLeft);
     statusLabel_.setMinimumHorizontalScale(1.0f); // the hub hint is long: wrap instead of squeezing
@@ -464,12 +465,17 @@ void PlaceholderEditor::updateStatus() {
                              juce::dontSendNotification);
         break;
     case GenerationStatus::Done:
-    case GenerationStatus::DoneLocked: {
+    case GenerationStatus::DoneLocked:
+    case GenerationStatus::Refined: {
+        // An AI result under the minimum of the style is shown and kept (SPEC 4.4): the rating is part of the message.
         const auto& report = processor_.lastReport();
-        const bool locked = processor_.generationStatus() == GenerationStatus::DoneLocked;
+        const auto status = processor_.generationStatus();
+        const std::string_view done = status == GenerationStatus::Refined      ? keys::kStatusRefined
+                                      : status == GenerationStatus::DoneLocked ? keys::kStatusDoneLocked
+                                                                               : keys::kStatusDone;
         statusLabel_.setText(report.usedAi && report.belowMinScore
                                  ? tr(keys::kStatusBelowQuality, {{"score", std::to_string(report.score)}})
-                                 : tr(locked ? keys::kStatusDoneLocked : keys::kStatusDone),
+                                 : tr(done),
                              juce::dontSendNotification);
         break;
     }
@@ -480,9 +486,6 @@ void PlaceholderEditor::updateStatus() {
     }
     case GenerationStatus::GenerationCancelled:
         statusLabel_.setText(tr(keys::kStatusCancelled), juce::dontSendNotification);
-        break;
-    case GenerationStatus::Refined:
-        statusLabel_.setText(tr(keys::kStatusRefined), juce::dontSendNotification);
         break;
     case GenerationStatus::NothingToRefine:
         statusLabel_.setText(tr(keys::kStatusNothingToRefine), juce::dontSendNotification);

@@ -47,40 +47,6 @@ ArchetypeSettings settingsForRole(const ArchetypeSettings& base, PhraseRole role
     return settings;
 }
 
-/// The chords of the half bars [from, to) of the progression, starting at 0.
-std::vector<ChordEvent> sliceProgression(const std::vector<ChordEvent>& progression, uint32_t from, uint32_t to) {
-    std::vector<ChordEvent> slice;
-    for (const ChordEvent& event : progression) {
-        const uint32_t start = std::max(event.startHalfBar, from);
-        const uint32_t end = std::min(event.startHalfBar + event.lengthHalfBars, to);
-        if (start < end) {
-            ChordEvent part = event;
-            part.startHalfBar = start - from;
-            part.lengthHalfBars = end - start;
-            slice.push_back(part);
-        }
-    }
-    return slice;
-}
-
-/// A pattern of the length of the phrase with the harmony, kick grid and voices of `pattern` (without notes).
-Pattern phrasePattern(const Pattern& pattern, const Phrase& phrase) {
-    Pattern sub = makeEmptyPattern(phrase.lengthBars, pattern.styleId);
-    sub.kickGridId = phrase.kickGridId.value_or(pattern.kickGridId);
-    sub.kickRoot = pattern.kickRoot;
-    sub.polymeterPhase = pattern.polymeterPhase;
-    sub.rhythmRef = pattern.rhythmRef;
-    sub.voicing = pattern.voicing;
-    sub.context = pattern.context;
-    sub.context.progression =
-        sliceProgression(pattern.context.progression, phrase.startBar * 2, (phrase.startBar + phrase.lengthBars) * 2);
-    sub.voices = pattern.voices;
-    for (Track& track : sub.voices) {
-        track.notes.clear();
-    }
-    return sub;
-}
-
 using VoiceNotes = std::vector<std::vector<Note>>; ///< per voice, absolute ticks, without ids
 
 /// Generates all voices of one phrase; nullopt if one of them cannot be generated.
@@ -90,7 +56,7 @@ std::optional<VoiceNotes> generatePhraseNotes(const Pattern& pattern, const Phra
                                               const std::vector<std::string>& archetypes, const StyleProfile& style,
                                               const ArchetypeSettings& base, uint64_t phraseSeed,
                                               const std::vector<bool>& keep = {}) {
-    Pattern sub = phrasePattern(pattern, phrase);
+    Pattern sub = phraseSkeleton(pattern, phrase);
     const auto kept = [&keep](size_t i) { return i < keep.size() && keep[i]; };
     const uint32_t phraseFrom = phrase.startBar * kTicksPerBar;
     const uint32_t phraseTo = phraseFrom + phrase.lengthBars * kTicksPerBar;

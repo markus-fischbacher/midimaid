@@ -456,3 +456,53 @@ TEST_CASE("a phrase takes the drum reference of the pattern into its generation"
         }
     }
 }
+
+TEST_CASE("a phrase can be taken out and put back", "[form][phrase]") {
+    Pattern pattern = makeEmptyPattern(8, "peak_time");
+    pattern.phrases.clear();
+    for (uint32_t start : {0u, 4u}) {
+        Phrase phrase;
+        phrase.startBar = start;
+        phrase.lengthBars = 4;
+        phrase.role = start == 0 ? PhraseRole::Main : PhraseRole::Variation;
+        pattern.phrases.push_back(phrase);
+    }
+    for (uint32_t bar = 0; bar < 8; ++bar) {
+        Note note;
+        note.id = allocateNoteId(pattern);
+        note.pitch = static_cast<uint8_t>(40 + bar);
+        note.startTick = bar * kTicksPerBar + 240;
+        note.lengthTicks = 240;
+        pattern.voices[0].notes.push_back(note);
+    }
+    const Phrase second = pattern.phrases[1];
+
+    Pattern sub = extractPhrase(pattern, second);
+    CHECK(sub.lengthBars == 4);
+    CHECK(sub.voices.size() == pattern.voices.size());
+    REQUIRE(sub.voices[0].notes.size() == 4);
+    CHECK(sub.voices[0].notes.front().startTick == 240); // the phrase starts at 0
+    CHECK(sub.voices[0].notes.front().pitch == 44);
+    CHECK(sub.nextNoteId == pattern.nextNoteId);
+    CHECK(sub.context.progression.size() <= pattern.context.progression.size());
+
+    const Pattern unchanged = pattern;
+    replacePhraseNotes(pattern, second, sub);
+    CHECK(pattern == unchanged); // putting back what was taken out changes nothing
+
+    sub.voices[0].notes.pop_back();
+    Note added;
+    added.id = sub.nextNoteId++;
+    added.pitch = 60;
+    added.startTick = 0;
+    added.lengthTicks = 240;
+    sub.voices[0].notes.insert(sub.voices[0].notes.begin(), added);
+    replacePhraseNotes(pattern, second, sub);
+    CHECK(pattern.voices[0].notes.size() == 8);
+    CHECK(pattern.voices[0].notes[4].startTick == 4 * kTicksPerBar); // the new note, shifted back to its bar
+    CHECK(pattern.voices[0].notes[4].pitch == 60);
+    CHECK(pattern.nextNoteId == sub.nextNoteId);
+    for (size_t i = 0; i < 4; ++i) { // the first phrase is untouched
+        CHECK(pattern.voices[0].notes[i] == unchanged.voices[0].notes[i]);
+    }
+}
