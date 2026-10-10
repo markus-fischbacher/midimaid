@@ -603,3 +603,38 @@ TEST_CASE("the merge gives a note that takes the id of a note outside the phrase
     }
     CHECK(merged.nextNoteId > current.nextNoteId);
 }
+
+TEST_CASE("a refined voice that copies the set is shown under the minimum", "[ai][refine][reference]") {
+    const auto style = shipped();
+    Pattern pattern;
+    std::vector<ReferenceEntry> entries;
+    bool distinctive = false;
+    for (uint64_t seed = 1; seed <= 60 && !distinctive; ++seed) {
+        pattern = algorithmic(style, seed);
+        entries.clear();
+        for (const auto& track : pattern.voices) {
+            ReferenceEntry entry;
+            entry.role = track.role;
+            entry.bars = pattern.lengthBars;
+            entry.notes = track.notes;
+            distinctive = distinctive || isDistinctive(entry);
+            entries.push_back(entry);
+        }
+    }
+    REQUIRE(distinctive);
+    // the answer changes nothing: the pattern is exactly the set
+    auto input = inputFor(style, pattern);
+    MockProvider free;
+    free.enqueueText(answerOf(pattern, style).dump());
+    const auto plain = refine(free, input);
+    REQUIRE(plain.outcome == AiOutcome::Success);
+    CHECK_FALSE(plain.copyFlagged);
+
+    input.referenceSet = entries;
+    MockProvider guarded;
+    guarded.enqueueText(answerOf(pattern, style).dump());
+    const auto flagged = refine(guarded, input);
+    REQUIRE(flagged.outcome == AiOutcome::Success);
+    CHECK(flagged.copyFlagged);
+    CHECK(flagged.belowMinScore);
+}

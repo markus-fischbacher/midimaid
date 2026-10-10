@@ -185,8 +185,9 @@ mit Wahlmöglichkeit, und die Wiedergabe läuft ungestört weiter.
 - [x] Referenzen v1.0: ein Set pro Stil, Massen-Import (Dateien, Ordner, Clips), Rolle beim Import
       zuordnen, Hintergrund-Analyse mit Cache, Ansicht „Referenzen“ (Gewicht, an/aus)
   - Stand: fertig (D-180, D-181, P4-E); die Wirkung auf die Erzeugung folgt in P4-F; Host-Check H40.
-- [ ] Referenz-Progressionen im Progressions-Generator, KI-Beispiele aus dem Set, Kopierschutz,
+- [x] Referenz-Progressionen im Progressions-Generator, KI-Beispiele aus dem Set, Kopierschutz,
       Set-ID im Pattern, Datenschutz-Schalter
+  - Stand: fertig (D-182, P4-F); Host-Check H41.
 
 **Abnahme:** Eine importierte eigene Bassline bleibt unverändert, die generierte Melodie passt harmonisch
 dazu. Mit Drum-Referenz spart der Bass die echten Kicks aus und übernimmt den Hat-Groove. Mit einem Set

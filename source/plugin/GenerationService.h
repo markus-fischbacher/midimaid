@@ -3,6 +3,7 @@
 #include "ai/AiGeneration.h"
 #include "core/InstanceSettings.h"
 #include "core/Pattern.h"
+#include "core/ReferenceProfile.h"
 #include "core/StyleLibrary.h"
 
 #include <atomic>
@@ -41,6 +42,11 @@ struct GenerationJob {
     std::string model;
     int timeoutSeconds = 30;
     int maxTokens = 4096;
+    /// The reference set of the style as it was when the musician asked (SPEC 3.20): the entries for the copy
+    /// protection and the progressions for the offline generator, the id for the pattern, and the examples for the AI
+    /// (only with the consent of the provider, D-86; empty otherwise).
+    mm::core::ReferenceEffect references;
+    std::vector<mm::core::PersonalExample> examples;
 };
 
 /// How a job ended, for the editor (SPEC 7.9). Without AI only `usedAi == false` is meaningful.
@@ -52,6 +58,7 @@ struct GenerationReport {
     std::string error; ///< a readable cause; never contains a key
     bool repaired = false;
     bool belowMinScore = false;
+    bool copyFlagged = false; ///< the answer is too close to an entry of the set (D-87); `belowMinScore` is set too
     int score = 0;
 };
 

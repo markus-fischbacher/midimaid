@@ -20,9 +20,11 @@ using MakeAttempt = std::function<ExchangeAttempt(const std::string& answer)>;
 /// The shared request loop of "Generate" and "Refine" (SPEC 7.3, 7.9): asks the provider, hands each answer to
 /// `makeAttempt`, and sends exactly one repair request that names the problem when the answer was unusable. A provider
 /// error ends it at once; a cancelled token ends it with `Cancelled`. A pattern that worked is rated with the style
-/// (SPEC 4.4). `prompt` and `request` are filled by the caller (the request without the user text of the repair).
+/// (SPEC 4.4); with `reference` an answer too close to an entry of the set counts as below the minimum (`copyFlagged`,
+/// D-87). `prompt` and `request` are filled by the caller (the request without the user text of the repair).
 AiGenerateResult runExchange(IAiProvider& provider, const Prompt& prompt, AiRequest request,
                              const mm::core::StyleProfile& style, int energyPct, int creativityPct,
-                             const MakeAttempt& makeAttempt, const CancellationToken& token);
+                             const MakeAttempt& makeAttempt, const CancellationToken& token,
+                             const std::vector<mm::core::ReferenceEntry>& reference = {});
 
 } // namespace mm::ai

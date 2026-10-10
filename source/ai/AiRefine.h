@@ -22,6 +22,8 @@ struct AiRefineInput {
     int timeoutSeconds = 30;
     int maxTokens = 4096;
     int64_t createdUnixMs = 0;
+    /// The active entries of the reference set for the copy protection of the answer (SPEC 3.20, D-87).
+    std::vector<mm::core::ReferenceEntry> referenceSet;
 };
 
 /// How many earlier refinements the pattern remembers and sends as context (SPEC 3.15).

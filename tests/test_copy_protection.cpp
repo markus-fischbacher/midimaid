@@ -286,6 +286,18 @@ TEST_CASE("check: transposed copies are caught, only voices of the same role com
     CHECK_FALSE(checkCopyProtection(patternWith(1, original, 2), bassSet).violated);
 }
 
+TEST_CASE("check: a locked voice is the musician's own and never counts as a copy", "[copy]") {
+    const Onsets original = twentyOnsets();
+    const std::vector<ReferenceEntry> set{entry(original, 2)};
+    Pattern p = patternWith(1, original, 2);
+    REQUIRE(checkCopyProtection(p, set).violated);
+    p.voices[1].lock = LockFlags{true, true, true};
+    CHECK_FALSE(checkCopyProtection(p, set).violated);
+    // a voice that is locked only in part is still generated material
+    p.voices[1].lock = LockFlags{true, true, false};
+    CHECK(checkCopyProtection(p, set).violated);
+}
+
 TEST_CASE("check: inactive and common entries are ignored", "[copy]") {
     const Onsets original = twentyOnsets();
     ReferenceEntry inactive = entry(original, 2);

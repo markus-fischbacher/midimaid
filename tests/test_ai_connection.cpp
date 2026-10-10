@@ -124,6 +124,7 @@ TEST_CASE("an active provider is built with its defaults and the key from the ke
     REQUIRE(pumpUntil([&] { return backendHas("anthropic"); }));
     const auto settings = AiBackend::instance().get();
     CHECK(settings.model == "claude-sonnet-5-5");
+    CHECK(settings.cloud); // a provider on the internet needs the consent for the musician's examples (D-86)
     CHECK(settings.timeoutSeconds == 30);
     CHECK(settings.maxTokens == 4096);
 
@@ -158,6 +159,7 @@ TEST_CASE("the choices of the musician reach the backend", "[ai-connection]") {
     REQUIRE(pumpUntil([&] { return backendHas("ollama"); }));
     const auto settings = AiBackend::instance().get();
     CHECK(settings.model == "llama3.1");
+    CHECK_FALSE(settings.cloud); // on this computer: no consent needed
     CHECK(settings.timeoutSeconds == 200);
     CHECK(settings.maxTokens == 9000);
 }

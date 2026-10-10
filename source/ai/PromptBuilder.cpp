@@ -218,6 +218,27 @@ std::string allBarsNote(const GeneratePromptInput& input, uint32_t bars) {
 
 } // namespace
 
+std::string personalExamplesText(const std::vector<mm::core::PersonalExample>& examples) {
+    if (examples.empty()) {
+        return "";
+    }
+    std::string text =
+        "The musician's own style: these are pieces the musician wrote. Pick up their rhythm, register and phrasing, "
+        "but do not copy them note for note; they take precedence over any other example. Each note is "
+        "`step:semitones/length` (16th steps, semitones above the key root, length in steps).\n";
+    for (const auto& example : examples) {
+        text += std::string("- ") + (example.role == mm::core::TrackRole::Bass ? "bass" : "melody") + ", " +
+                std::to_string(example.bars) + (example.bars == 1 ? " bar, " : " bars, ") +
+                rootName(example.root) + " " + example.scaleId + ":";
+        for (const auto& note : example.notes) {
+            text += " " + std::to_string(note.step) + ":" + std::to_string(note.semitones) + "/" +
+                    std::to_string(note.lengthSteps);
+        }
+        text += "\n";
+    }
+    return text;
+}
+
 std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, const GeneratePromptInput& input) {
     if (input.style == nullptr) {
         return std::nullopt;
@@ -255,6 +276,7 @@ std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, cons
                        "of 4, 8 or 16, `role`) that covers all bars without gaps; the plugin builds the phrases "
                        "from your motif."
                  : allBarsNote(input, bars);
+    request["examples"] = personalExamplesText(input.examples);
     request["locked_note"] = "";
     if (!input.lockedRoles.empty()) {
         request["locked_note"] =

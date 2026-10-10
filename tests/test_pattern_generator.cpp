@@ -311,6 +311,46 @@ TEST_CASE("the copy protection rejects candidates that copy a distinctive refere
     CHECK(replayWinner(style, request, plain.seed) == plain.pattern);
 }
 
+TEST_CASE("generation around locks protects against the set for the generated voices only", "[generator]") {
+    const StyleProfile style = loadShipped("peak_time");
+    GenerationRequest request = requestFor(4, 6);
+    // a locked bass that is distinctive, so that the set would flag it if the check looked at it
+    Pattern current;
+    ReferenceEntry ownBass;
+    for (uint64_t seed = 1; seed <= 60; ++seed) {
+        current = generateCandidate(style, request, seed);
+        ownBass.role = VoiceRole::Bass;
+        ownBass.bars = current.lengthBars;
+        ownBass.notes = current.voices[0].notes;
+        if (isDistinctive(ownBass)) {
+            break;
+        }
+    }
+    REQUIRE(isDistinctive(ownBass));
+    request.referenceSet = {ownBass};
+    REQUIRE(checkCopyProtection(current, request.referenceSet).violated); // unlocked it is flagged
+    current.voices[0].lock = LockFlags{true, true, true};
+    const SelectionResult kept = generatePatternAroundLocks(style, request, current);
+    CHECK(kept.success); // the locked bass is the musician's own: it never counts as a copy
+    CHECK(kept.pattern.voices[0].notes == current.voices[0].notes);
+
+    // the melody that the generation made without a set is in the set now: it must not come again
+    GenerationRequest guardedRequest = requestFor(4, 6);
+    const SelectionResult plain = generatePatternAroundLocks(style, guardedRequest, current);
+    REQUIRE(plain.success);
+    ReferenceEntry melody;
+    melody.role = VoiceRole::Melody;
+    melody.bars = plain.pattern.lengthBars;
+    melody.notes = plain.pattern.voices[1].notes;
+    REQUIRE(isDistinctive(melody));
+    guardedRequest.referenceSet = {melody};
+    const SelectionResult guarded = generatePatternAroundLocks(style, guardedRequest, current);
+    CHECK(guarded.seed != plain.seed);
+    if (guarded.success) {
+        CHECK_FALSE(checkCopyProtection(guarded.pattern, guardedRequest.referenceSet).violated);
+    }
+}
+
 TEST_CASE("every voice of the pattern is generated, bass first", "[generator]") {
     const StyleProfile style = loadShipped("peak_time");
     GenerationRequest request = requestFor(2, 1);

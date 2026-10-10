@@ -67,7 +67,8 @@ struct CopyCheck {
     int permille = 0; ///< that similarity (0 if nothing was compared)
 };
 
-/// Compares every voice with notes to every active, distinctive entry of the same role. `violated` if the highest
+/// Compares every voice with notes (but not a locked one: that is the musician's own) to every active, distinctive
+/// entry of the same role. `violated` if the highest
 /// similarity is above `kCopyThresholdPermille`.
 CopyCheck checkCopyProtection(const Pattern& pattern, const std::vector<ReferenceEntry>& set);
 

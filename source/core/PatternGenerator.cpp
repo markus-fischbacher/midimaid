@@ -157,6 +157,7 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
     pattern.info.styleProfileVersion = style.version;
     pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
     pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
+    pattern.info.referenceSetId = request.referenceSetId;
     return pattern;
 }
 
@@ -178,7 +179,7 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
             pattern.voices.push_back(std::move(track));
         }
     }
-    applyHarmony(pattern, style, rng, request.root, request.scaleId);
+    applyHarmony(pattern, style, rng, request.root, request.scaleId, request.personalProgressions);
     applyStyleGroove(pattern, style);
     for (Track& track : pattern.voices) {
         setManualArchetype(track, track.role == VoiceRole::Bass ? request.bassArchetype : request.melodyArchetype);
@@ -224,6 +225,7 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     pattern.info.styleProfileVersion = style.version;
     pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
     pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
+    pattern.info.referenceSetId = request.referenceSetId;
     return pattern;
 }
 
@@ -236,10 +238,17 @@ SelectionResult generatePatternAroundLocks(const StyleProfile& style, const Gene
     }
     const auto generate = [&](uint64_t seed) { return generateAroundLocks(style, request, current, seed); };
     const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
-    // the voices that are generated have an archetype; a locked one may have none (an imported or drawn line)
-    const HardCheck hardCheck = [](const Pattern& pattern) {
-        return std::all_of(pattern.voices.begin(), pattern.voices.end(),
-                           [](const Track& track) { return isVoiceLocked(track) || !track.archetypeId.empty(); });
+    HardCheck copyCheck;
+    if (!request.referenceSet.empty()) {
+        copyCheck = copyProtectionCheck(request.referenceSet);
+    }
+    // the voices that are generated have an archetype; a locked one may have none (an imported or drawn line); the copy
+    // protection leaves locked voices alone
+    const HardCheck hardCheck = [copyCheck](const Pattern& pattern) {
+        const bool complete =
+            std::all_of(pattern.voices.begin(), pattern.voices.end(),
+                        [](const Track& track) { return isVoiceLocked(track) || !track.archetypeId.empty(); });
+        return complete && (!copyCheck || copyCheck(pattern));
     };
     SelectionResult result = selectBest(generate, request.seed, style.quality, contextFor, hardCheck);
     if (result.success) {

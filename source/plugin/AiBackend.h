@@ -16,6 +16,8 @@ struct AiBackendSettings {
     std::string model;
     int timeoutSeconds = 30;
     int maxTokens = 4096;
+    /// False for a provider on this computer: it gets the musician's examples without consent (SPEC 3.20, D-86).
+    bool cloud = true;
 };
 
 class AiBackend {
