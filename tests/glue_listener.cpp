@@ -12,8 +12,12 @@ public:
 
     void testRunStarting(const Catch::TestRunInfo&) override {
         mm::plugin::overrideGlobalSettings(&mmtest::disabledSettings());
+        mm::plugin::overrideReferenceStore(&mmtest::disabledReferences());
     }
-    void testRunEnded(const Catch::TestRunStats&) override { mm::plugin::overrideGlobalSettings(nullptr); }
+    void testRunEnded(const Catch::TestRunStats&) override {
+        mm::plugin::overrideGlobalSettings(nullptr);
+        mm::plugin::overrideReferenceStore(nullptr);
+    }
 };
 
 } // namespace

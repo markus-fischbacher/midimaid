@@ -751,3 +751,34 @@ TEST_CASE("a start close to the next 16th counts for that step", "[analysis]") {
     CHECK(analysis.rhythm.bars[0].test(1)); // 230 ticks is nearer to step 1 (240) than to step 0
     CHECK(analysis.rhythm.meanOffsetTicks[1] == -10);
 }
+
+TEST_CASE("a bass line in the range of the toms is a bass line, not a kit (D-180)", "[analysis]") {
+    // A, C and G in the octave of the toms: no kick, and the toms are not part of the kit notes
+    std::vector<MidiClipNote> bass;
+    for (uint32_t i = 0; i < 16; ++i) {
+        bass.push_back(note(static_cast<uint8_t>(i % 3 == 0 ? 45 : i % 3 == 1 ? 48 : 43), i * 240, 200, 100, 1));
+    }
+    CHECK(suggestRole(bass) == TrackRole::Bass);
+
+    // with the kick note among them and a tom, still a bass line (a C minor bass with F and G)
+    std::vector<MidiClipNote> cMinor;
+    for (uint32_t i = 0; i < 16; ++i) {
+        cMinor.push_back(note(static_cast<uint8_t>(i % 4 == 0 ? 36 : i % 4 == 1 ? 41 : i % 4 == 2 ? 43 : 46), i * 240, 200, 100, 1));
+    }
+    CHECK(suggestRole(cMinor) == TrackRole::Bass);
+
+    // a kit on a channel other than 10: kick, snare, hats
+    std::vector<MidiClipNote> kit;
+    for (uint32_t i = 0; i < 16; ++i) {
+        kit.push_back(note(static_cast<uint8_t>(i % 4 == 0 ? 36 : i % 4 == 2 ? 38 : 42), i * 240, 60, 100, 1));
+    }
+    CHECK(suggestRole(kit) == TrackRole::Drums);
+
+    // the same notes without a kick are not recognised as a kit
+    for (auto& n : kit) {
+        if (n.pitch == 36) {
+            n.pitch = 38;
+        }
+    }
+    CHECK(suggestRole(kit) != TrackRole::Drums);
+}
