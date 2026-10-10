@@ -566,4 +566,10 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Gegenprobe:** Gleicher Seed und gleiches Set geben dasselbe Pattern; ein geändertes Set (alle Einträge aus) gibt ein anderes ohne Set-ID. So ist sicher, dass der erste Test die Änderung des Sets wirklich ausübt.
 - **Umfang:** Gewinner-Seed, Wahrscheinlichkeits-Hash und Evolve-Ebene sind v1.1; ihre Felder sind im State, ihr Test kommt mit ihnen. Mutation: ein Bit der Anschlagstärke beim Speichern gekippt → 43 Prüfungen rot.
 - **Offen:** Der Test mit einem echten Projekt in einer DAW bleibt Host-Check H44.
+### D-187 – Performance-Messung gegen SPEC 11 (Phase 6, P6-B)
+
+- **Messung** (`tests/test_performance.cpp`, Tag `[.perf]`, versteckt): Zeiten eines Debug-Builds oder einer ausgelasteten CI sagen nichts, deshalb läuft sie von Hand auf dem Release-Build: `cmake --build --preset macos-release --target mm_plugin_glue_tests && build/macos-release/tests/mm_plugin_glue_tests "[perf]"`. Die Prüfungen sind die Zielwerte aus SPEC 11.
+- **Ergebnis** (Apple Silicon, Release, 10.10.2026): Offline-Generierung 16 Takte mit allen Kandidaten **0,5 bis 0,7 ms** im Median (Ziel < 100 ms, 40 Seeds je Stil, schlimmster Fall 0,9 ms). Instanz anlegen **0,2 ms** (Ziel < 500 ms; ohne Editor und ohne Host). Wiedergabe eines 16-Takte-Patterns **0,002 bis 0,06 % eines Kerns** je nach Blockgröße 2048 bis 64 (Ziel < 1 %), schlimmster Block 0,04 ms bei 1,3 bis 10,7 ms Blocklänge. Analyse von **200 Referenzdateien in 0,02 s** (Ziel < 30 s), der schlimmste Audio-Block währenddessen 0,009 ms.
+- **Prüfung der Messung:** Die Dateien sind alle verschieden (200 Einträge, keine übersprungen). Mutation: 150 ms Schlaf in `generatePattern` → Median 155 ms, Prüfung rot.
+- **Grenzen:** Die Analyse-Dateien sind klein (8 Takte, synthetisch); echte Dateien mit mehreren Spuren sind größer, der Abstand zur Grenze von 30 s ist aber sehr groß. „Laden des Plugins“ ist ohne Editor und ohne Host gemessen; die Zeit in der DAW (Scan, Editor öffnen) bleibt **Host-Check H45**. Die CPU-Last mit mehreren Instanzen im Hub-Betrieb und mit laufendem Editor ebenfalls (H45).
 
