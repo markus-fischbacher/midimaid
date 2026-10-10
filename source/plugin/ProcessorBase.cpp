@@ -6,6 +6,8 @@
 #include "core/SlotBankJson.h"
 #include "core/TextKeys.h"
 #include "core/Variation.h"
+#include "plugin/AiBackend.h"
+#include "plugin/EmbeddedPrompts.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
@@ -74,6 +76,7 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
       generator_(styles_, [this](const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
           onGenerated(job, std::move(pattern));
       }) {
+    generator_.setReportHandler([this](const GenerationJob&, const GenerationReport& report) { lastReport_ = report; });
     slotValue_ = parameters_.getRawParameterValue("slot");
     for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
         muteValues_[static_cast<size_t>(voice - 1)] =
@@ -388,10 +391,48 @@ void ProcessorBase::generate() {
         generationStatus_ = GenerationStatus::AllLocked; // nothing to generate
         return;
     }
+    const auto backend = AiBackend::instance().get();
+    if (backend.provider != nullptr) {
+        job.provider = backend.provider;
+        job.templates = &embeddedPrompts();
+        job.model = backend.model;
+        job.timeoutSeconds = backend.timeoutSeconds;
+        job.maxTokens = backend.maxTokens;
+    }
+    startJob(std::move(job));
+}
+
+void ProcessorBase::startJob(GenerationJob job) {
     parked_.reset(); // a newer request replaces a result that is still waiting
     parkTimer_.reset();
     generationStatus_ = GenerationStatus::Generating;
+    lastReport_ = {};
+    lastJobUsesAi_ = job.provider != nullptr;
+    lastJob_ = job;
     generator_.request(job);
+}
+
+void ProcessorBase::generateOffline() {
+    if (!lastJob_) {
+        return;
+    }
+    auto job = *lastJob_;
+    job.provider.reset();
+    startJob(std::move(job));
+}
+
+void ProcessorBase::retryGeneration() {
+    if (lastJob_) {
+        startJob(*lastJob_);
+    }
+}
+
+void ProcessorBase::cancelGeneration() {
+    if (generationStatus_ != GenerationStatus::Generating) {
+        return;
+    }
+    generator_.cancel();
+    generationStatus_ = GenerationStatus::GenerationCancelled;
 }
 
 bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::optional<uint64_t> seed,
@@ -409,8 +450,9 @@ bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::opti
         generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
         return false;
     }
-    slotIndex = slotChoice ? *slotChoice
-                           : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    slotIndex = slotChoice
+                    ? *slotChoice
+                    : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
     const uint64_t useSeed = seed ? *seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     bool done = false;
     bool allLocked = false;
@@ -542,7 +584,13 @@ bool ProcessorBase::browseHistory(bool back, std::optional<size_t> slotChoice) {
 
 void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
     if (!pattern) {
-        generationStatus_ = GenerationStatus::NoResult; // the slot stays as it was
+        const bool aiFailed = lastReport_.usedAi && lastReport_.outcome != mm::ai::AiOutcome::Cancelled;
+        if (aiFailed && autoOffline_) {
+            generateOffline();
+            return;
+        }
+        // the slot stays as it was
+        generationStatus_ = aiFailed ? GenerationStatus::AiFailed : GenerationStatus::NoResult;
         return;
     }
     if (isNonRealtime()) {
@@ -972,6 +1020,7 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
                                          : juce::String("auto"));
         root.setAttribute("genScale", settings_.generation.scaleId ? juce::String(*settings_.generation.scaleId)
                                                                    : juce::String("auto"));
+        root.setAttribute("genPrompt", juce::String::fromUTF8(settings_.generation.prompt.c_str()));
         root.setAttribute("genSeed", settings_.generation.seed
                                          ? juce::String(std::to_string(*settings_.generation.seed))
                                          : juce::String("random"));
@@ -1020,6 +1069,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
         settings.generation.scaleId = text;
     }
     settings.generation.seed = mm::core::parseSeed(root->getStringAttribute("genSeed").toStdString());
+    settings.generation.prompt = root->getStringAttribute("genPrompt").toStdString();
 
     mm::core::SlotBank bank;
     std::vector<std::string> problems;

@@ -19,8 +19,8 @@ add_executable(mm_engine_tests test_pattern_player.cpp test_slot_publisher.cpp t
 target_link_libraries(mm_engine_tests PRIVATE mm_engine Threads::Threads Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_engine_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
-add_executable(mm_plugin_glue_tests test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp glue_listener.cpp)
-mm_warn_sources(test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp glue_listener.cpp)
+add_executable(mm_plugin_glue_tests test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp test_ai_plugin.cpp glue_listener.cpp)
+mm_warn_sources(test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp test_ai_plugin.cpp glue_listener.cpp)
 # The generation tests pump the message loop (runDispatchLoopUntil needs modal loops).
 target_compile_definitions(mm_plugin_glue_tests PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catch2WithMain)

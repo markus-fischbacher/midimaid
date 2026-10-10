@@ -245,6 +245,40 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(barsBox_);
 
+    promptEditor_.setComponentID("prompt");
+    promptEditor_.setMultiLine(false);
+    promptEditor_.setInputRestrictions(static_cast<int>(mm::core::kMaxPromptBytes));
+    promptEditor_.setTextToShowWhenEmpty(tr(keys::kPromptHint), juce::Colours::white.withAlpha(0.45f));
+    promptEditor_.onTextChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.generation.prompt = promptEditor_.getText().toStdString();
+        processor_.setInstanceSettings(next);
+    };
+    promptEditor_.onReturnKey = [this] {
+        processor_.generate();
+        updateStatus();
+    };
+    addChildComponent(promptEditor_);
+
+    retryButton_.setButtonText(tr(keys::kButtonRetry));
+    retryButton_.setComponentID("retry");
+    retryButton_.onClick = [this] {
+        processor_.retryGeneration();
+        updateStatus();
+    };
+    addChildComponent(retryButton_);
+    offlineButton_.setButtonText(tr(keys::kButtonOffline));
+    offlineButton_.setComponentID("offline");
+    offlineButton_.onClick = [this] {
+        processor_.generateOffline();
+        updateStatus();
+    };
+    addChildComponent(offlineButton_);
+    autoOfflineButton_.setButtonText(tr(keys::kToggleAutoOffline));
+    autoOfflineButton_.setComponentID("autoOffline");
+    autoOfflineButton_.onClick = [this] { processor_.setAutoOffline(autoOfflineButton_.getToggleState()); };
+    addChildComponent(autoOfflineButton_);
+
     seedEditor_.setComponentID("seed");
     seedEditor_.setInputRestrictions(20, "0123456789");
     seedEditor_.setTextToShowWhenEmpty(tr(keys::kSeedRandom), juce::Colours::white.withAlpha(0.45f));
@@ -331,8 +365,13 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     addChildComponent(rollView_);
 
     generateButton_.setButtonText(tr(keys::kButtonGenerate));
+    generateButton_.setComponentID("generate");
     generateButton_.onClick = [this] {
-        processor_.generate();
+        if (processor_.generatingWithAi()) {
+            processor_.cancelGeneration(); // the button is "Cancel" while the AI works (SPEC 7.9)
+        } else {
+            processor_.generate();
+        }
         updateStatus();
     };
     addAndMakeVisible(generateButton_);
@@ -351,6 +390,48 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 PlaceholderEditor::~PlaceholderEditor() {
     stopTimer();
 }
+
+namespace {
+
+/// What went wrong, in words for the status bar (SPEC 7.9): the status of the provider, the HTTP code if there was one.
+juce::String aiFailureReason(const GenerationReport& report) {
+    using mm::ai::AiStatus;
+    if (report.outcome == mm::ai::AiOutcome::Invalid) {
+        return tr(keys::kAiReasonInvalid);
+    }
+    std::string_view key = keys::kAiReasonNetwork;
+    switch (report.status) {
+    case AiStatus::AuthFailed:
+        key = keys::kAiReasonAuth;
+        break;
+    case AiStatus::ModelNotFound:
+        key = keys::kAiReasonModel;
+        break;
+    case AiStatus::RateLimited:
+        key = keys::kAiReasonRate;
+        break;
+    case AiStatus::ServerError:
+        key = keys::kAiReasonServer;
+        break;
+    case AiStatus::BadRequest:
+        key = keys::kAiReasonBad;
+        break;
+    case AiStatus::Timeout:
+        key = keys::kAiReasonTimeout;
+        break;
+    case AiStatus::NetworkError:
+    case AiStatus::Cancelled:
+    case AiStatus::Ok:
+        break;
+    }
+    auto text = tr(key);
+    if (report.httpStatus != 0) {
+        text += " (HTTP " + juce::String(report.httpStatus) + ")";
+    }
+    return text;
+}
+
+} // namespace
 
 void PlaceholderEditor::updateStatus() {
     using mm::core::GroupStatus;
@@ -383,13 +464,26 @@ void PlaceholderEditor::updateStatus() {
 
     switch (processor_.generationStatus()) {
     case GenerationStatus::Generating:
-        statusLabel_.setText(tr(keys::kStatusGenerating), juce::dontSendNotification);
+        statusLabel_.setText(tr(processor_.generatingWithAi() ? keys::kStatusGeneratingAi : keys::kStatusGenerating),
+                             juce::dontSendNotification);
         break;
     case GenerationStatus::Done:
-        statusLabel_.setText(tr(keys::kStatusDone), juce::dontSendNotification);
+    case GenerationStatus::DoneLocked: {
+        const auto& report = processor_.lastReport();
+        const bool locked = processor_.generationStatus() == GenerationStatus::DoneLocked;
+        statusLabel_.setText(report.usedAi && report.belowMinScore
+                                 ? tr(keys::kStatusBelowQuality, {{"score", std::to_string(report.score)}})
+                                 : tr(locked ? keys::kStatusDoneLocked : keys::kStatusDone),
+                             juce::dontSendNotification);
         break;
-    case GenerationStatus::DoneLocked:
-        statusLabel_.setText(tr(keys::kStatusDoneLocked), juce::dontSendNotification);
+    }
+    case GenerationStatus::AiFailed: {
+        const std::string reason = aiFailureReason(processor_.lastReport()).toStdString();
+        statusLabel_.setText(tr(keys::kStatusAiFailed, {{"reason", reason}}), juce::dontSendNotification);
+        break;
+    }
+    case GenerationStatus::GenerationCancelled:
+        statusLabel_.setText(tr(keys::kStatusCancelled), juce::dontSendNotification);
         break;
     case GenerationStatus::AllLocked:
         statusLabel_.setText(tr(keys::kStatusAllLocked), juce::dontSendNotification);
@@ -426,6 +520,14 @@ void PlaceholderEditor::updateStatus() {
         statusLabel_.setText({}, juce::dontSendNotification);
         break;
     }
+    const bool failed = processor_.generationStatus() == GenerationStatus::AiFailed && !voiceLayout_;
+    for (auto* component :
+         std::initializer_list<juce::Component*>{&retryButton_, &offlineButton_, &autoOfflineButton_}) {
+        component->setVisible(failed);
+    }
+    autoOfflineButton_.setToggleState(processor_.autoOffline(), juce::dontSendNotification);
+    generateButton_.setButtonText(
+        tr(processor_.generatingWithAi() ? keys::kButtonCancelGeneration : keys::kButtonGenerate));
     if (groupText_.isNotEmpty()) {
         const auto generation = statusLabel_.getText();
         statusLabel_.setText(generation.isEmpty() ? groupText_ : groupText_ + "  |  " + generation,
@@ -443,8 +545,8 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
-             &infoLabel_, &expertButton_, &undoButton_, &redoButton_, &historyBackButton_, &historyForwardButton_,
-             &historyLabel_}) {
+             &infoLabel_, &promptEditor_, &expertButton_, &undoButton_, &redoButton_, &historyBackButton_,
+             &historyForwardButton_, &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -455,7 +557,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
         row->setVisible(!voiceLayout);
     }
     // The voice UI is compact (SPEC 8.1); the hub UI has the size of the standard window (SPEC 8.1).
-    setSize(voiceLayout ? 600 : 1000, voiceLayout ? 320 : 640);
+    setSize(voiceLayout ? 600 : 1000, voiceLayout ? 320 : 680);
     resized();
 }
 
@@ -485,6 +587,12 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     }
     if (barsBox_.getSelectedId() != static_cast<int>(generation.lengthBars)) {
         barsBox_.setSelectedId(static_cast<int>(generation.lengthBars), juce::dontSendNotification);
+    }
+    if (!promptEditor_.hasKeyboardFocus(true)) {
+        const auto text = juce::String::fromUTF8(generation.prompt.c_str());
+        if (promptEditor_.getText() != text) {
+            promptEditor_.setText(text, juce::dontSendNotification);
+        }
     }
     if (!seedEditor_.hasKeyboardFocus(true)) {
         const juce::String text = generation.seed ? juce::String(std::to_string(*generation.seed)) : juce::String();
@@ -752,6 +860,8 @@ void PlaceholderEditor::resized() {
     top.removeFromRight(8);
     styleBox_.setBounds(top);
 
+    promptEditor_.setBounds(area.removeFromTop(40).reduced(16, 6));
+
     auto sliders = area.removeFromTop(40).reduced(16, 6);
     const int half = sliders.getWidth() / 2;
     auto left = sliders.removeFromLeft(half - 8);
@@ -767,7 +877,12 @@ void PlaceholderEditor::resized() {
         button.setBounds(strip.removeFromLeft(buttonWidth).reduced(2, 0));
     }
 
-    statusLabel_.setBounds(area.removeFromBottom(40).reduced(16, 0));
+    auto statusRow = area.removeFromBottom(40).reduced(16, 0);
+    autoOfflineButton_.setBounds(statusRow.removeFromRight(210));
+    offlineButton_.setBounds(statusRow.removeFromRight(140).reduced(0, 6));
+    statusRow.removeFromRight(8);
+    retryButton_.setBounds(statusRow.removeFromRight(140).reduced(0, 6));
+    statusLabel_.setBounds(statusRow);
     infoLabel_.setBounds(area.removeFromBottom(28).reduced(16, 0));
     auto historyBar = area.removeFromBottom(32).reduced(16, 2);
     undoButton_.setBounds(historyBar.removeFromLeft(110));

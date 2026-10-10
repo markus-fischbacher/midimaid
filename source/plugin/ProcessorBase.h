@@ -39,7 +39,9 @@ enum class GenerationStatus {
     VaryAllLocked,
     Renewed,
     NothingToRenew,
-    RenewLocked
+    RenewLocked,
+    AiFailed,           ///< the AI request failed or gave nothing usable; `lastReport()` says why (SPEC 7.9)
+    GenerationCancelled ///< the musician cancelled the request
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -177,7 +179,23 @@ public:
     /// Message thread: generates a pattern in the background for the slot that is selected now (SPEC 3.1, D-140).
     /// The result lands in that slot and plays at the next bar line; during an offline bounce it waits until the
     /// host is real-time again. A new request replaces a running one.
+    /// With an AI provider set in `AiBackend` the request goes to the AI (SPEC 7), else it runs offline. When the AI
+    /// fails the status becomes `AiFailed` and the slot stays as it was: the editor offers `retryGeneration`,
+    /// `generateOffline` or nothing (SPEC 7.9). With `autoOffline` the offline generator takes over by itself.
     void generate();
+    /// Message thread: the same request without the AI (same settings and seed).
+    void generateOffline();
+    /// Message thread: sends the last request again, to the AI if it went there. No-op without an earlier request.
+    void retryGeneration();
+    /// Message thread: ends the running request; the slot stays as it was.
+    void cancelGeneration();
+    /// "Continue offline automatically" for the rest of this session (SPEC 7.9), per instance.
+    void setAutoOffline(bool on) { autoOffline_ = on; }
+    bool autoOffline() const { return autoOffline_; }
+    /// True while the running request goes to an AI provider.
+    bool generatingWithAi() const { return generationStatus_ == GenerationStatus::Generating && lastJobUsesAi_; }
+    /// How the last request ended (message thread).
+    const GenerationReport& lastReport() const { return lastReport_; }
     GenerationStatus generationStatus() const { return generationStatus_; }
     /// Message thread: varies the pattern of the slot that is selected now (SPEC 3.6, D-155) with the subtle operators,
     /// synchronously (it is purely algorithmic). `voice` limits it to one voice (0-based), `seed` makes it repeatable
@@ -192,7 +210,8 @@ public:
     /// energy and creativity are those of the hub settings. The result is a history entry and an undo step and plays
     /// at the next bar line. False, with the status telling why, for a voice instance, an empty slot, a voice with all
     /// three locks or when the voice cannot be generated.
-    bool renewVoice(size_t voice, std::optional<uint64_t> seed = std::nullopt, std::optional<size_t> slot = std::nullopt);
+    bool renewVoice(size_t voice, std::optional<uint64_t> seed = std::nullopt,
+                    std::optional<size_t> slot = std::nullopt);
     /// Message thread: browses the results of the slot (SPEC 3.6): the entry becomes the current pattern and plays at
     /// the next bar line. Browsing is no undo step; it removes the undo and redo steps of the slot, which would no
     /// longer fit (D-160). False at the ends, for an empty history and in a voice instance.
@@ -228,6 +247,7 @@ private:
     // pattern.
     const mm::core::Slot* playingSlotLocked(VoiceView& view) const;
     void fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pattern, size_t voiceIndex) const;
+    void startJob(GenerationJob job);
     void onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern);
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
@@ -265,6 +285,10 @@ private:
     mm::engine::SlotPublisher publisher_;
     GenerationStatus generationStatus_ = GenerationStatus::Idle; // message thread
     size_t lastVariationChanges_ = 0;                            // message thread
+    std::optional<GenerationJob> lastJob_;                       // message thread: for retry and offline fallback
+    bool lastJobUsesAi_ = false;
+    bool autoOffline_ = false;
+    GenerationReport lastReport_;
     struct ParkedResult {
         GenerationJob job;
         mm::core::Pattern pattern;

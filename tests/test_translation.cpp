@@ -87,8 +87,8 @@ TEST_CASE("every language file has the keys of the German one", "[i18n]") {
 TEST_CASE("the placeholders of a text are the same in every use", "[i18n]") {
     // A text with a placeholder the code does not fill would show "{name}" on screen.
     const auto german = loadLanguage("de");
-    const std::set<std::string> known = {"n",     "note",   "name", "value",  "slot",  "style", "key",
-                                         "scale", "length", "seed", "winner", "voice", "m"};
+    const std::set<std::string> known = {"n",      "note", "name",   "value", "slot", "style",  "key",  "scale",
+                                         "length", "seed", "winner", "voice", "m",    "reason", "score"};
     for (const auto& key : german.keys()) {
         const auto text = german.tr(key);
         for (size_t i = text.find('{'); i != std::string::npos; i = text.find('{', i + 1)) {

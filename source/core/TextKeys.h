@@ -59,6 +59,23 @@ namespace mm::core::text {
     X(kOctaveItem, "octave.item")                                                                                      \
     X(kStatusGenerating, "status.generating")                                                                          \
     X(kStatusDone, "status.done")                                                                                      \
+    X(kButtonCancelGeneration, "button.cancelGeneration")                                                              \
+    X(kButtonRetry, "button.retry")                                                                                    \
+    X(kButtonOffline, "button.offline")                                                                                \
+    X(kToggleAutoOffline, "toggle.autoOffline")                                                                        \
+    X(kPromptHint, "prompt.hint")                                                                                      \
+    X(kStatusGeneratingAi, "status.generatingAi")                                                                      \
+    X(kStatusAiFailed, "status.aiFailed")                                                                              \
+    X(kStatusCancelled, "status.cancelled")                                                                            \
+    X(kStatusBelowQuality, "status.belowQuality")                                                                      \
+    X(kAiReasonAuth, "ai.reason.auth")                                                                                 \
+    X(kAiReasonModel, "ai.reason.model")                                                                               \
+    X(kAiReasonRate, "ai.reason.rate")                                                                                 \
+    X(kAiReasonServer, "ai.reason.server")                                                                             \
+    X(kAiReasonBad, "ai.reason.bad")                                                                                   \
+    X(kAiReasonNetwork, "ai.reason.network")                                                                           \
+    X(kAiReasonTimeout, "ai.reason.timeout")                                                                           \
+    X(kAiReasonInvalid, "ai.reason.invalid")                                                                           \
     X(kStatusNoResult, "status.noResult")                                                                              \
     X(kStatusUseHub, "status.useHub")                                                                                  \
     X(kStatusForwarded, "status.forwarded")                                                                            \

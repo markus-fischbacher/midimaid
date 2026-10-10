@@ -151,12 +151,12 @@ Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
       Fähigkeitsstufe pro Backend; Verbindungstest stuft nur herab (SPEC §7.2)
 - [ ] Antwort-Schema v1 (v1.0-Felder, Stufen, Oktave, Progressionen, Motive bei über 8 Takten), Parser und
       Validierung, ein Reparaturversuch, Nachfrage bei Fehlschlag (SPEC §7.3)
-  - Stand: Schema, Parser, Umwandlung in ein Pattern (D-165, P3-A), Reparaturversuch und Motiv-Wiederholung bei 16 Takten (D-167, P3-C1) fertig. Offen: die Nachfrage bei Fehlschlag in der Oberfläche (P3-C2), das Formen des Motivs nach Phrasenrolle.
+  - Stand: Schema, Parser, Umwandlung in ein Pattern (D-165, P3-A), Reparaturversuch und Motiv-Wiederholung bei 16 Takten (D-167, P3-C1) fertig. Die Nachfrage bei Fehlschlag (Erneut, Offline, Abbrechen) ist in der Oberfläche (D-168, P3-C2). Offen: das Formen des Motivs nach Phrasenrolle.
 - [ ] Zustimmung pro Cloud-Provider für Referenzen und importierte Stimmen; Logging ohne Prompts und
       Nutzerinhalte, Option „Prompts protokollieren“ (SPEC §3.20, §10)
 - [x] Prompt-Vorlagen v1 (Generieren, Verfeinern) mit Stilregeln, Motivik und Anti-Klischee-Liste (D-166; die Wirkung mit echten Modellen zeigt der Praxistest in P3-G, persönliche Beispiele kommen mit Phase 4)
 - [ ] KI-Ergebnisse durch Constraint-Schicht und Qualitätsbewertung, Anzeige bei Unterschreitung
-  - Stand: Pipeline fertig (D-167, P3-C1: Constraints, Wertung, `belowMinScore`); die Anzeige in der Oberfläche folgt in P3-C2.
+  - Stand: Pipeline fertig (D-167, P3-C1: Constraints, Wertung, `belowMinScore`); Anzeige „unter Mindestwert“, Abbrechen-Knopf und Fehlerleiste sind im Plugin (D-168, P3-C2); Host-Check H32.
 - [ ] Verfeinern per Prompt mit Kontext, Noten-IDs und Verlauf (SPEC §3.15)
 - [ ] Keychain-Wrapper macOS und Windows
 - [ ] Einstellungsdialog inklusive Verbindungstest; `models.json` mit Empfehlungen
