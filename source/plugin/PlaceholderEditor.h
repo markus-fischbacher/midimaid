@@ -77,6 +77,7 @@ private:
     juce::Slider strengthSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
     juce::TextButton undoButton_;
     juce::TextButton redoButton_;
+    juce::TextButton drumsButton_;
     juce::TextButton historyBackButton_;
     juce::TextButton historyForwardButton_;
     juce::Label historyLabel_;

@@ -179,8 +179,9 @@ mit Wahlmöglichkeit, und die Wiedergabe läuft ungestört weiter.
 - [x] Eigene Stimme importieren: Ersetzen, Sperre, harmonischer Kontext, übrige Stimmen passend
       generieren, „Sperre lösen“, Grenzen (nur 4/4, Länge, höchstens 16 Takte) (SPEC §3.18)
   - Stand: fertig (D-178, P4-C): Drop ersetzt und sperrt die Stimme, Tonart und Akkorde aus der Analyse, übrige Stimmen werden um sie erzeugt, Tonart-Korrektur über die Boxen; Host-Check H38. Aus der Voice-Instanz reicht der Drop nichts an den Hub weiter (D-178, offen).
-- [ ] Drum-Referenz per Clip/.mid: GM-Zuordnung plus Liste in den Einstellungen, `custom`-Kick-Raster,
+- [x] Drum-Referenz per Clip/.mid: GM-Zuordnung plus Liste in den Einstellungen, `custom`-Kick-Raster,
       Hat-Groove, Akzente; kein doppelter Swing (SPEC §3.14, §3.9)
+  - Stand: fertig (D-179, P4-D); offen: Dichte-Referenz für die Energie und Nutzung der Akzente in den Archetypen (dort beschrieben); Host-Check H39.
 - [ ] Referenzen v1.0: ein Set pro Stil, Massen-Import (Dateien, Ordner, Clips), Rolle beim Import
       zuordnen, Hintergrund-Analyse mit Cache, Ansicht „Referenzen“ (Gewicht, an/aus)
 - [ ] Referenz-Progressionen im Progressions-Generator, KI-Beispiele aus dem Set, Kopierschutz,

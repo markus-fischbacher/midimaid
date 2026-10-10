@@ -53,6 +53,8 @@ private:
     mm::ai::ModelsConfig models_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 
+    juce::Label drumMapLabel_, drumMapHint_;
+    juce::TextEditor drumMapEditor_;
     juce::Label providerLabel_, keyLabel_, urlLabel_, modelLabel_, timeoutLabel_, tokensLabel_, levelLabel_,
         consentLabel_;
     juce::ComboBox providerBox_, modelBox_, levelBox_;
