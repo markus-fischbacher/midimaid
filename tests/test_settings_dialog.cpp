@@ -478,3 +478,19 @@ TEST_CASE("the voice UI does not show the settings button", "[settings-dialog][e
     REQUIRE(editor != nullptr);
     CHECK_FALSE(part<juce::TextButton>(*editor, "settings").isVisible());
 }
+
+TEST_CASE("the drum mapping is typed into the dialog, cleaned and kept", "[settings-dialog]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    {
+        const auto dialog = env.dialog();
+        auto& editor = part<juce::TextEditor>(*dialog, "drumMap");
+        CHECK(editor.getText().isEmpty());
+        editor.setText(" 60 = kick; 61=closed_hat, 300=ride, nonsense", true);
+        editor.onReturnKey();
+        CHECK(env.store.get().drumMap == "60=kick, 61=closed_hat");
+        CHECK(editor.getText() == "60=kick, 61=closed_hat"); // what is kept is what the field shows
+    }
+    const auto again = env.dialog();
+    CHECK(part<juce::TextEditor>(*again, "drumMap").getText() == "60=kick, 61=closed_hat");
+}
