@@ -6,6 +6,7 @@
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
+#include "plugin/ReferencesDialog.h"
 #include "plugin/SettingsDialog.h"
 
 namespace mm::plugin {
@@ -290,6 +291,15 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     settingsButton_.setComponentID("settings");
     settingsButton_.onClick = [] { SettingsDialog::show(); };
     addChildComponent(settingsButton_);
+    referencesButton_.setButtonText(tr(keys::kButtonReferences));
+    referencesButton_.setComponentID("references");
+    referencesButton_.onClick = [this] {
+        const auto id = processor_.instanceSettings().generation.styleId;
+        const auto* style = processor_.styles().findOrFallback(id);
+        ReferencesDialog::show(style != nullptr ? style->id : id,
+                               style != nullptr ? juce::String::fromUTF8(style->nameDe.c_str()) : juce::String(id));
+    };
+    addChildComponent(referencesButton_);
     errorSettingsButton_.setButtonText(tr(keys::kButtonSettings));
     errorSettingsButton_.setComponentID("errorSettings");
     errorSettingsButton_.onClick = [] { SettingsDialog::show(); };
@@ -620,7 +630,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
-             &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_,
+             &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_,
              &expertButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
         component->setVisible(!voiceLayout);
     }
@@ -964,6 +974,8 @@ void PlaceholderEditor::resized() {
     auto roles = area.removeFromTop(48).reduced(16, 10);
     if (!voiceLayout_) { // the voice UI is compact: the settings belong to the hub
         settingsButton_.setBounds(roles.removeFromRight(120));
+        roles.removeFromRight(8);
+        referencesButton_.setBounds(roles.removeFromRight(110));
         roles.removeFromRight(8);
     }
     takeOverButton_.setBounds(roles.removeFromRight(120));

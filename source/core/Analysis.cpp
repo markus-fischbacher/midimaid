@@ -116,8 +116,11 @@ std::vector<Candidate> candidates(const AnalysisSettings& settings) {
     return result;
 }
 
-bool isDrumNote(uint8_t pitch) {
-    return pitch >= 35 && pitch <= 59;
+/// The notes of a General MIDI kit without the toms (41, 43, 45, 47, 48, 50) and the other notes a bass line plays:
+/// kick, side stick, snare, clap, hats, cymbals, tambourine, cowbell, shaker.
+bool isKitNote(uint8_t pitch) {
+    static const std::set<uint8_t> kit = {35, 36, 37, 38, 39, 40, 42, 44, 46, 49, 51, 53, 54, 55, 56, 57, 59, 70};
+    return kit.count(pitch) != 0;
 }
 
 /// Groups the notes that start within a short time of each other (a played chord is never exactly together).
@@ -294,10 +297,8 @@ TrackRole suggestRole(const std::vector<MidiClipNote>& notes) {
         return TrackRole::Melody;
     }
     size_t channelTen = 0;
-    size_t drumPitches = 0;
     for (const auto& note : notes) {
         channelTen += note.channel == 10 ? 1 : 0;
-        drumPitches += isDrumNote(note.pitch) ? 1 : 0;
     }
     if (channelTen * 2 > notes.size()) {
         return TrackRole::Drums;
@@ -318,7 +319,11 @@ TrackRole suggestRole(const std::vector<MidiClipNote>& notes) {
     for (const auto& note : notes) {
         distinct.insert(note.pitch);
     }
-    if (drumPitches == notes.size() && notes.size() >= 8 && distinct.size() <= 8 && distinct.size() >= 2) {
+    // A drum clip on another channel than 10: only the pitches of a kit (no toms: a bass line in that range uses them),
+    // a kick among them (D-180).
+    const bool hasKick = distinct.count(35) != 0 || distinct.count(36) != 0;
+    const bool onlyKitPitches = std::all_of(distinct.begin(), distinct.end(), isKitNote);
+    if (onlyKitPitches && hasKick && notes.size() >= 8 && distinct.size() <= 8 && distinct.size() >= 2) {
         return TrackRole::Drums;
     }
     bool monophonic = true;

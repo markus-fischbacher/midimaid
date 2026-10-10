@@ -137,6 +137,31 @@ namespace mm::core::text {
     X(kLogHint, "settings.logHint")                                                                                    \
     X(kLabelDrumMap, "settings.drumMap")                                                                               \
     X(kDrumMapHint, "settings.drumMapHint")                                                                            \
+    X(kButtonReferences, "button.references")                                                                      \
+    X(kReferencesTitle, "references.title")                                                                        \
+    X(kReferencesSummary, "references.summary")                                                                    \
+    X(kReferencesEmpty, "references.empty")                                                                        \
+    X(kReferencesInfo, "references.info")                                                                          \
+    X(kReferencesInfoDrums, "references.infoDrums")                                                                \
+    X(kReferencesAddFiles, "references.addFiles")                                                                  \
+    X(kReferencesAddFolder, "references.addFolder")                                                                \
+    X(kReferencesCancel, "references.cancel")                                                                      \
+    X(kReferencesRemove, "references.remove")                                                                      \
+    X(kReferencesActive, "references.active")                                                                      \
+    X(kReferencesProgress, "references.progress")                                                                  \
+    X(kReferencesReport, "references.report")                                                                      \
+    X(kReferencesReportMore, "references.reportMore")                                                              \
+    X(kReferencesDuplicates, "references.duplicates")                                                              \
+    X(kReferencesNotFourFour, "references.notFourFour")                                                            \
+    X(kReferencesUnreadable, "references.unreadable")                                                              \
+    X(kReferencesTooSmall, "references.tooSmall")                                                                  \
+    X(kReferencesOverLimit, "references.overLimit")                                                                \
+    X(kReferencesTruncated, "references.truncated")                                                                \
+    X(kReferencesRoleDrums, "references.role.drums")                                                               \
+    X(kReferencesRoleChords, "references.role.chords")                                                             \
+    X(kReferencesRoleBass, "references.role.bass")                                                                 \
+    X(kReferencesRoleMelody, "references.role.melody")                                                             \
+    X(kReferencesWeight, "references.weight")                                                                      \
     X(kButtonClose, "button.close")                                                                                    \
     X(kStatusNoResult, "status.noResult")                                                                              \
     X(kStatusUseHub, "status.useHub")                                                                                  \

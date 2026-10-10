@@ -182,8 +182,9 @@ mit Wahlmöglichkeit, und die Wiedergabe läuft ungestört weiter.
 - [x] Drum-Referenz per Clip/.mid: GM-Zuordnung plus Liste in den Einstellungen, `custom`-Kick-Raster,
       Hat-Groove, Akzente; kein doppelter Swing (SPEC §3.14, §3.9)
   - Stand: fertig (D-179, P4-D); offen: Dichte-Referenz für die Energie und Nutzung der Akzente in den Archetypen (dort beschrieben); Host-Check H39.
-- [ ] Referenzen v1.0: ein Set pro Stil, Massen-Import (Dateien, Ordner, Clips), Rolle beim Import
+- [x] Referenzen v1.0: ein Set pro Stil, Massen-Import (Dateien, Ordner, Clips), Rolle beim Import
       zuordnen, Hintergrund-Analyse mit Cache, Ansicht „Referenzen“ (Gewicht, an/aus)
+  - Stand: fertig (D-180, D-181, P4-E); die Wirkung auf die Erzeugung folgt in P4-F; Host-Check H40.
 - [ ] Referenz-Progressionen im Progressions-Generator, KI-Beispiele aus dem Set, Kopierschutz,
       Set-ID im Pattern, Datenschutz-Schalter
 
