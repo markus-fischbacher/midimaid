@@ -81,6 +81,9 @@ public:
     virtual ProviderInfo info() const = 0;
     virtual AiResult generate(const AiRequest& request, const CancellationToken& token) = 0;
     virtual ConnectionStatus testConnection(const CancellationToken& token) = 0;
+    /// The models the provider offers right now (for the model list of the settings), or an empty list when it cannot
+    /// say. Blocks like `generate`. The default is the fixed list of `info()`.
+    virtual std::vector<std::string> listModels(const CancellationToken&) { return info().models; }
 };
 
 } // namespace mm::ai
