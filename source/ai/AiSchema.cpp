@@ -546,14 +546,20 @@ BuildResult buildPattern(const AiDraft& draft, const BuildContext& context) {
         if (!base) {
             return refuse("voices: no voice base for the " + wanted + " voice");
         }
+        // A pattern over 8 bars comes as a motif of `motif_bars` bars (SPEC 7.3): the notes outside it are dropped and
+        // the motif is repeated over the pattern below.
+        const bool motif = context.lengthBars > 8 && voice.motifBars.has_value();
+        const uint32_t motifBars = motif ? std::clamp<uint32_t>(*voice.motifBars, 1, 8) : context.lengthBars;
+        const uint32_t motifSteps = motifBars * kStepsPerBar;
+        const size_t firstNote = track.notes.size();
         for (const auto& draftNote : voice.notes) {
-            if (draftNote.step < 0 || static_cast<uint32_t>(draftNote.step) >= totalSteps) {
+            if (draftNote.step < 0 || static_cast<uint32_t>(draftNote.step) >= (motif ? motifSteps : totalSteps)) {
                 ++result.droppedNotes;
                 continue;
             }
             const int alt = std::clamp(draftNote.alt, -1, 1);
             const int octave = std::clamp(draftNote.octave, -4, 4);
-            const int maxLen = static_cast<int>(totalSteps) - draftNote.step;
+            const int maxLen = static_cast<int>(motif ? motifSteps : totalSteps) - draftNote.step;
             const int len = std::clamp(draftNote.len, 1, maxLen);
             const int vel = std::clamp(draftNote.vel, 1, 127);
             result.clampedValues +=
@@ -578,6 +584,23 @@ BuildResult buildPattern(const AiDraft& draft, const BuildContext& context) {
             }
             track.notes.push_back(note);
             ++notesBuilt;
+        }
+        if (motif) {
+            const std::vector<Note> once(track.notes.begin() + static_cast<std::ptrdiff_t>(firstNote),
+                                         track.notes.end());
+            for (uint32_t repeat = 1; repeat * motifSteps < totalSteps; ++repeat) {
+                for (Note copy : once) {
+                    copy.id = 0; // only the first statement of the motif keeps its id
+                    copy.startTick += repeat * motifSteps * kTicksPerStep;
+                    // A motif that does not divide the pattern is cut at the end: later notes go, a long one is
+                    // shortened.
+                    if (copy.startTick >= totalSteps * kTicksPerStep) {
+                        continue;
+                    }
+                    copy.lengthTicks = std::min(copy.lengthTicks, totalSteps * kTicksPerStep - copy.startTick);
+                    track.notes.push_back(copy);
+                }
+            }
         }
     }
     if (notesBuilt == 0) {

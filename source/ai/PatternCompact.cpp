@@ -97,17 +97,8 @@ std::string rootName(PitchClass root) {
     return names[root % 12];
 }
 
-std::optional<CompactPattern> patternToSchemaJson(const Pattern& pattern, const StyleProfile* style, bool includeIds) {
-    const Scale* scale = findScale(pattern.context.scaleId);
-    if (scale == nullptr) {
-        return std::nullopt;
-    }
-    CompactPattern result;
-    json root;
-    root["schema_version"] = 1;
-    root["context"]["root"] = rootName(pattern.context.root);
-    root["context"]["scale"] = std::string(scale->id);
-    json progression = json::array();
+std::optional<std::vector<std::string>> progressionSymbols(const Pattern& pattern) {
+    std::vector<std::string> symbols;
     for (uint32_t bar = 0; bar < pattern.lengthBars; ++bar) {
         const ChordEvent* first = chordAt(pattern, bar * 2);
         const ChordEvent* second = chordAt(pattern, bar * 2 + 1);
@@ -118,6 +109,27 @@ std::optional<CompactPattern> patternToSchemaJson(const Pattern& pattern, const 
         if (!(first->chord == second->chord)) {
             symbol += "|" + formatChordSymbol(second->chord);
         }
+        symbols.push_back(std::move(symbol));
+    }
+    return symbols;
+}
+
+std::optional<CompactPattern> patternToSchemaJson(const Pattern& pattern, const StyleProfile* style, bool includeIds) {
+    const Scale* scale = findScale(pattern.context.scaleId);
+    if (scale == nullptr) {
+        return std::nullopt;
+    }
+    CompactPattern result;
+    json root;
+    root["schema_version"] = 1;
+    root["context"]["root"] = rootName(pattern.context.root);
+    root["context"]["scale"] = std::string(scale->id);
+    const auto symbols = progressionSymbols(pattern);
+    if (!symbols) {
+        return std::nullopt;
+    }
+    json progression = json::array();
+    for (const auto& symbol : *symbols) {
         progression.push_back(symbol);
     }
     root["context"]["progression"] = progression;

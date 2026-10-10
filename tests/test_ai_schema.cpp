@@ -427,6 +427,90 @@ TEST_CASE("phrases of the answer are used when they form a valid plan", "[ai][sc
     CHECK(buildFrom(answer, style, 8).ok);
 }
 
+TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]") {
+    const auto style = shippedStyle();
+    auto answer = validAnswer();
+    answer["voices"][0]["motif_bars"] = 2;
+    answer["voices"][0]["notes"] =
+        json::array({{{"step", 1}, {"degree", 1}, {"len", 2}},
+                     {{"step", 20}, {"degree", 5}, {"len", 40}}, // reaches past the motif: cut
+                     {{"step", 40}, {"degree", 2}}});            // outside the motif: dropped
+    auto result = buildFrom(answer, style, 16);
+    REQUIRE(result.ok);
+    const auto& notes = result.pattern.voices[0].notes;
+    CHECK(result.droppedNotes == 1);
+    REQUIRE(notes.size() == 2 * 8); // two notes, eight statements of a two-bar motif
+    CHECK(notes[0].startTick == 240);
+    CHECK(notes[1].startTick == 20 * 240);
+    CHECK(notes[1].lengthTicks == 12 * 240);     // the motif ends at step 32
+    CHECK(notes[2].startTick == 32 * 240 + 240); // the second statement
+    CHECK(notes[15].startTick == 7 * 32 * 240 + 20 * 240);
+    CHECK(notes[14].pitch == notes[0].pitch);
+    CHECK(notes[15].pitch == notes[1].pitch);
+    std::set<uint32_t> ids;
+    for (const auto& note : notes) {
+        CHECK(ids.insert(note.id).second);
+    }
+    CHECK(validatePattern(result.pattern).empty());
+    // the melody has no motif length: its notes are the whole pattern
+    CHECK(result.pattern.voices[1].notes.size() == 2);
+
+    // a motif that does not divide the pattern is cut at the end of the pattern
+    answer["voices"][0]["motif_bars"] = 5;
+    answer["voices"][0]["notes"] =
+        json::array({{{"step", 0}, {"degree", 1}, {"len", 4}},
+                     {{"step", 4}, {"degree", 2}, {"len", 60}},  // long: shortened in the last statement
+                     {{"step", 64}, {"degree", 3}, {"len", 16}}, // bar 5 of the motif
+                     {{"step", 76}, {"degree", 5}, {"len", 8}}});
+    result = buildFrom(answer, style, 16);
+    REQUIRE(result.ok);
+    CHECK(validatePattern(result.pattern).empty());
+    {
+        const auto& cut = result.pattern.voices[0].notes;
+        // statements start at bars 0, 5, 10 and 15: the last one has room for bar 1 only
+        CHECK(cut.size() == 4 + 4 + 4 + 2);
+        CHECK(cut.back().startTick == 244 * 240);
+        CHECK(cut.back().startTick + cut.back().lengthTicks == 16 * kTicksPerBar); // shortened to the end
+        for (const auto& note : cut) {
+            CHECK(note.startTick + note.lengthTicks <= 16 * kTicksPerBar);
+        }
+    }
+    // the ids of known notes belong to the first statement only
+    {
+        const auto parsed = parseAiResponse(answer.dump());
+        REQUIRE(parsed.ok);
+        auto draft = parsed.draft;
+        draft.voices[0].notes[0].id = 7;
+        const std::set<uint32_t> known = {7};
+        auto context = contextFor(style, 16);
+        context.knownIds = &known;
+        const auto withIds = buildPattern(draft, context);
+        REQUIRE(withIds.ok);
+        std::set<uint32_t> ids;
+        for (const auto& note : withIds.pattern.voices[0].notes) {
+            CHECK(ids.insert(note.id).second);
+        }
+        CHECK(withIds.pattern.voices[0].notes[0].id == 7);
+    }
+    answer["voices"][0]["motif_bars"] = 12; // at most 8 bars
+    answer["voices"][0]["notes"] = json::array({{{"step", 100}, {"degree", 1}}, {{"step", 127}, {"degree", 1}}});
+    result = buildFrom(answer, style, 16);
+    REQUIRE(result.ok);
+    CHECK(result.pattern.voices[0].notes.size() == 4); // two statements of an eight-bar motif
+    answer["voices"][0]["motif_bars"] = 0;             // no motif
+    result = buildFrom(answer, style, 16);
+    REQUIRE(result.ok);
+    CHECK(result.pattern.voices[0].notes.size() == 2);
+    answer["voices"][0]["motif_bars"] = 2; // up to 8 bars the notes are the pattern, whatever the answer says
+    answer["voices"][0]["notes"] = json::array({{{"step", 1}, {"degree", 1}}, {{"step", 40}, {"degree", 1}}});
+    result = buildFrom(answer, style, 4);
+    REQUIRE(result.ok);
+    CHECK(result.pattern.voices[0].notes.size() == 2);
+    result = buildFrom(answer, style, 8);
+    REQUIRE(result.ok);
+    CHECK(result.pattern.voices[0].notes.size() == 2);
+}
+
 TEST_CASE("an archetype is taken only when it exists for that role", "[ai][schema]") {
     const auto style = shippedStyle();
     const auto bass = std::find_if(allArchetypes().begin(), allArchetypes().end(),
