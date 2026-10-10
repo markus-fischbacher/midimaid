@@ -479,6 +479,26 @@ void PlaceholderEditor::updateStatus() {
                              juce::dontSendNotification);
         break;
     }
+    case GenerationStatus::ImportRead:
+    case GenerationStatus::ImportReadCut: {
+        const auto& pending = processor_.pendingImport();
+        const std::string notes = pending ? std::to_string(pending->plan.notes.size()) : "0";
+        statusLabel_.setText(processor_.generationStatus() == GenerationStatus::ImportReadCut
+                                 ? tr(keys::kStatusImportCut, {{"n", notes}})
+                                 : tr(keys::kStatusImportRead,
+                                      {{"n", notes}, {"m", pending ? std::to_string(pending->plan.lengthBars) : "0"}}),
+                             juce::dontSendNotification);
+        break;
+    }
+    case GenerationStatus::ImportNotFourFour:
+        statusLabel_.setText(tr(keys::kStatusImportNotFourFour), juce::dontSendNotification);
+        break;
+    case GenerationStatus::ImportNoNotes:
+        statusLabel_.setText(tr(keys::kStatusImportNoNotes), juce::dontSendNotification);
+        break;
+    case GenerationStatus::ImportUnreadable:
+        statusLabel_.setText(tr(keys::kStatusImportUnreadable), juce::dontSendNotification);
+        break;
     case GenerationStatus::AiFailed: {
         const std::string reason = aiFailureReason(processor_.lastReport()).toStdString();
         statusLabel_.setText(tr(keys::kStatusAiFailed, {{"reason", reason}}), juce::dontSendNotification);
@@ -734,6 +754,10 @@ void PlaceholderEditor::rebuildRows(size_t count) {
             }
         };
         row->onAction = [this] { updateStatus(); };
+        row->onMidiDropped = [this](int voice, const juce::File& file) {
+            processor_.importMidi(file, static_cast<size_t>(voice - 1));
+            updateStatus();
+        };
         addAndMakeVisible(*row);
         rows_.push_back(std::move(row));
     }
@@ -741,6 +765,17 @@ void PlaceholderEditor::rebuildRows(size_t count) {
     applyFocus();
     shownVoices_.clear();
     resized();
+}
+
+bool PlaceholderEditor::isInterestedInFileDrag(const juce::StringArray& files) {
+    return voiceLayout_ && firstMidiFile(files) != juce::File();
+}
+
+void PlaceholderEditor::filesDropped(const juce::StringArray& files, int, int) {
+    if (const auto file = firstMidiFile(files); voiceLayout_ && file != juce::File()) {
+        processor_.importMidi(file);
+        updateStatus();
+    }
 }
 
 void PlaceholderEditor::startRefine() {

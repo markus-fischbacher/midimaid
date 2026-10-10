@@ -13,13 +13,16 @@ namespace mm::plugin {
 /// slot a read-only roll with Mute and a grip that drags that voice's file into the host; an info line and the status
 /// line. A voice gets the compact voice UI instead (D-148): a read-only roll of the voice it plays, Mute, octave, the
 /// slot follow switch, "Open hub" and the drag handle. The texts come from the translation table (SPEC 8.2).
-class PlaceholderEditor : public juce::AudioProcessorEditor, private juce::Timer {
+class PlaceholderEditor : public juce::AudioProcessorEditor, private juce::Timer, public juce::FileDragAndDropTarget {
 public:
     explicit PlaceholderEditor(ProcessorBase& processor);
     ~PlaceholderEditor() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    // A MIDI file dropped on the voice window imports for its voice (the hub takes drops on its rows, SPEC 3.18).
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
     /// The voice (1 to 8) that has the focus in the roll area of the hub UI, 0 when all are shown.
     int focusedVoice() const { return focusedVoice_; }
     /// The strength (0 to 100 %) that "Variation" uses; a value of the open editor, not saved (D-161).

@@ -14,6 +14,7 @@
 #include "plugin/GenerationService.h"
 #include "plugin/GroupLink.h"
 #include "plugin/MidiExporter.h"
+#include "plugin/MidiImportService.h"
 
 #include <array>
 #include <functional>
@@ -45,7 +46,12 @@ enum class GenerationStatus {
     Refined,             ///< a refinement was applied (SPEC 3.15)
     NothingToRefine,     ///< no pattern in the slot, or no instruction
     RefineAllLocked,     ///< every voice in the scope is locked
-    RefineNeedsAi        ///< refining asks the AI and none is set up
+    RefineNeedsAi,       ///< refining asks the AI and none is set up
+    ImportRead,          ///< a dropped MIDI file was read (SPEC 3.18); `pendingImport()` holds the plan
+    ImportReadCut,       ///< the same, but the clip is longer than 16 bars: only the first 16 count
+    ImportNotFourFour,   ///< the file has a time signature other than 4/4: no import
+    ImportNoNotes,       ///< the file has no notes
+    ImportUnreadable     ///< the file is no usable MIDI file
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -237,6 +243,21 @@ public:
         bool operator==(const RefineTargets&) const = default;
     };
     RefineTargets refineTargets(std::optional<size_t> slot = std::nullopt) const;
+    /// A MIDI clip that was read and checked for a voice (SPEC 3.18): the plan with the notes as they are (ticks exact,
+    /// length rounded up to a pattern length, at most 16 bars) and where it is meant to go.
+    struct PendingImport {
+        size_t voice = 0; ///< 0-based voice of the pattern
+        int slot = 0;     ///< 0-based slot
+        std::string fileName;
+        mm::core::ImportPlan plan;
+    };
+    /// Message thread: reads a dropped MIDI file for `voice` (0-based) in the background and checks it (4/4, length,
+    /// notes). The outcome is the generation status (`ImportRead` and the like) and, on success, `pendingImport()`.
+    /// False for a file that cannot be a MIDI file by its name. A voice instance imports for its own voice.
+    bool importMidi(const juce::File& file, std::optional<size_t> voice = std::nullopt);
+    const std::optional<PendingImport>& pendingImport() const { return pendingImport_; }
+    /// Message thread: the pending import is used up (or dismissed).
+    void clearPendingImport() { pendingImport_.reset(); }
     /// True when the last request was a refinement (message thread).
     bool lastJobIsRefine() const { return lastJob_ && lastJob_->refine; }
     /// How many notes the last successful `vary` changed.
@@ -271,6 +292,7 @@ private:
     void fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pattern, size_t voiceIndex) const;
     void startJob(GenerationJob job);
     void onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern);
+    void onImported(const ImportRequest& request, ImportOutcome outcome);
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
     void updateSlotMode(); // message thread
@@ -345,6 +367,8 @@ private:
     std::atomic<bool> voiceRole_{false}; // a voice also obeys the hub's mute switches (audio thread reads)
     int channelMember_ = mm::engine::GroupChannel::kNone; // message thread
     std::shared_ptr<GroupLink> groupLink_;
+    std::optional<PendingImport> pendingImport_;
+    MidiImportService importer_;  // before the generator: both are destroyed before the members they call into
     GenerationService generator_; // last: destroyed first, so no delivery reaches a half-destroyed instance
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ProcessorBase)

@@ -73,7 +73,9 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     : juce::AudioProcessor(buses), name_(std::move(name)),
       parameters_(*this, nullptr, "MidiMaid", createParameterLayout()), styles_(embeddedStyles()),
       publisher_(handover_, styles_), player_(mm::core::PatternView{nullptr, 0, mm::core::kTicksPerBar}),
-      returnCollector_(handover_),
+      returnCollector_(handover_), importer_([this](const ImportRequest& request, ImportOutcome outcome) {
+          onImported(request, std::move(outcome));
+      }),
       generator_(styles_, [this](const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
           onGenerated(job, std::move(pattern));
       }) {
@@ -474,6 +476,50 @@ bool ProcessorBase::refine(const std::string& instruction, std::optional<size_t>
     job.refine = std::move(request);
     startJob(std::move(job));
     return true;
+}
+
+bool ProcessorBase::importMidi(const juce::File& file, std::optional<size_t> voice) {
+    const auto extension = file.getFileExtension().toLowerCase();
+    if (extension != ".mid" && extension != ".midi") {
+        generationStatus_ = GenerationStatus::ImportUnreadable;
+        return false;
+    }
+    ImportRequest request;
+    request.file = file;
+    request.slot = std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        // a voice instance imports for the voice it plays; the hub for the row the file was dropped on
+        request.voice = settings_.role == mm::core::InstanceRole::Voice
+                            ? static_cast<size_t>(std::max(settings_.outputVoice, 1) - 1)
+                            : voice.value_or(0);
+    }
+    importer_.request(request);
+    return true;
+}
+
+void ProcessorBase::onImported(const ImportRequest& request, ImportOutcome outcome) {
+    pendingImport_.reset();
+    if (outcome.unreadable ||
+        (outcome.error != mm::core::MidiReadError::None && outcome.error != mm::core::MidiReadError::NoNotes)) {
+        generationStatus_ = GenerationStatus::ImportUnreadable;
+        return;
+    }
+    if (outcome.error == mm::core::MidiReadError::NoNotes || outcome.plan.status == mm::core::ImportStatus::NoNotes) {
+        generationStatus_ = GenerationStatus::ImportNoNotes;
+        return;
+    }
+    if (outcome.plan.status == mm::core::ImportStatus::NotFourFour) {
+        generationStatus_ = GenerationStatus::ImportNotFourFour;
+        return;
+    }
+    PendingImport pending;
+    pending.voice = request.voice;
+    pending.slot = request.slot;
+    pending.fileName = request.file.getFileName().toStdString();
+    pending.plan = std::move(outcome.plan);
+    generationStatus_ = pending.plan.truncated ? GenerationStatus::ImportReadCut : GenerationStatus::ImportRead;
+    pendingImport_ = std::move(pending);
 }
 
 ProcessorBase::RefineTargets ProcessorBase::refineTargets(std::optional<size_t> slotChoice) const {

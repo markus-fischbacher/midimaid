@@ -30,10 +30,13 @@ private:
     bool dragging_ = false;
 };
 
+/// The first MIDI file (.mid, .midi) of a drag, or an empty file.
+juce::File firstMidiFile(const juce::StringArray& files);
+
 /// One voice of the hub UI (SPEC 8.1): name, Mute (host parameter `mute_<voice>`), the piano roll and the grip to
 /// drag the voice's file into the host, the lock of the voice (SPEC 3.5) and the action buttons: "Neu" (renews the
 /// voice), "Variation" (varies it with the strength the editor holds) and "Duplizieren" (the selection of the roll).
-class VoiceRow : public juce::Component {
+class VoiceRow : public juce::Component, public juce::FileDragAndDropTarget {
 public:
     VoiceRow(ProcessorBase& processor, int voice);
 
@@ -59,11 +62,20 @@ public:
     /// Called after an action of the row ran (renew, duplicate), for the editor's status line.
     std::function<void()> onAction;
 
+    /// Called with the voice number (1 to 8) and the file when a MIDI file is dropped on the row (SPEC 3.18).
+    std::function<void(int, const juce::File&)> onMidiDropped;
+
     void resized() override;
+    void paintOverChildren(juce::Graphics& g) override;
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void fileDragEnter(const juce::StringArray& files, int x, int y) override;
+    void fileDragExit(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
 
 private:
     ProcessorBase& processor_;
     int voice_;
+    bool dropHighlight_ = false;
     juce::Label nameLabel_;
     juce::ToggleButton muteButton_;
     juce::ToggleButton lockButton_;
