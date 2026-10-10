@@ -36,20 +36,33 @@ LibraryStore::LibraryStore(juce::File folder, size_t maxEntries)
 }
 
 LibraryStore::~LibraryStore() {
+    waitForIdle(); // what was saved is written before the plugin goes: a queued write is never dropped
     *alive_ = false;
     pool_.removeAllJobs(true, 10000);
 }
 
 void LibraryStore::readAll() {
     removeStaleTemporaries(folder_);
-    std::map<std::string, mm::core::LibraryEntryInfo> found;
-    size_t bad = 0;
+    std::vector<mm::core::LibraryFileState> files;
     for (const auto& file : folder_.findChildFiles(juce::File::findFiles, false, "*.json")) {
         const auto id = file.getFileNameWithoutExtension().toStdString();
-        if (!mm::core::isValidLibraryId(id)) {
-            continue; // not ours
+        if (file.getFileName() == kIndexFileName || !mm::core::isValidLibraryId(id)) {
+            continue; // the index, or not ours
         }
-        const auto loaded = mm::core::loadLibraryEntry(file.loadFileAsString().toStdString(), id);
+        files.push_back({id, file.getSize(), file.getLastModificationTime().toMilliseconds()});
+    }
+    const auto indexFile = folder_.getChildFile(kIndexFileName);
+    const auto index = mm::core::loadLibraryIndex(indexFile.existsAsFile() ? indexFile.loadFileAsString().toStdString()
+                                                                           : std::string());
+    const auto plan = mm::core::reconcileLibraryIndex(index.records, files);
+
+    std::map<std::string, mm::core::LibraryEntryInfo> found;
+    for (const auto& record : plan.trusted) {
+        found[record.info.id] = record.info;
+    }
+    size_t bad = 0;
+    for (const auto& id : plan.toRead) {
+        const auto loaded = mm::core::loadLibraryEntry(fileFor(id).loadFileAsString().toStdString(), id);
         if (loaded.ok()) {
             found[id] = loaded.entry->info;
         } else {
@@ -64,9 +77,50 @@ void LibraryStore::readAll() {
             }
         }
         unreadable_ = bad;
+        indexed_ = plan.trusted.size();
+        parsed_ = plan.toRead.size();
         ready_ = true;
     }
+    if (!index.ok || !plan.toRead.empty() || plan.dropped > 0 || index.skipped > 0) {
+        scheduleIndex(); // the index did not tell the truth about the folder: write it again
+    }
     changed();
+}
+
+void LibraryStore::scheduleIndex() {
+    if (!enabled()) {
+        return;
+    }
+    // One job per change, queued behind the job that wrote the change. A job that finds a later request waiting skips:
+    // that later job runs after every change before it, so the last job of a burst writes the index once.
+    const auto number = ++indexRequests_;
+    pool_.addJob([this, number] {
+        if (indexRequests_.load() == number) {
+            writeIndex();
+        }
+    });
+}
+
+void LibraryStore::writeIndex() {
+    std::vector<mm::core::LibraryIndexRecord> records;
+    {
+        const juce::ScopedLock lock(lock_);
+        for (const auto& [id, info] : infos_) {
+            mm::core::LibraryIndexRecord record;
+            record.info = info;
+            records.push_back(std::move(record));
+        }
+    }
+    std::vector<mm::core::LibraryIndexRecord> existing;
+    for (auto& record : records) {
+        const auto file = fileFor(record.info.id);
+        if (file.existsAsFile()) { // an entry whose file is not there is not in the index
+            record.fileSize = file.getSize();
+            record.modifiedMs = file.getLastModificationTime().toMilliseconds();
+            existing.push_back(std::move(record));
+        }
+    }
+    writeFileAtomically(folder_.getChildFile(kIndexFileName), mm::core::libraryIndexToString(std::move(existing)));
 }
 
 void LibraryStore::changed() {
@@ -129,6 +183,7 @@ LibraryStore::SaveResult LibraryStore::add(mm::core::LibraryEntry entry) {
         pool_.addJob([this, entry = std::move(entry)] {
             writeFileAtomically(fileFor(entry.info.id), mm::core::libraryEntryToString(entry));
         });
+        scheduleIndex();
     }
     changed();
     return {id, SaveError::None};
@@ -241,6 +296,7 @@ bool LibraryStore::remove(const std::string& id) {
     }
     if (enabled()) {
         pool_.addJob([this, id] { fileFor(id).deleteFile(); });
+        scheduleIndex();
     }
     changed();
     return true;
@@ -271,6 +327,7 @@ bool LibraryStore::rename(const std::string& id, const std::string& name) {
                 writeFileAtomically(file, mm::core::libraryEntryToString(*loaded.entry));
             }
         });
+        scheduleIndex();
     }
     changed();
     return true;
