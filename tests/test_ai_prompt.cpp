@@ -283,6 +283,37 @@ TEST_CASE("the request prompt carries length, key, scale, energy, voices and the
     CHECK(contains(prompt->user, "<<<(none: let the style decide)>>>"));
 }
 
+TEST_CASE("a request up to 8 bars asks for every bar and names the floors of the unlocked voices", "[ai][prompt]") {
+    const auto t = templates();
+    const auto style = shipped("peak_time");
+    GeneratePromptInput input;
+    input.style = &style;
+    input.lengthBars = 4;
+    auto prompt = buildGeneratePrompt(t, input);
+    REQUIRE(prompt.has_value());
+    CHECK(contains(prompt->user, "Write all 4 bars of every voice you write"));
+    CHECK(contains(prompt->user, "the bass at least 16 notes and the melody at least 8 notes in total"));
+
+    input.lengthBars = 8;
+    input.lockedRoles = {"bass"};
+    input.fixedProgression = {"i"};
+    prompt = buildGeneratePrompt(t, input);
+    REQUIRE(prompt.has_value());
+    CHECK(contains(prompt->user, "the melody at least 16 notes in total"));
+    CHECK_FALSE(contains(prompt->user, "the bass at least"));
+
+    input.lockedRoles = {"bass", "melody"};
+    prompt = buildGeneratePrompt(t, input);
+    REQUIRE(prompt.has_value());
+    CHECK_FALSE(contains(prompt->user, "Write all"));
+
+    input.lockedRoles.clear();
+    input.lengthBars = 16;
+    prompt = buildGeneratePrompt(t, input);
+    REQUIRE(prompt.has_value());
+    CHECK_FALSE(contains(prompt->user, "Write all")); // a motif, not every bar
+}
+
 TEST_CASE("a 16-bar request asks for a motif and a phrase plan", "[ai][prompt]") {
     const auto t = templates();
     const auto style = shipped("peak_time");

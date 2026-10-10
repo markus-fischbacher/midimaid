@@ -35,7 +35,7 @@
       "cloud": false,
       "keyRequired": false,
       "schemaSupport": "enforced",
-      "timeoutSeconds": 120,
+      "timeoutSeconds": 600,
       "recommendedModel": "",
       "models": []
     },
@@ -47,7 +47,7 @@
       "cloud": false,
       "keyRequired": false,
       "schemaSupport": "enforced",
-      "timeoutSeconds": 120,
+      "timeoutSeconds": 600,
       "recommendedModel": "",
       "models": []
     },

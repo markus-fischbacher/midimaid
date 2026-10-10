@@ -74,7 +74,7 @@ TEST_CASE("cloud and local providers, keys and timeouts", "[ai-models]") {
     CHECK(config.find("openai")->keyRequired);
     CHECK_FALSE(config.find("ollama")->keyRequired);
     CHECK(config.find("anthropic")->timeoutSeconds == 30);
-    CHECK(config.find("ollama")->timeoutSeconds == 120); // SPEC 7.5
+    CHECK(config.find("ollama")->timeoutSeconds == 600); // SPEC 7.5, D-174: thinking models need minutes
 }
 
 TEST_CASE("an address on this computer is never cloud, whatever the file says", "[ai-models]") {
@@ -128,7 +128,7 @@ TEST_CASE("the choice of the musician beats the entry, the entry beats the defau
     CHECK(effectiveModel(anthropic, none) == "claude-sonnet-5-5");
     CHECK(effectiveModel(ollama, none).empty());
     CHECK(effectiveTimeout(anthropic, none) == 30);
-    CHECK(effectiveTimeout(ollama, none) == 120);
+    CHECK(effectiveTimeout(ollama, none) == 600);
     CHECK(effectiveMaxTokens(none) == 4096);
     CHECK(effectiveBaseUrl(ollama, none) == "http://localhost:11434/v1");
     ProviderChoice chosen;

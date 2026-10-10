@@ -193,6 +193,31 @@ std::string styleRules(const PromptTemplates& templates, const StyleProfile& sty
     return out.str();
 }
 
+namespace {
+
+/// "Write every bar" for patterns up to 8 bars: small local models stop after one bar. The numbers are floors that
+/// every style meets (the offbeat bass has 4 notes a bar, a motif about 2 notes a bar), not a target.
+std::string allBarsNote(const GeneratePromptInput& input, uint32_t bars) {
+    const auto locked = [&](const char* role) {
+        return std::find(input.lockedRoles.begin(), input.lockedRoles.end(), role) != input.lockedRoles.end();
+    };
+    std::string floors;
+    if (!locked("bass")) {
+        floors += "the bass at least " + std::to_string(bars * 4) + " notes";
+    }
+    if (!locked("melody")) {
+        floors +=
+            std::string(floors.empty() ? "" : " and ") + "the melody at least " + std::to_string(bars * 2) + " notes";
+    }
+    if (floors.empty()) {
+        return "";
+    }
+    return "Write all " + std::to_string(bars) +
+           " bars of every voice you write, note by note, not just the first bar: " + floors + " in total.";
+}
+
+} // namespace
+
 std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, const GeneratePromptInput& input) {
     if (input.style == nullptr) {
         return std::nullopt;
@@ -229,7 +254,7 @@ std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, cons
                        "counted from bar 0, with `motif_bars` on the voice) and a `phrases` plan (`start_bar`, `bars` "
                        "of 4, 8 or 16, `role`) that covers all bars without gaps; the plugin builds the phrases "
                        "from your motif."
-                 : "";
+                 : allBarsNote(input, bars);
     request["locked_note"] = "";
     if (!input.lockedRoles.empty()) {
         request["locked_note"] =
