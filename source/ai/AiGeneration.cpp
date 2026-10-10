@@ -126,6 +126,8 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
         return result;
     }
 
+    result.systemPrompt = prompt->system;
+    result.userPrompt = prompt->user;
     AiRequest request;
     request.model = input.model;
     request.systemPrompt = prompt->system;
@@ -161,6 +163,7 @@ AiGenerateResult generateWithAi(IAiProvider& provider, const AiGenerateInput& in
             result.error = answer.message;
             return result;
         }
+        result.lastAnswer = answer.text;
         Attempt attempt = makePattern(answer.text, input, providerId);
         if (attempt.ok) {
             result.outcome = AiOutcome::Success;

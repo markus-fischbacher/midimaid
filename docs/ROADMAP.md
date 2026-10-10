@@ -155,12 +155,14 @@ Keine Klicks oder hängenden Noten beim Bearbeiten während der Wiedergabe.
   - Stand: Schema, Parser, Umwandlung in ein Pattern (D-165, P3-A), Reparaturversuch und Motiv-Wiederholung bei 16 Takten (D-167, P3-C1) fertig. Die Nachfrage bei Fehlschlag (Erneut, Offline, Abbrechen) ist in der Oberfläche (D-168, P3-C2). Offen: das Formen des Motivs nach Phrasenrolle.
 - [ ] Zustimmung pro Cloud-Provider für Referenzen und importierte Stimmen; Logging ohne Prompts und
       Nutzerinhalte, Option „Prompts protokollieren“ (SPEC §3.20, §10)
+  - Stand: Protokoll und Speicherung der Zustimmung fertig (D-170, P3-E1); die Oberfläche für Zustimmung und Option folgt im Einstellungsdialog (P3-E2).
 - [x] Prompt-Vorlagen v1 (Generieren, Verfeinern) mit Stilregeln, Motivik und Anti-Klischee-Liste (D-166; die Wirkung mit echten Modellen zeigt der Praxistest in P3-G, persönliche Beispiele kommen mit Phase 4)
 - [ ] KI-Ergebnisse durch Constraint-Schicht und Qualitätsbewertung, Anzeige bei Unterschreitung
   - Stand: Pipeline fertig (D-167, P3-C1: Constraints, Wertung, `belowMinScore`); Anzeige „unter Mindestwert“, Abbrechen-Knopf und Fehlerleiste sind im Plugin (D-168, P3-C2); Host-Check H32.
 - [ ] Verfeinern per Prompt mit Kontext, Noten-IDs und Verlauf (SPEC §3.15)
-- [ ] Keychain-Wrapper macOS und Windows
+- [x] Keychain-Wrapper macOS und Windows (D-170, P3-E1: macOS fertig; Windows außen vor, Speicher der Sitzung als Ersatz ohne Klartext)
 - [ ] Einstellungsdialog inklusive Verbindungstest; `models.json` mit Empfehlungen
+  - Stand: `models.json`, Einstellungen, Schlüssel und Verbindung im Hintergrund fertig (D-170, P3-E1); der Dialog folgt in P3-E2.
 - [ ] Kreativitäts-Regler: Abbildung auf Temperatur, Prompt und Algorithmus (SPEC §7.6)
 - [ ] Fehlerverhalten nach SPEC §7.9: Dialog, nicht blockierende Leiste während der Wiedergabe
 - [x] Mock-Provider und Tests mit kaputten Antworten (D-165; weitere Fehlerfälle des Netzes kommen mit dem Fake-Server in P3-D)

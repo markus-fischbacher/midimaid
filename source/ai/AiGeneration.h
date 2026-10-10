@@ -46,6 +46,11 @@ struct AiGenerateResult {
     int outputTokens = 0;
     size_t droppedNotes = 0;
     size_t clampedValues = 0;
+    /// The texts of the exchange, for the log when the musician asked for "Prompts protokollieren" (SPEC 10): the
+    /// prompt that was sent and the last answer. Never logged otherwise.
+    std::string systemPrompt;
+    std::string userPrompt;
+    std::string lastAnswer;
 };
 
 /// "Generate" with an AI provider (SPEC 7, 7.4): builds the prompt, asks the provider, reads the answer, builds the

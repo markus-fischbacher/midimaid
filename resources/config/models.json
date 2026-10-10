@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "providers": [
+    {
+      "id": "anthropic",
+      "name": "Anthropic (Claude)",
+      "kind": "anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "cloud": true,
+      "keyRequired": true,
+      "schemaSupport": "enforced",
+      "timeoutSeconds": 30,
+      "recommendedModel": "claude-sonnet-5-5",
+      "models": ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI (ChatGPT)",
+      "kind": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "cloud": true,
+      "keyRequired": true,
+      "schemaSupport": "enforced",
+      "timeoutSeconds": 30,
+      "maxCompletionTokens": true,
+      "filterChatModels": true,
+      "recommendedModel": "",
+      "models": []
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama (lokal)",
+      "kind": "openai",
+      "baseUrl": "http://localhost:11434/v1",
+      "cloud": false,
+      "keyRequired": false,
+      "schemaSupport": "enforced",
+      "timeoutSeconds": 120,
+      "recommendedModel": "",
+      "models": []
+    },
+    {
+      "id": "lmstudio",
+      "name": "LM Studio (lokal)",
+      "kind": "openai",
+      "baseUrl": "http://localhost:1234/v1",
+      "cloud": false,
+      "keyRequired": false,
+      "schemaSupport": "enforced",
+      "timeoutSeconds": 120,
+      "recommendedModel": "",
+      "models": []
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "kind": "openai",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "cloud": true,
+      "keyRequired": true,
+      "schemaSupport": "json",
+      "timeoutSeconds": 60,
+      "recommendedModel": "",
+      "models": []
+    },
+    {
+      "id": "custom",
+      "name": "Eigene Adresse (OpenAI-kompatibel)",
+      "kind": "openai",
+      "baseUrl": "",
+      "cloud": true,
+      "keyRequired": false,
+      "schemaSupport": "json",
+      "timeoutSeconds": 60,
+      "recommendedModel": "",
+      "models": []
+    }
+  ]
+}

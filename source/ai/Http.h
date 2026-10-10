@@ -49,6 +49,12 @@ struct RetryPolicy {
     int maxDelayMs = 10000; ///< also the cap for a `Retry-After` header
 };
 
+/// The host of an `http(s)` URL in lower case (IPv6 in brackets), without user info and port; empty without one.
+std::string urlHost(const std::string& url);
+
+/// True when `url` points to this computer: `localhost`, `*.localhost`, 127.0.0.1 or [::1].
+bool isLocalUrl(const std::string& url);
+
 /// `http://` is only allowed towards this computer when a key is sent: a key must not travel in clear text over a
 /// network. `https://` is always fine. Nullopt when the URL is acceptable, else the reason.
 std::optional<std::string> checkUrl(const std::string& url, bool sendsKey);

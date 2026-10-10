@@ -7,6 +7,7 @@
 #include "core/TextKeys.h"
 #include "core/Variation.h"
 #include "plugin/AiBackend.h"
+#include "plugin/AiConnection.h"
 #include "plugin/EmbeddedPrompts.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/EmbeddedTranslation.h"
@@ -76,6 +77,7 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
       generator_(styles_, [this](const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
           onGenerated(job, std::move(pattern));
       }) {
+    AiConnection::instance().start(); // applies the provider of the settings once they are read
     generator_.setReportHandler([this](const GenerationJob&, const GenerationReport& report) { lastReport_ = report; });
     slotValue_ = parameters_.getRawParameterValue("slot");
     for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {

@@ -46,7 +46,7 @@ GlobalSettingsStore::~GlobalSettingsStore() {
 }
 
 bool GlobalSettingsStore::Pending::any() const {
-    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic;
+    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || ai;
 }
 
 void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) const {
@@ -67,6 +67,9 @@ void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) con
     }
     if (snapChromatic) {
         settings.snapChromatic = *snapChromatic;
+    }
+    if (ai) {
+        settings.ai = *ai;
     }
 }
 
@@ -121,6 +124,7 @@ void GlobalSettingsStore::update(const std::function<void(mm::core::GlobalSettin
             note(pending_.variationStrength, before.variationStrength, next.variationStrength);
             note(pending_.grid, before.grid, next.grid);
             note(pending_.snapChromatic, before.snapChromatic, next.snapChromatic);
+            note(pending_.ai, before.ai, next.ai);
             return;
         }
     }
