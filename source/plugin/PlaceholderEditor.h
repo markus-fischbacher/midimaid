@@ -74,6 +74,10 @@ private:
     juce::TextButton historyBackButton_;
     juce::TextButton historyForwardButton_;
     juce::Label historyLabel_;
+    juce::TextEditor promptEditor_; // hub: what the AI is asked for (D-168)
+    juce::TextButton retryButton_;
+    juce::TextButton offlineButton_;
+    juce::ToggleButton autoOfflineButton_;
     juce::TextEditor seedEditor_;
     juce::TextButton randomButton_;
     juce::Label energyLabel_;

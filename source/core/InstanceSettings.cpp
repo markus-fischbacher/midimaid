@@ -54,6 +54,13 @@ GenerationSettings sanitize(GenerationSettings settings) {
     if (settings.scaleId && findScale(*settings.scaleId) == nullptr) {
         settings.scaleId.reset();
     }
+    if (settings.prompt.size() > kMaxPromptBytes) {
+        size_t cut = kMaxPromptBytes;
+        while (cut > 0 && (static_cast<unsigned char>(settings.prompt[cut]) & 0xC0) == 0x80) {
+            --cut; // not in the middle of a UTF-8 character
+        }
+        settings.prompt.resize(cut);
+    }
     return settings;
 }
 

@@ -22,6 +22,9 @@ enum class SlotFollow { Hub, Own };
 /// What "Generate" asks for (SPEC 3.1, 3.3 basic parameters). A new instance starts in A minor (SPEC 8.1); an empty
 /// key or scale means "auto": drawn for every request (older states, D-149). No seed means a new random seed for every
 /// request; a seed makes a request repeat the same pattern.
+/// Longest prompt text that is kept (bytes).
+inline constexpr size_t kMaxPromptBytes = 2000;
+
 struct GenerationSettings {
     std::string styleId = "peak_time";
     uint32_t lengthBars = 4;                              ///< 1, 2, 4, 8 or 16
@@ -30,6 +33,7 @@ struct GenerationSettings {
     std::optional<PitchClass> root = PitchClass{9};       ///< 0 to 11 (0 = C), A by default
     std::optional<std::string> scaleId = "natural_minor"; ///< an id of `allScales()`
     std::optional<uint64_t> seed;                         ///< fixed seed, else random per request
+    std::string prompt; ///< what the musician asks the AI for (SPEC 3.1); offline: ignored
 
     bool operator==(const GenerationSettings&) const = default;
 };

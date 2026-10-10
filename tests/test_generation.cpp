@@ -268,7 +268,7 @@ TEST_CASE("the generation settings are saved, and invalid ones are made valid on
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor source("Test");
     auto settings = source.instanceSettings();
-    settings.generation = {"melodic_techno", 8, 70, 20, 2, "dorian", 12345};
+    settings.generation = {"melodic_techno", 8, 70, 20, 2, "dorian", 12345, ""};
     source.setInstanceSettings(settings);
     juce::MemoryBlock saved;
     source.getStateInformation(saved);
