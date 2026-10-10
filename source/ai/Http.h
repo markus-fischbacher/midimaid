@@ -16,7 +16,8 @@ struct HttpRequest {
     std::string url;
     std::vector<std::pair<std::string, std::string>> headers;
     std::string body;
-    int connectTimeoutSeconds = 10; ///< the connection gets its own short timeout (SPEC 7.1)
+    int connectTimeoutSeconds = 10; ///< a short timeout for the connection where the network layer can keep it apart
+                                    ///< (the JUCE layer cannot: it uses `timeoutSeconds`, D-172)
     int timeoutSeconds = 30;        ///< for the whole request including the answer
 };
 

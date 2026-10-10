@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -32,8 +33,10 @@ struct FakeReply {
     int status = 200;
     std::string body;
     std::map<std::string, std::string> headers;
-    int delayMs = 0;       ///< waits before it answers (the connection stays open)
-    bool hangUp = false;   ///< closes the connection without an answer
+    int delayMs = 0;     ///< waits before it answers (the connection stays open)
+    bool hangUp = false; ///< closes the connection without an answer
+    bool chunked =
+        false; ///< `Transfer-Encoding: chunked` without a length; with `partialBytes` the last chunk is missing
     int partialBytes = -1; ///< >= 0: sends the head and only this many body bytes, then waits `delayMs`, then stops
 };
 
@@ -171,14 +174,32 @@ private:
             }
             if (!reply.hangUp && !stop_.load()) {
                 std::string out = "HTTP/1.1 " + std::to_string(reply.status) + " X\r\n";
-                out += "Content-Length: " + std::to_string(reply.body.size()) + "\r\nConnection: close\r\n";
+                if (reply.chunked) {
+                    out += "Transfer-Encoding: chunked\r\nConnection: close\r\n";
+                } else {
+                    out += "Content-Length: " + std::to_string(reply.body.size()) + "\r\nConnection: close\r\n";
+                }
                 out += "Content-Type: application/json\r\n";
                 for (const auto& [name, value] : reply.headers) {
                     out += name + ": " + value + "\r\n";
                 }
                 out += "\r\n";
-                out += reply.partialBytes >= 0 ? reply.body.substr(0, static_cast<size_t>(reply.partialBytes))
-                                               : reply.body;
+                const std::string sent = reply.partialBytes >= 0
+                                             ? reply.body.substr(0, static_cast<size_t>(reply.partialBytes))
+                                             : reply.body;
+                if (reply.chunked) {
+                    for (size_t at = 0; at < sent.size(); at += 50) {
+                        const auto piece = sent.substr(at, 50);
+                        char size[16];
+                        std::snprintf(size, sizeof(size), "%zx", piece.size());
+                        out += std::string(size) + "\r\n" + piece + "\r\n";
+                    }
+                    if (reply.partialBytes < 0) {
+                        out += "0\r\n\r\n"; // the end of the body
+                    }
+                } else {
+                    out += sent;
+                }
                 ::send(client, out.data(), out.size(), 0);
                 if (reply.partialBytes >= 0) {
                     wait(); // the rest of the body never comes

@@ -702,6 +702,26 @@ TEST_CASE("openai: odd answers give an empty text, not a crash", "[ai-openai]") 
     }
 }
 
+TEST_CASE("openai: an answer in the reasoning field of a reasoning model is used when the content is empty",
+          "[ai-openai]") {
+    for (const std::string field : {"reasoning_content", "reasoning"}) {
+        INFO(field);
+        auto client = std::make_shared<ScriptedClient>();
+        json message = {{"content", ""}, {field, "{\"a\":1}"}};
+        client->pushOk(json{{"choices", json::array({json{{"message", message}}})}}.dump());
+        OpenAiProvider provider(client, openAiConfig(SchemaSupport::Enforced));
+        const auto result = provider.generate(sampleRequest(), CancellationToken());
+        CHECK(result.ok());
+        CHECK(result.text == "{\"a\":1}");
+    }
+    // The content wins when there is one, and a reasoning text without content is not invented from nothing.
+    auto client = std::make_shared<ScriptedClient>();
+    json message = {{"content", "{\"b\":2}"}, {"reasoning_content", "thinking"}};
+    client->pushOk(json{{"choices", json::array({json{{"message", message}}})}}.dump());
+    OpenAiProvider provider(client, openAiConfig(SchemaSupport::Enforced));
+    CHECK(provider.generate(sampleRequest(), CancellationToken()).text == "{\"b\":2}");
+}
+
 TEST_CASE("openai: a model that takes no temperature is asked again without it", "[ai-openai]") {
     auto client = std::make_shared<ScriptedClient>();
     client->pushStatus(
