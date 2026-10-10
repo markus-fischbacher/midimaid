@@ -11,6 +11,7 @@
 #include "engine/PatternHandover.h"
 #include "engine/PatternPlayer.h"
 #include "engine/SlotPublisher.h"
+#include "plugin/StateMigration.h"
 #include "plugin/GenerationService.h"
 #include "plugin/GroupLink.h"
 #include "plugin/MidiExporter.h"
@@ -334,8 +335,6 @@ private:
         mm::engine::PatternHandover& handover_;
     };
 
-    /// Version of the plugin state (SPEC 9.1); every change of its format raises it and gets a migration.
-    static constexpr int kStateVersion = 1;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     juce::String name_;

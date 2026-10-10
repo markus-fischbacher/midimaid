@@ -17,6 +17,7 @@
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ReferenceStore.h"
+#include "plugin/StateMigration.h"
 
 #include <algorithm>
 #include <set>
@@ -1338,6 +1339,13 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     if (root == nullptr || !root->hasTagName("MidiMaid") || root->getIntAttribute("stateVersion", 0) < 1) {
         return;
     }
+    const auto migrated = migrateState(*root, kStateVersion, stateMigrations());
+    if (!migrated.ok) {
+        // an older state that cannot be brought up to date is not used; the instance keeps what it has
+        const juce::ScopedLock lock(slotsLock_);
+        slotLoadProblems_.push_back(migrated.error);
+        return;
+    }
     startKeyPending_ = false; // the project has its own key
     startKeyTimer_.reset();
     if (const auto* parameters = root->getChildByName(parameters_.state.getType())) {
@@ -1376,12 +1384,15 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
 
     mm::core::SlotBank bank;
     std::vector<std::string> problems;
+    if (migrated.fromNewer) {
+        problems.push_back("stateVersion: written by a newer plugin version, loaded as far as understood");
+    }
     if (const auto* slotsElement = root->getChildByName("Slots")) {
         auto loaded = mm::core::loadSlotBank(slotsElement->getAllSubText().toStdString());
         if (loaded.ok()) {
             bank = std::move(*loaded.bank);
         }
-        problems = std::move(loaded.problems);
+        problems.insert(problems.end(), loaded.problems.begin(), loaded.problems.end());
         if (!loaded.error.empty()) {
             problems.push_back(loaded.error);
         }
