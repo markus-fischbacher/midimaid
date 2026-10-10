@@ -13,7 +13,10 @@ namespace mm::plugin {
 /// slot a read-only roll with Mute and a grip that drags that voice's file into the host; an info line and the status
 /// line. A voice gets the compact voice UI instead (D-148): a read-only roll of the voice it plays, Mute, octave, the
 /// slot follow switch, "Open hub" and the drag handle. The texts come from the translation table (SPEC 8.2).
-class PlaceholderEditor : public juce::AudioProcessorEditor, private juce::Timer, public juce::FileDragAndDropTarget {
+class PlaceholderEditor : public juce::AudioProcessorEditor,
+                          private juce::Timer,
+                          public juce::FileDragAndDropTarget,
+                          public juce::DragAndDropContainer {
 public:
     explicit PlaceholderEditor(ProcessorBase& processor);
     ~PlaceholderEditor() override;
@@ -37,6 +40,8 @@ private:
     /// Switches between the voice UI and the placeholder layout (size and visible controls).
     void applyLayout(bool voiceLayout);
     void applyScale();
+    /// The menu of the slot actions at `where` (screen position) for the slot (1-based), SPEC 3.10.
+    void showSlotMenu(int slot, juce::Point<int> where);
     void updateVoiceView();
     /// The hub UI: fields, slot strip, rows of the playing slot, info line.
     void updateFullView();
@@ -99,7 +104,7 @@ private:
     juce::Label creativityLabel_;
     juce::Slider energySlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
     juce::Slider creativitySlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
-    std::array<juce::TextButton, mm::core::kSlotCount> slotButtons_;
+    std::vector<std::unique_ptr<SlotButton>> slotButtons_;
     std::vector<std::unique_ptr<VoiceRow>> rows_;
     std::vector<ProcessorBase::VoiceView> shownVoices_;
     ProcessorBase::SlotInfo shownInfo_;

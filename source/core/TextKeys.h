@@ -188,6 +188,16 @@ namespace mm::core::text {
     X(kStatusLibraryImported, "status.libraryImported")                                                            \
     X(kStatusLibraryExported, "status.libraryExported")                                                            \
     X(kStatusLibraryExportFailed, "status.libraryExportFailed")                                                    \
+    X(kStatusSlotCopied, "status.slotCopied")                                                                          \
+    X(kStatusSlotPasted, "status.slotPasted")                                                                          \
+    X(kStatusSlotNothingToCopy, "status.slotNothingToCopy")                                                            \
+    X(kStatusSlotCleared, "status.slotCleared")                                                                        \
+    X(kStatusSlotsSwapped, "status.slotsSwapped")                                                                      \
+    X(kSlotMenuCopy, "slot.menu.copy")                                                                                 \
+    X(kSlotMenuPaste, "slot.menu.paste")                                                                               \
+    X(kSlotMenuClear, "slot.menu.clear")                                                                               \
+    X(kSlotMenuSwap, "slot.menu.swap")                                                                                 \
+    X(kSlotMenuSwapItem, "slot.menu.swapItem")                                                                         \
     X(kButtonClose, "button.close")                                                                                    \
     X(kStatusNoResult, "status.noResult")                                                                              \
     X(kStatusUseHub, "status.useHub")                                                                                  \

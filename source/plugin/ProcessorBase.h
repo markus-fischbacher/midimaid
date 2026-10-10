@@ -69,7 +69,12 @@ enum class GenerationStatus {
     LibraryLoadFailed,   ///< the entry is gone or cannot be read
     LibraryImported,     ///< a MIDI file became a library entry
     LibraryExported,     ///< an entry was written as a MIDI file
-    LibraryExportFailed  ///< the entry cannot be exported (a set, no notes, unreadable, no write access)
+    LibraryExportFailed, ///< the entry cannot be exported (a set, no notes, unreadable, no write access)
+    SlotCopied,          ///< a slot went to the clipboard of the instance (SPEC 3.10)
+    SlotPasted,          ///< the clipboard became the result of a slot
+    SlotNothingToCopy,   ///< the slot is empty, or nothing is on the clipboard
+    SlotCleared,         ///< a slot was reset completely
+    SlotsSwapped         ///< two slots changed places
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -194,6 +199,18 @@ public:
     /// Message thread: takes the last undo step back or does the undone one again (D-153). The result plays at once.
     /// False when there is nothing to do or this instance is a voice.
     bool undo();
+    /// Message thread: the slot actions of SPEC 3.10 (0-based indices). Hub and solo only (a voice says "use the hub").
+    /// `copySlot` puts the slot (pattern, name and colour) on the clipboard of this instance; `pasteSlot` makes it the
+    /// result of a slot (history entry and an undo step, plays when that slot is selected); `copySlotTo` is both in
+    /// one; `clearSlot` resets a slot completely and `swapSlots` exchanges two with their history. Clearing and
+    /// swapping end the undo steps of the slots they touch (the steps no longer fit, D-153). False when nothing
+    /// happened; `generationStatus()` says why.
+    bool copySlot(size_t index);
+    bool pasteSlot(size_t index);
+    bool copySlotTo(size_t from, size_t to);
+    bool clearSlot(size_t index);
+    bool swapSlots(size_t first, size_t second);
+    bool hasSlotClipboard() const;
     /// Message thread: locks or unlocks a voice of the slot (0-based indices, SPEC 3.5). An undo step like a note edit.
     /// False in a voice, for an empty slot or when the lock is already as asked.
     bool setVoiceLocked(size_t slotIndex, size_t voice, bool locked);
@@ -424,6 +441,7 @@ private:
     std::shared_ptr<GroupLink> groupLink_;
     std::optional<PendingImport> pendingImport_;
     std::optional<mm::core::RhythmReference> drumReference_; ///< the last one dropped (message thread)
+    std::optional<mm::core::SlotContent> slotClipboard_; // message thread
     std::shared_ptr<bool> libraryAlive_ = std::make_shared<bool>(true); ///< callbacks of the library check it
     bool importCut_ = false; ///< the import that started the running generation was cut to 16 bars
     MidiImportService importer_;  // before the generator: both are destroyed before the members they call into

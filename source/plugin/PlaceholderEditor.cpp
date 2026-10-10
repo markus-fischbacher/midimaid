@@ -376,12 +376,21 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         addChildComponent(*label);
     }
 
-    for (size_t i = 0; i < slotButtons_.size(); ++i) {
-        auto& button = slotButtons_[i];
+    for (size_t i = 0; i < mm::core::kSlotCount; ++i) {
+        auto& button = *slotButtons_.emplace_back(std::make_unique<SlotButton>(static_cast<int>(i) + 1));
         button.setButtonText(juce::String(static_cast<int>(i) + 1));
         button.setComponentID("slot" + juce::String(static_cast<int>(i) + 1));
         button.setClickingTogglesState(false);
         button.onClick = [this, i] { processor_.selectSlot(static_cast<int>(i) + 1); };
+        button.onMenu = [this](int slot, juce::Point<int> where) { showSlotMenu(slot, where); };
+        button.onSlotDropped = [this](int from, int to, bool copy) {
+            if (copy) {
+                processor_.copySlotTo(static_cast<size_t>(from - 1), static_cast<size_t>(to - 1));
+            } else {
+                processor_.swapSlots(static_cast<size_t>(from - 1), static_cast<size_t>(to - 1));
+            }
+            updateStatus();
+        };
         addChildComponent(button);
     }
 
@@ -560,6 +569,21 @@ void PlaceholderEditor::updateStatus() {
     case GenerationStatus::LibraryExportFailed:
         statusLabel_.setText(tr(libraryStatusKey(processor_.generationStatus())), juce::dontSendNotification);
         break;
+    case GenerationStatus::SlotCopied:
+        statusLabel_.setText(tr(keys::kStatusSlotCopied), juce::dontSendNotification);
+        break;
+    case GenerationStatus::SlotPasted:
+        statusLabel_.setText(tr(keys::kStatusSlotPasted), juce::dontSendNotification);
+        break;
+    case GenerationStatus::SlotNothingToCopy:
+        statusLabel_.setText(tr(keys::kStatusSlotNothingToCopy), juce::dontSendNotification);
+        break;
+    case GenerationStatus::SlotCleared:
+        statusLabel_.setText(tr(keys::kStatusSlotCleared), juce::dontSendNotification);
+        break;
+    case GenerationStatus::SlotsSwapped:
+        statusLabel_.setText(tr(keys::kStatusSlotsSwapped), juce::dontSendNotification);
+        break;
     case GenerationStatus::ImportNotFourFour:
         statusLabel_.setText(tr(keys::kStatusImportNotFourFour), juce::dontSendNotification);
         break;
@@ -649,6 +673,37 @@ void PlaceholderEditor::updateStatus() {
     }
 }
 
+void PlaceholderEditor::showSlotMenu(int slot, juce::Point<int> where) {
+    const size_t index = static_cast<size_t>(slot - 1);
+    const bool filled = processor_.slotUsage()[index];
+    juce::PopupMenu menu;
+    menu.addItem(1, tr(keys::kSlotMenuCopy), filled);
+    menu.addItem(2, tr(keys::kSlotMenuPaste), processor_.hasSlotClipboard());
+    menu.addItem(3, tr(keys::kSlotMenuClear), filled);
+    juce::PopupMenu swap;
+    for (int other = 1; other <= static_cast<int>(mm::core::kSlotCount); ++other) {
+        if (other != slot) {
+            swap.addItem(100 + other, tr(keys::kSlotMenuSwapItem, {{"n", std::to_string(other)}}));
+        }
+    }
+    menu.addSubMenu(tr(keys::kSlotMenuSwap), swap);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(juce::Rectangle<int>(where.x, where.y, 1, 1)),
+                       [this, index](int choice) {
+                           if (choice == 1) {
+                               processor_.copySlot(index);
+                           } else if (choice == 2) {
+                               processor_.pasteSlot(index);
+                           } else if (choice == 3) {
+                               processor_.clearSlot(index);
+                           } else if (choice > 100) {
+                               processor_.swapSlots(index, static_cast<size_t>(choice - 101));
+                           }
+                           if (choice != 0) {
+                               updateStatus();
+                           }
+                       });
+}
+
 void PlaceholderEditor::applyScale() {
     // The layout keeps its logical size; the window grows or shrinks with it, so the aspect ratio stays (SPEC 8.1).
     setScaleFactor(static_cast<float>(processor_.uiScalePct()) / 100.0f);
@@ -670,7 +725,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     }
     applyLevel();
     for (auto& button : slotButtons_) {
-        button.setVisible(!voiceLayout);
+        button->setVisible(!voiceLayout);
     }
     for (auto& row : rows_) {
         row->setVisible(!voiceLayout);
@@ -911,7 +966,7 @@ void PlaceholderEditor::updateFullView() {
     const auto used = processor_.slotUsage();
     const int selected = processor_.activeSlot();
     for (size_t i = 0; i < slotButtons_.size(); ++i) {
-        auto& button = slotButtons_[i];
+        auto& button = *slotButtons_[i];
         const bool isSelected = static_cast<int>(i) + 1 == selected;
         button.setToggleState(isSelected, juce::dontSendNotification);
         button.setColour(juce::TextButton::buttonColourId, juce::Colour(used[i] ? 0xff3a3a44 : 0xff25252b));
@@ -1080,7 +1135,7 @@ void PlaceholderEditor::resized() {
     auto strip = area.removeFromTop(40).reduced(16, 4);
     const int buttonWidth = strip.getWidth() / static_cast<int>(slotButtons_.size());
     for (auto& button : slotButtons_) {
-        button.setBounds(strip.removeFromLeft(buttonWidth).reduced(2, 0));
+        button->setBounds(strip.removeFromLeft(buttonWidth).reduced(2, 0));
     }
 
     auto statusRow = area.removeFromBottom(40).reduced(16, 0);

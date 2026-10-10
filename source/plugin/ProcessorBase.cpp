@@ -1041,6 +1041,94 @@ bool ProcessorBase::browseHistory(bool back, std::optional<size_t> slotChoice) {
     return moved;
 }
 
+bool ProcessorBase::hasSlotClipboard() const {
+    return slotClipboard_.has_value() && slotClipboard_->pattern.has_value();
+}
+
+bool ProcessorBase::copySlot(size_t index) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    std::optional<mm::core::SlotContent> content;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        content = slots_.copy(index);
+    }
+    if (!content || !content->pattern) {
+        generationStatus_ = GenerationStatus::SlotNothingToCopy;
+        return false;
+    }
+    slotClipboard_ = std::move(content);
+    generationStatus_ = GenerationStatus::SlotCopied;
+    return true;
+}
+
+bool ProcessorBase::pasteSlot(size_t index) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    if (!hasSlotClipboard() || index >= mm::core::kSlotCount) {
+        generationStatus_ = GenerationStatus::SlotNothingToCopy;
+        return false;
+    }
+    bool pasted = false;
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto* slot = bank.slot(index);
+        std::optional<mm::core::Pattern> before = slot != nullptr ? slot->pattern : std::nullopt;
+        const size_t cursor = slot != nullptr ? slot->cursor : 0;
+        if (bank.paste(index, *slotClipboard_)) {
+            undo_.recordResult(index, std::move(before), cursor, *bank.slot(index)->pattern);
+            pasted = true;
+        }
+    });
+    generationStatus_ = pasted ? GenerationStatus::SlotPasted : GenerationStatus::SlotNothingToCopy;
+    return pasted;
+}
+
+bool ProcessorBase::copySlotTo(size_t from, size_t to) {
+    if (from == to) {
+        return false;
+    }
+    return copySlot(from) && pasteSlot(to);
+}
+
+bool ProcessorBase::clearSlot(size_t index) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    bool cleared = false;
+    editSlots([&](mm::core::SlotBank& bank) {
+        cleared = bank.clear(index);
+        if (cleared) {
+            undo_.discardSlot(index);
+        }
+    });
+    generationStatus_ = cleared ? GenerationStatus::SlotCleared : GenerationStatus::SlotNothingToCopy;
+    return cleared;
+}
+
+bool ProcessorBase::swapSlots(size_t first, size_t second) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    bool swapped = false;
+    editSlots([&](mm::core::SlotBank& bank) {
+        swapped = first != second && bank.swap(first, second);
+        if (swapped) {
+            undo_.discardSlot(first);
+            undo_.discardSlot(second);
+        }
+    });
+    if (swapped) {
+        generationStatus_ = GenerationStatus::SlotsSwapped;
+    }
+    return swapped;
+}
+
 void ProcessorBase::onGenerated(const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
     if (!pattern) {
         const bool aiFailed = lastReport_.usedAi && lastReport_.outcome != mm::ai::AiOutcome::Cancelled;

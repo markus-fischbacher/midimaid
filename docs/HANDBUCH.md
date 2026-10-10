@@ -33,7 +33,7 @@ Eine neue Instanz ist **still**, bis du etwas erzeugt hast.
 | **Rolle** | *Solo* (eine Instanz allein), *Hub* (steuert alle Stimmen), *Stimme* (spielt genau eine Stimme des Hubs) |
 | **Stil, Tonart, Skala, Takte** | Tonart und Skala auf *auto* lassen oder festlegen; 1 bis 16 Takte |
 | **Energie, Kreativität** | Dichte und Abwechslung (Seed und Zufälliger Seed im Experten-Modus) |
-| **Slots 1–16** | 16 Pattern-Plätze je Instanz bzw. Hub; ein Klick wählt den Slot (Wechsel zum nächsten Takt) |
+| **Slots 1–16** | 16 Pattern-Plätze je Instanz bzw. Hub; ein Klick wählt den Slot (Wechsel zum nächsten Takt); Rechtsklick: kopieren, einfügen, leeren, tauschen; ein Feld auf ein anderes ziehen tauscht die Slots, mit Alt kopiert es |
 | **Piano-Roll** je Stimme | Noten ansehen und bearbeiten (Abschnitt 6) |
 | **Größe** | Fenstergröße von 75 bis 200 % (Hub oben rechts, Stimme unten rechts); wird je Instanz im Projekt gespeichert |
 | **Statuszeile** | Was gerade passiert, auch Fehler und Hinweise |
@@ -51,6 +51,8 @@ Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehe
   jede Änderung.
 - **Verlauf** (◀ ▶, „Verlauf 2/5“): jeder Slot behält seine letzten Ergebnisse. Vorher gab es nichts, was du verlieren
   könntest.
+
+**Slots kopieren, tauschen, leeren:** Ein Rechtsklick auf ein Feld der Slot-Leiste öffnet das Menü *Slot kopieren*, *Slot einfügen*, *Slot leeren* und *Tauschen mit …*. Du kannst auch ein Feld auf ein anderes **ziehen**: Das tauscht die beiden Slots, mit gehaltener **Alt-Taste** kopiert es. Einfügen ist ein Ergebnis wie *Erzeugen* (◀ und *Rückgängig* gehen zurück). **Leeren und Tauschen** lassen sich nicht rückgängig machen, weil sie auch Verlauf, Name und Farbe mitnehmen.
 
 **Sperren:** Der Knopf *Sperren* an einer Stimme hält sie fest, bis du sie wieder freigibst. Erzeugen, Variation und
 Verfeinern lassen sie in Ruhe.

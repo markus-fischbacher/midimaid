@@ -30,6 +30,37 @@ private:
     bool dragging_ = false;
 };
 
+/// One field of the slot strip (SPEC 3.10): a click selects the slot, a right click (or Ctrl-click) asks for the menu
+/// of the slot actions, and dragging it onto another field exchanges the two; with Alt held the drop copies instead.
+/// Slot numbers are 1-based, like the host parameter.
+class SlotButton : public juce::TextButton, public juce::DragAndDropTarget {
+public:
+    explicit SlotButton(int slot);
+
+    int slot() const { return slot_; }
+    /// Called with the slot and the screen position of the click when the menu is asked for.
+    std::function<void(int, juce::Point<int>)> onMenu;
+    /// Called with the dragged slot, this slot and whether the drop is a copy (else an exchange).
+    std::function<void(int, int, bool)> onSlotDropped;
+
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void paintOverChildren(juce::Graphics& g) override;
+    bool isInterestedInDragSource(const SourceDetails& details) override;
+    void itemDragEnter(const SourceDetails& details) override;
+    void itemDragExit(const SourceDetails& details) override;
+    void itemDropped(const SourceDetails& details) override;
+
+    /// The description of a dragged slot field and how to read it back (0: not a slot).
+    static juce::var describe(int slot);
+    static int slotOf(const juce::var& description);
+
+private:
+    int slot_;
+    bool dropTarget_ = false;
+    bool menuAsked_ = false;
+};
+
 /// The first MIDI file (.mid, .midi) of a drag, or an empty file.
 juce::File firstMidiFile(const juce::StringArray& files);
 
