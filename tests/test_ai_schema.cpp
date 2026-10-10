@@ -454,6 +454,40 @@ TEST_CASE("a motif is repeated over a pattern of 16 bars", "[ai][schema][motif]"
     // the melody has no motif length: its notes are the whole pattern
     CHECK(result.pattern.voices[1].notes.size() == 2);
 
+    // a motif that does not divide the pattern is cut at the end of the pattern
+    answer["voices"][0]["motif_bars"] = 5;
+    answer["voices"][0]["notes"] = json::array({{{"step", 0}, {"degree", 1}, {"len", 4}},
+                                                {{"step", 64}, {"degree", 3}, {"len", 16}}, // bar 5 of the motif
+                                                {{"step", 76}, {"degree", 5}, {"len", 8}}});
+    result = buildFrom(answer, style, 16);
+    REQUIRE(result.ok);
+    CHECK(validatePattern(result.pattern).empty());
+    {
+        const auto& cut = result.pattern.voices[0].notes;
+        // statements start at bars 0, 5, 10 and 15: the last one has room for bar 1 only
+        CHECK(cut.size() == 3 + 3 + 3 + 1);
+        CHECK(cut.back().startTick == 15 * kTicksPerBar);
+        for (const auto& note : cut) {
+            CHECK(note.startTick + note.lengthTicks <= 16 * kTicksPerBar);
+        }
+    }
+    // the ids of known notes belong to the first statement only
+    {
+        const auto parsed = parseAiResponse(answer.dump());
+        REQUIRE(parsed.ok);
+        auto draft = parsed.draft;
+        draft.voices[0].notes[0].id = 7;
+        const std::set<uint32_t> known = {7};
+        auto context = contextFor(style, 16);
+        context.knownIds = &known;
+        const auto withIds = buildPattern(draft, context);
+        REQUIRE(withIds.ok);
+        std::set<uint32_t> ids;
+        for (const auto& note : withIds.pattern.voices[0].notes) {
+            CHECK(ids.insert(note.id).second);
+        }
+        CHECK(withIds.pattern.voices[0].notes[0].id == 7);
+    }
     answer["voices"][0]["motif_bars"] = 12; // at most 8 bars
     answer["voices"][0]["notes"] = json::array({{{"step", 100}, {"degree", 1}}, {{"step", 127}, {"degree", 1}}});
     result = buildFrom(answer, style, 16);

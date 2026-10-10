@@ -298,6 +298,35 @@ TEST_CASE("a cancelled token ends the generation without a result", "[ai][genera
     }
 }
 
+namespace {
+
+/// Answers fine, but the musician pressed cancel while it was working.
+class CancelDuringCall : public IAiProvider {
+public:
+    explicit CancelDuringCall(std::string text) : text_(std::move(text)) {}
+    ProviderInfo info() const override { return {"late", "Late", SchemaSupport::Enforced, {}}; }
+    AiResult generate(const AiRequest&, const CancellationToken& token) override {
+        token.cancel();
+        AiResult result;
+        result.status = AiStatus::Ok;
+        result.text = text_;
+        return result;
+    }
+    ConnectionStatus testConnection(const CancellationToken&) override { return {}; }
+
+private:
+    std::string text_;
+};
+
+} // namespace
+
+TEST_CASE("an answer that arrives after the cancel is discarded", "[ai][generate][cancel]") {
+    const auto style = shipped();
+    CancelDuringCall provider(answerFor(algorithmic(style, 5), style));
+    const auto result = generateWithAi(provider, inputFor(style), CancellationToken());
+    CHECK(result.outcome == AiOutcome::Cancelled);
+}
+
 TEST_CASE("a cancel between the first and the repair request stops there", "[ai][generate][cancel]") {
     const auto style = shipped();
     MockProvider mock;
@@ -354,6 +383,10 @@ TEST_CASE("locked voices stay, the answer is written for their harmony", "[ai][g
     other.context.root = static_cast<PitchClass>((current.context.root + 5) % 12);
     json answer = json::parse(answerFor(other, style));
     answer["voices"][0]["notes"] = json::array(); // locked: returned empty
+    answer["context"]["progression"] = json::array({"not a chord"}); // the harmony of the locked voice counts, not this
+    current.kickGridId = "broken_a";
+    current.voices[0].lock = {true, true, true};
+    const Track lockedBassNow = current.voices[0];
     MockProvider mock;
     mock.enqueueText(answer.dump());
     auto input = inputFor(style);
@@ -364,6 +397,7 @@ TEST_CASE("locked voices stay, the answer is written for their harmony", "[ai][g
     REQUIRE(result.outcome == AiOutcome::Success);
     const Pattern& p = result.pattern;
     CHECK(p.voices[0] == lockedBass); // notes, ids, lock: exactly as they were
+    CHECK(p.voices[0] == lockedBassNow);
     CHECK(p.context == current.context);
     CHECK(p.phrases == current.phrases);
     CHECK(p.kickGridId == current.kickGridId);
@@ -386,9 +420,40 @@ TEST_CASE("locked voices stay, the answer is written for their harmony", "[ai][g
     CHECK(contains(user, "fixed, use " + current.context.scaleId));
     const auto symbols = progressionSymbols(current);
     REQUIRE(symbols.has_value());
+    std::string joined;
     for (const auto& symbol : *symbols) {
-        CHECK(contains(user, symbol));
+        joined += (joined.empty() ? "" : ", ") + symbol;
     }
+    CHECK(contains(user, "Keep this progression (one entry per bar): " + joined + "."));
+}
+
+TEST_CASE("the phrases of the locked pattern stay", "[ai][generate][lock]") {
+    const auto style = shipped();
+    Pattern current = algorithmic(style, 21, 8);
+    current.phrases.clear();
+    Phrase first;
+    first.startBar = 0;
+    first.lengthBars = 4;
+    first.role = PhraseRole::Main;
+    Phrase second;
+    second.startBar = 4;
+    second.lengthBars = 4;
+    second.role = PhraseRole::Answer;
+    current.phrases = {first, second};
+    current.voices[1].lock = {true, true, true};
+    REQUIRE(validatePattern(current).empty());
+    json answer = json::parse(answerFor(algorithmic(style, 22, 8), style));
+    answer["phrases"] = json::array({{{"start_bar", 0}, {"bars", 8}, {"role", "build"}}});
+    answer["voices"][1]["notes"] = json::array();
+    MockProvider mock;
+    mock.enqueueText(answer.dump());
+    auto input = inputFor(style);
+    input.lockedFrom = current;
+    const auto result = generateWithAi(mock, input, CancellationToken());
+    REQUIRE(result.outcome == AiOutcome::Success);
+    CHECK(result.pattern.phrases == current.phrases);
+    CHECK(result.pattern.voices[1] == current.voices[1]);
+    CHECK_FALSE(result.pattern.voices[0].notes.empty());
 }
 
 TEST_CASE("an unlocked pattern gives a request without lock note", "[ai][generate][lock]") {
