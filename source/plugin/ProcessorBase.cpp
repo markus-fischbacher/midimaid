@@ -1041,8 +1041,26 @@ bool ProcessorBase::browseHistory(bool back, std::optional<size_t> slotChoice) {
     return moved;
 }
 
+namespace {
+
+double steadySeconds() {
+    return juce::Time::getMillisecondCounterHiRes() / 1000.0;
+}
+
+std::atomic<ProcessorBase::PlayheadClock> playheadClock{&steadySeconds};
+
+double playheadSeconds() {
+    return playheadClock.load(std::memory_order_relaxed)();
+}
+
+} // namespace
+
+void ProcessorBase::setPlayheadClock(PlayheadClock clock) {
+    playheadClock.store(clock != nullptr ? clock : &steadySeconds);
+}
+
 std::optional<double> ProcessorBase::playheadPpq() const {
-    return playhead_.ppqAt(juce::Time::getMillisecondCounterHiRes() / 1000.0);
+    return playhead_.ppqAt(playheadSeconds());
 }
 
 bool ProcessorBase::hasSlotClipboard() const {
@@ -1275,8 +1293,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
         }
     }
 
-    playhead_.publish(transport.hasPosition && transport.isPlaying, transport.ppq, transport.bpm,
-                      juce::Time::getMillisecondCounterHiRes() / 1000.0);
+    playhead_.publish(transport.hasPosition && transport.isPlaying, transport.ppq, transport.bpm, playheadSeconds());
 
     // Host parameters are read once per block and never written here (SPEC 3.13, 6.1a rule 1).
     const auto decision = groupSync_.beginBlock(
@@ -1307,7 +1324,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
 }
 
 void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi) {
-    playhead_.publish(false, 0.0, 0.0, juce::Time::getMillisecondCounterHiRes() / 1000.0);
+    playhead_.publish(false, 0.0, 0.0, playheadSeconds());
     audio.clear();
     midi.clear();
     midi.ensureSize(kMidiBufferBytes);
