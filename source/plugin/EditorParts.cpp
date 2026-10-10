@@ -229,4 +229,76 @@ void VoiceRow::resized() {
     roll_.setBounds(area);
 }
 
+SlotButton::SlotButton(int slot) : slot_(slot) {}
+
+juce::var SlotButton::describe(int slot) {
+    return juce::var("mm-slot:" + juce::String(slot));
+}
+
+int SlotButton::slotOf(const juce::var& description) {
+    const auto text = description.toString();
+    if (!text.startsWith("mm-slot:")) {
+        return 0;
+    }
+    const auto number = text.fromFirstOccurrenceOf(":", false, false);
+    if (!number.containsOnly("0123456789") || number.isEmpty() || number.length() > 2) {
+        return 0;
+    }
+    const int slot = number.getIntValue();
+    return slot >= 1 && slot <= static_cast<int>(mm::core::kSlotCount) ? slot : 0;
+}
+
+void SlotButton::mouseDown(const juce::MouseEvent& event) {
+    menuAsked_ = event.mods.isPopupMenu();
+    if (menuAsked_) { // a right click is no click on the button
+        if (onMenu) {
+            onMenu(slot_, event.getScreenPosition());
+        }
+        return;
+    }
+    juce::TextButton::mouseDown(event);
+}
+
+void SlotButton::mouseDrag(const juce::MouseEvent& event) {
+    juce::TextButton::mouseDrag(event);
+    if (menuAsked_ || event.getDistanceFromDragStart() < 8) {
+        return;
+    }
+    if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this);
+        container != nullptr && !container->isDragAndDropActive()) {
+        container->startDragging(describe(slot_), this);
+    }
+}
+
+void SlotButton::paintOverChildren(juce::Graphics& g) {
+    if (dropTarget_) {
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 4.0f, 2.0f);
+    }
+}
+
+bool SlotButton::isInterestedInDragSource(const SourceDetails& details) {
+    const int from = slotOf(details.description);
+    return from != 0 && from != slot_;
+}
+
+void SlotButton::itemDragEnter(const SourceDetails&) {
+    dropTarget_ = true;
+    repaint();
+}
+
+void SlotButton::itemDragExit(const SourceDetails&) {
+    dropTarget_ = false;
+    repaint();
+}
+
+void SlotButton::itemDropped(const SourceDetails& details) {
+    dropTarget_ = false;
+    repaint();
+    const int from = slotOf(details.description);
+    if (from != 0 && from != slot_ && onSlotDropped) {
+        onSlotDropped(from, slot_, juce::ModifierKeys::currentModifiers.isAltDown());
+    }
+}
+
 } // namespace mm::plugin
