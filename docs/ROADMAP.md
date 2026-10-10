@@ -211,7 +211,7 @@ Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set 
 - [ ] DAW-Vorlagen: Live-Set mit Gruppenspuren, Logic-Patches (SPEC §8.6)
 - [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5) – Text steht (D-188), der Hilfe-Dialog im Plugin und die Bestätigung in der DAW (H46) fehlen
 - [x] Nutzerhandbuch (kurz)
-- [ ] Vollständige manuelle Testmatrix (Anhang, v1.0-Zeilen)
+- [x] Vollständige manuelle Testmatrix (Anhang, v1.0-Zeilen) – die Zeilen sind vollständig und mit Host-Checks und Tests verknüpft; **ausgefüllt wird sie vom Entwickler in der DAW**
 - [x] Determinismus-Gesamttest: Pattern speichern, Referenz-Set ändern, Projekt neu laden, Ausgabe
       bitgenau vergleichen (FEATURES.md W7)
 
@@ -290,34 +290,42 @@ Euklidische Rhythmen als Feature
 
 ## Anhang: Manuelle Testmatrix
 
-| Test | Release | Live 12 macOS | Live 12 Win | Logic |
-|---|---|---|---|---|
-| Laden und Entfernen, auch Entfernen während der Wiedergabe | v1.0 | | | |
-| Sync bei Start mitten im Takt | v1.0 | | | |
-| Loop-Bereich, Rücksprung | v1.0 | | | |
-| Tempowechsel und Automation | v1.0 | | | |
-| Stop → keine hängenden Noten | v1.0 | | | |
-| Pattern-Wechsel während der Wiedergabe | v1.0 | | | |
-| Drag & Drop pro Stimme (Hub und Voice) | v1.0 | | | |
-| Projekt speichern und neu öffnen | v1.0 | | | |
-| Hub & Voices: Wechsel synchron, Hub gelöscht, Projekt ohne Hub geöffnet | v1.0 | | | |
-| Slot-Wechsel 50 ms vor Taktgrenze: alle Instanzen gleichzeitig | v1.0 | | | |
-| Start bei Takt 37 mit Slot-Automation | v1.0 | | | |
-| Offline-Rendern / Bounce mit Slot-Automation | v1.0 | | | |
-| Einzelspur-Bounce bzw. Freeze einer Voice mit Slot-Automation (Modus „eigen“, D-131) | v1.0 | | | |
-| Piano-Roll-Bearbeitung während der Wiedergabe: kein Versatz, keine hängenden Noten | v1.0 | | | |
-| Bypass während der Wiedergabe | v1.0 | | | |
-| Slides über Loop-Grenze, Synth im Legato-Modus | v1.0 | | | |
-| Groove + Slide + Kick-Freiraum kombiniert: keine Lücken, keine Kick-Überlappung | v1.0 | | | |
-| Eigene Bassline importiert, Melodie generiert | v1.0 | | | |
-| Drum-Clip als Referenz: Bass weicht echten Kicks aus | v1.0 | | | |
-| Referenz-Set: eigene Progressionen hörbar, keine Kopie | v1.0 | | | |
-| Verfeinern per Prompt, danach Rückgängig | v1.0 | | | |
-| Netzwerk weg während KI-Anfrage | v1.0 | | | |
-| Freeze/Aufnahme-Workflow laut Setup-Hilfe | v1.0 | | | |
-| DAW-Vorlagen laden und sofort spielen | v1.0 | | | |
-| Evolve-Ebene: Behalten, Zurück, Verwerfen; Slot unverändert; Bounce spielt Slot | v1.1 | | | |
-| Live-Transponieren per Keyboard, auch während Slides | v1.1 | | | |
-| Vorhören bei Stop, Übergabe an Transport-Start | v1.1 | | | |
-| Wahrscheinlichkeiten: gleiche Song-Position klingt gleich, Bounce = Wiedergabe | v1.1 | | | |
-| Referenz-Set wechseln: hörbar anderer Charakter | v1.1 | | | |
+| Test | Release | Live 12 macOS | Live 12 Win | Logic | Abgedeckt durch |
+|---|---|---|---|---|---|
+| Laden und Entfernen, auch Entfernen während der Wiedergabe | v1.0 | | | | Teil B/C; automatisch: `[handover]` (Zerstören gibt Patterns frei) |
+| Sync bei Start mitten im Takt | v1.0 | | | | Teil B/C; automatisch: `test_pattern_player` |
+| Loop-Bereich, Rücksprung | v1.0 | | | | Teil B/C; automatisch: `test_pattern_player` |
+| Tempowechsel und Automation | v1.0 | | | | Teil B/C; automatisch: `test_pattern_player` |
+| Stop → keine hängenden Noten | v1.0 | | | | Teil B/C; automatisch: `test_pattern_player`, `[plugin]` |
+| Pattern-Wechsel während der Wiedergabe | v1.0 | | | | H4–H6; automatisch: `[handover]`, `test_group_sync` |
+| Drag & Drop pro Stimme (Hub und Voice) | v1.0 | | | | Teil D |
+| Projekt speichern und neu öffnen | v1.0 | | | | H16–H18, H42, H44; automatisch: `[determinism]`, `test_state_migration` |
+| Hub & Voices: Wechsel synchron, Hub gelöscht, Projekt ohne Hub geöffnet | v1.0 | | | | H1–H18; automatisch: `test_group_*` |
+| Slot-Wechsel 50 ms vor Taktgrenze: alle Instanzen gleichzeitig | v1.0 | | | | H5, H6 |
+| Start bei Takt 37 mit Slot-Automation | v1.0 | | | | H7 |
+| Offline-Rendern / Bounce mit Slot-Automation | v1.0 | | | | H12, H19 |
+| Einzelspur-Bounce bzw. Freeze einer Voice mit Slot-Automation (Modus „eigen“, D-131) | v1.0 | | | | H8, H19 |
+| Piano-Roll-Bearbeitung während der Wiedergabe: kein Versatz, keine hängenden Noten | v1.0 | | | | H24–H28; automatisch: `[handover]`, `test_roll_edit` |
+| Bypass während der Wiedergabe | v1.0 | | | | Teil B/C; automatisch: `bypass releases a sounding note` |
+| Slides über Loop-Grenze, Synth im Legato-Modus | v1.0 | | | | Hörtest (`docs/HOERTEST.md`); automatisch: `test_output_stage` |
+| Groove + Slide + Kick-Freiraum kombiniert: keine Lücken, keine Kick-Überlappung | v1.0 | | | | Hörtest; automatisch: `test_output_stage`, Eigenschaftstests |
+| Eigene Bassline importiert, Melodie generiert | v1.0 | | | | H37, H38 |
+| Drum-Clip als Referenz: Bass weicht echten Kicks aus | v1.0 | | | | H39 |
+| Referenz-Set: eigene Progressionen hörbar, keine Kopie | v1.0 | | | | H40, H41 |
+| Verfeinern per Prompt, danach Rückgängig | v1.0 | | | | H34, H28 |
+| Netzwerk weg während KI-Anfrage | v1.0 | | | | H33–H35; automatisch: `test_ai_plugin`, `test_ai_connection` |
+| Freeze/Aufnahme-Workflow laut Setup-Hilfe | v1.0 | | | | H20, H21, H46 |
+| DAW-Vorlagen laden und sofort spielen | v1.0 | | | | offen: Vorlagen sind noch nicht gebaut (Phase 6) |
+| Bibliothek: Slot und Set speichern, laden, als .mid exportieren, .mid importieren, Plugin neu laden | v1.0 | | | | H43; automatisch: `test_library*` |
+| Referenzen: Ordner mit 20+ eigenen Dateien analysieren, Wiedergabe läuft ruhig weiter | v1.0 | | | | H40; automatisch: `test_reference_*`, Messung `[perf]` |
+| Projekt mit geändertem Referenz-Set neu öffnen: Ausgabe unverändert | v1.0 | | | | H44; automatisch: `[determinism]` |
+| Projekt aus einer früheren Version öffnen (State-Migration) | v1.0 | | | | H42; automatisch: `test_state_migration` (Golden `state_v1.xml`, Fuzz) |
+| KI-Praxis: Cloud-Anbieter, Zustimmung pro Anbieter, Schlüssel im Schlüsselbund | v1.0 | | | | H33, H35; automatisch: `test_ai_*`, `test_secret_store` |
+| Plugin-Validierung: pluginval Stufe 10, `auval` für `aumu` und `aumi` | v1.0 | | | | CI (macOS-Lauf); in der DAW kein Schritt |
+| Laden, Editor öffnen, acht Instanzen: CPU und Verzögerung | v1.0 | | | | H45; Messung `[perf]` |
+| Nicht aktive Parameter (SPEC 3.13) sichtbar, aber ohne Wirkung | v1.0 | | | | H22 |
+| Evolve-Ebene: Behalten, Zurück, Verwerfen; Slot unverändert; Bounce spielt Slot | v1.1 | | | | v1.1: noch nicht umgesetzt |
+| Live-Transponieren per Keyboard, auch während Slides | v1.1 | | | | v1.1: noch nicht umgesetzt |
+| Vorhören bei Stop, Übergabe an Transport-Start | v1.1 | | | | v1.1: noch nicht umgesetzt |
+| Wahrscheinlichkeiten: gleiche Song-Position klingt gleich, Bounce = Wiedergabe | v1.1 | | | | v1.1: noch nicht umgesetzt |
+| Referenz-Set wechseln: hörbar anderer Charakter | v1.1 | | | | v1.1: noch nicht umgesetzt |
