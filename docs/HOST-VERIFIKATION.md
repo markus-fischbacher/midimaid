@@ -144,7 +144,7 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H7 | Slot-Automation im Hub, Start mitten im Arrangement (z. B. ab Takt 37) | Hub und Voices spielen sofort den dort automatisierten Slot; bei „Slot: folgt dem Hub“ keine Abweichung |ok| | |
 | H8 | Voice auf „Slot: eigener“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt |ok | | |
 | H9 | Hub: `Mute 2` an | Voice 2 schweigt mit Note-Off, Voice 1 und der Hub spielen weiter; wieder aus: Voice 2 spielt ab der nächsten Note |ok| | |
-| H10 | Voice 1: eigenes `Mute 1` an | Nur Voice 1 schweigt | | | |
+| H10 | Voice 1: eigenes `Mute 1` an | Nur Voice 1 schweigt |ok| | |
 | H11 | In einer Voice **Erzeugen** drücken | Statuszeile „Hub zum Erzeugen aufgefordert“, der Hub erzeugt in seinen Slot, alle bekommen das Pattern zum selben Takt | | | |
 | H12 | Hub und Voice getrennt bouncen (Offline) und die Wellenformen vergleichen | Anschläge sample-gleich. Sonst: Versatz in Samples und Millisekunden notieren (Grundlage für den Mindestvorlauf, D-90) | | | |
 | H13 | Hub löschen | Voices spielen weiter, die älteste zeigt „Hub not found: you can take over“ und den Knopf „Hub werden“; die zweite Voice „Hub not found“ | | | |
