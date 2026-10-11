@@ -3678,3 +3678,36 @@ TEST_CASE("after a drop the rows show the patterns that are in the slots now", "
     CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->lengthBars == 2);
     CHECK(rowTicks() == 3840);
 }
+
+TEST_CASE("a slot chosen while the host does not run shows its pattern at once", "[group-wiring][slot-drop]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(0, marked(41)));
+        REQUIRE(bank.setResult(1, marked(42)));
+    });
+    hub.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    hub.step(); // the audio thread reports slot 1 as the playing one
+    auto* info = dynamic_cast<juce::Label*>(find(*editor, "info"));
+    REQUIRE(info != nullptr);
+    REQUIRE(waitFor([&] { return info->getText().contains("Slot 1"); }));
+
+    // the host stops and no longer calls processBlock (Live does that for a silent device): nothing reports slot 2
+    hub.setPlaying(false);
+    hub.step();
+    FakePlayheadClock::advance(5.0);
+    hub.setSlotParameter(2);
+    CHECK(waitFor([&] { return info->getText().contains("Slot 2"); }));
+}
+
+TEST_CASE("a drag of another slot with Alt held shows the copy cursor", "[group-wiring][slot-drop]") {
+    using mm::plugin::SlotButton;
+    const auto from2 = SlotButton::describe(2);
+    CHECK(SlotButton::showsCopy(from2, 5, true));
+    CHECK_FALSE(SlotButton::showsCopy(from2, 5, false)); // an exchange
+    CHECK_FALSE(SlotButton::showsCopy(from2, 2, true));  // the field itself
+    CHECK_FALSE(SlotButton::showsCopy(juce::var("something else"), 5, true));
+}

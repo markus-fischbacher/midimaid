@@ -67,14 +67,21 @@ public:
     void paintOverChildren(juce::Graphics& g) override;
     bool isInterestedInDragSource(const SourceDetails& details) override;
     void itemDragEnter(const SourceDetails& details) override;
+    void itemDragMove(const SourceDetails& details) override;
     void itemDragExit(const SourceDetails& details) override;
     void itemDropped(const SourceDetails& details) override;
+    /// The copy cursor (a plus) while another slot is dragged over this field with Alt held.
+    juce::MouseCursor getMouseCursor() override;
 
     /// The description of a dragged slot field and how to read it back (0: not a slot).
     static juce::var describe(int slot);
     static int slotOf(const juce::var& description);
+    /// Whether a drop of `description` on the field `slot` with Alt held (or not) is a copy that shows the plus.
+    static bool showsCopy(const juce::var& description, int slot, bool altHeld);
 
 private:
+    static bool copyHeld();
+
     int slot_;
     bool dropTarget_ = false;
     bool menuAsked_ = false;

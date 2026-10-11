@@ -1420,7 +1420,10 @@ std::vector<ProcessorBase::VoiceView> ProcessorBase::playingVoices() const {
 }
 
 const mm::core::Slot* ProcessorBase::playingSlotLocked(VoiceView& view) const {
-    const int playing = handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
+    // The audio thread names the playing slot (a switch waits for its bar line), but only while the transport runs: a
+    // stopped host may not call processBlock at all, and the view must show the slot that was just chosen or edited.
+    const bool running = playheadPpq().has_value();
+    const int playing = running && handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
     const int slotIndex = std::clamp(playing, 1, static_cast<int>(mm::core::kSlotCount)) - 1;
     view.slot = slotIndex + 1;
     view.origin = slots_.origin();

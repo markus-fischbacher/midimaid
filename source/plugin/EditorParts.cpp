@@ -333,7 +333,37 @@ void SlotButton::paintOverChildren(juce::Graphics& g) {
     if (dropTarget_) {
         g.setColour(juce::Colours::white.withAlpha(0.9f));
         g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 4.0f, 2.0f);
+        if (copyHeld()) { // the drop copies: a plus in the corner says so
+            const auto badge = getLocalBounds().toFloat().removeFromTop(14.0f).removeFromRight(14.0f);
+            g.setColour(juce::Colour(0xff4fc3a1));
+            g.fillEllipse(badge);
+            g.setColour(juce::Colours::black);
+            g.drawLine(badge.getCentreX() - 3.5f, badge.getCentreY(), badge.getCentreX() + 3.5f, badge.getCentreY(), 1.6f);
+            g.drawLine(badge.getCentreX(), badge.getCentreY() - 3.5f, badge.getCentreX(), badge.getCentreY() + 3.5f, 1.6f);
+        }
     }
+}
+
+bool SlotButton::copyHeld() {
+    return juce::ComponentPeer::getCurrentModifiersRealtime().isAltDown();
+}
+
+void SlotButton::itemDragMove(const SourceDetails&) {
+    repaint(); // the plus follows the Alt key
+}
+
+bool SlotButton::showsCopy(const juce::var& description, int slot, bool altHeld) {
+    const int from = slotOf(description);
+    return altHeld && from != 0 && from != slot;
+}
+
+juce::MouseCursor SlotButton::getMouseCursor() {
+    if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this);
+        container != nullptr && container->isDragAndDropActive() &&
+        showsCopy(container->getCurrentDragDescription(), slot_, copyHeld())) {
+        return juce::MouseCursor::CopyingCursor;
+    }
+    return juce::TextButton::getMouseCursor();
 }
 
 bool SlotButton::isInterestedInDragSource(const SourceDetails& details) {
@@ -356,7 +386,7 @@ void SlotButton::itemDropped(const SourceDetails& details) {
     repaint();
     const int from = slotOf(details.description);
     if (from != 0 && from != slot_ && onSlotDropped) {
-        onSlotDropped(from, slot_, juce::ModifierKeys::currentModifiers.isAltDown());
+        onSlotDropped(from, slot_, copyHeld());
     }
 }
 
