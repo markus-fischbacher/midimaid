@@ -12,15 +12,48 @@ void DragHandle::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(bounds, 7.0f);
     g.setColour(juce::Colour(0xff3a3e4a));
     g.drawRoundedRectangle(bounds.reduced(0.5f), 7.0f, 1.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
-    const float cx = bounds.getCentreX();
-    const float cy = bounds.getCentreY();
-    for (int row = -1; row <= 1; ++row) {
-        for (int col = -2; col <= 2; ++col) {
-            g.fillEllipse(cx + static_cast<float>(col) * 8.0f - 1.5f, cy + static_cast<float>(row) * 8.0f - 1.5f, 3.0f,
-                          3.0f);
-        }
+
+    // A page with a folded corner and a downward arrow: "take the file along". With room, the label follows.
+    const bool labelled = getWidth() >= 120;
+    const float iconWidth = 18.0f;
+    const auto label = tr(mm::core::text::kDragLabel);
+    juce::Font font{juce::FontOptions(13.0f)};
+    const float labelWidth = labelled ? juce::GlyphArrangement::getStringWidth(font, label) : 0.0f;
+    const float gap = labelled ? 8.0f : 0.0f;
+    const float left = bounds.getCentreX() - (iconWidth + gap + labelWidth) / 2.0f;
+    const float top = bounds.getCentreY() - 10.0f;
+    juce::Path page;
+    page.startNewSubPath(left, top);
+    page.lineTo(left + 11.0f, top);
+    page.lineTo(left + iconWidth - 2.0f, top + 7.0f);
+    page.lineTo(left + iconWidth - 2.0f, top + 20.0f);
+    page.lineTo(left, top + 20.0f);
+    page.closeSubPath();
+    g.setColour(juce::Colour(0xff4fc3a1));
+    g.strokePath(page, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved));
+    juce::Path fold;
+    fold.startNewSubPath(left + 11.0f, top);
+    fold.lineTo(left + 11.0f, top + 7.0f);
+    fold.lineTo(left + iconWidth - 2.0f, top + 7.0f);
+    g.strokePath(fold, juce::PathStrokeType(1.2f));
+    juce::Path arrow;
+    const float ax = left + 8.0f;
+    arrow.startNewSubPath(ax, top + 9.0f);
+    arrow.lineTo(ax, top + 16.0f);
+    arrow.startNewSubPath(ax - 3.0f, top + 13.0f);
+    arrow.lineTo(ax, top + 16.5f);
+    arrow.lineTo(ax + 3.0f, top + 13.0f);
+    g.strokePath(arrow, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (labelled) {
+        g.setColour(juce::Colour(0xffe8eaf0));
+        g.setFont(font);
+        g.drawText(label, juce::Rectangle<float>(left + iconWidth + gap, bounds.getY(), labelWidth + 2.0f, bounds.getHeight()),
+                   juce::Justification::centredLeft, false);
     }
+}
+
+juce::File DragHandle::file() const {
+    return voice_ == 0 ? exporter_.readyFile() : exporter_.readyFile(voice_);
 }
 
 ScaleCorner::ScaleCorner() {
@@ -49,10 +82,6 @@ void ScaleCorner::mouseDrag(const juce::MouseEvent& event) {
     if (onDrag) {
         onDrag(static_cast<double>(event.getScreenX() - startScreenX_));
     }
-}
-
-juce::File DragHandle::file() const {
-    return voice_ == 0 ? exporter_.readyFile() : exporter_.readyFile(voice_);
 }
 
 void DragHandle::mouseDrag(const juce::MouseEvent& event) {

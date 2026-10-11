@@ -14,6 +14,9 @@ fest auf Englisch). Daher gilt:
   zwischen zwei unabhängigen Instanzen) und **Teil H (Hub & Voices)**.
 - **Noch nicht prüfbar** (Teil G): Dateiimport und Tastenbelegung.
 
+> **Reihenfolge (D-198):** Vorerst wird **nur in Live** geprüft. Alle Zeilen und Teile für Logic (Teil C, die Logic-Spalte der
+> Tabellen, Logic-Anteile in H46, H51 usw.) bleiben stehen und folgen später; leere Logic-Zellen sind bis dahin kein Mangel.
+
 ## A. Vorbereitung
 
 - [x] Plugins gebaut und installiert (VST3, AU `aumu`, AU MIDI-FX `aumi`), AU-Cache geleert

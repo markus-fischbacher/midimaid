@@ -3520,3 +3520,63 @@ TEST_CASE("snapshot of the voice window and the hub window", "[.snapshot]") {
         writePng(image, hubWindow ? "hub.png" : "voice.png");
     }
 }
+
+TEST_CASE("the voice window rows share their columns", "[group-wiring][editor][layout]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* role = child<juce::ComboBox>(*editor, "role");
+    auto* voiceBox = child<juce::ComboBox>(*editor, "voice");
+    auto* mute = child<juce::ToggleButton>(*editor, "mute");
+    auto* octave = child<juce::ComboBox>(*editor, "octave");
+    auto* handle = child<mm::plugin::DragHandle>(*editor, "drag");
+    auto* generate = child<juce::TextButton>(*editor, "generate");
+    auto* takeOver = child<juce::TextButton>(*editor, "takeOver");
+    REQUIRE((role && voiceBox && mute && octave && handle && generate && takeOver));
+    CHECK(mute->getX() == role->getX());
+    CHECK(mute->getWidth() == role->getWidth());
+    CHECK(octave->getX() == voiceBox->getX());
+    CHECK(octave->getWidth() == voiceBox->getWidth());
+    CHECK(child<juce::TextButton>(*editor, "openHub")->getX() == child<juce::ComboBox>(*editor, "follow")->getX());
+    CHECK(takeOver->getRight() == generate->getRight()); // the action buttons share the right edge
+    CHECK(takeOver->getWidth() == generate->getWidth());
+    // the file handle is wide enough to carry its label and spans the first two columns
+    CHECK(handle->getX() == role->getX());
+    CHECK(handle->getRight() == voiceBox->getRight());
+    CHECK(handle->getWidth() >= 120);
+}
+
+TEST_CASE("the file handle shows a file icon, and its label when there is room", "[group-wiring][editor][paint]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    mm::plugin::DragHandle handle(voice.processor.midiExporter());
+    // light text pixels in the right half of the handle
+    const auto textPixels = [&](int width) {
+        handle.setBounds(0, 0, width, 40);
+        const auto image = handle.createComponentSnapshot(handle.getLocalBounds());
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); ++y) {
+            for (int x = width / 2 + 12; x < width - 6; ++x) {
+                count += image.getPixelAt(x, y).getBrightness() > 0.8f ? 1 : 0;
+            }
+        }
+        return count;
+    };
+    const auto iconPixels = [&](int width) { // accent pixels around the centre
+        handle.setBounds(0, 0, width, 40);
+        const auto image = handle.createComponentSnapshot(handle.getLocalBounds());
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); ++y) {
+            for (int x = 0; x < width; ++x) {
+                const auto pixel = image.getPixelAt(x, y);
+                count += (pixel.getGreen() > 150 && pixel.getRed() < 120) ? 1 : 0;
+            }
+        }
+        return count;
+    };
+    CHECK(textPixels(200) > 20); // "MIDI ziehen"
+    CHECK(textPixels(60) == 0);  // icon only
+    CHECK(iconPixels(60) > 100);  // the icon is there in both
+    CHECK(iconPixels(200) > 100);
+}

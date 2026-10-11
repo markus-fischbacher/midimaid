@@ -641,3 +641,17 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Textfelder** sind nun überall abgerundet (Radius wie die Schaltflächen, Rahmen in der Akzentfarbe bei Fokus), auch im Hub.
 - **Prüfung:** je Dialog ein Fall (`[look]`): das LookAndFeel gilt für Dialog und Kind, Pixel in den Ecken sind der Hintergrund des Themes; Mutationen (LookAndFeel nicht gesetzt) werden erkannt. Mit `[.snapshot]` rendern Hilfe, Bibliothek, Referenzen und Einstellungen als PNG.
 - **Offen:** Das Aussehen im Host ist **H53**. Die Anordnung der Einstellungen (Zeilenraster, schmales Schlüsselfeld) ist unverändert.
+
+### D-197 – Voice-Fenster auf gemeinsamen Spalten, Griff mit Symbol und Beschriftung (Phase 6, ergänzt D-193)
+
+- **Rückmeldung:** Das Voice-Fenster wirkte verstreut, der Griff für den MIDI-Export war als solcher nicht zu erkennen (nur Punkte).
+- **Spalten:** Beide Zeilen teilen drei Spalten (110, 110, 170 px) und je eine Hauptaktion am rechten Rand (130 px). Zeile 1: Rolle, Stimme, Slot-Modus | „Hub werden“. Zeile 2: Stumm, Oktave, „Hub öffnen“ | „Erzeugen“. Die Fußzeile: Griff über die ersten beiden Spalten, rechts Hilfe und Größe. Stumm steht damit unter Rolle, Oktave unter Stimme, „Hub öffnen“ unter dem Slot-Modus.
+- **Griff** (`DragHandle`, Hub und Voice-Fenster): gezeichnet als Seite mit Eselsohr und Pfeil nach unten in der Akzentfarbe; ab 120 px Breite mit der Beschriftung „MIDI ziehen“ (`drag.label`), sonst nur das Symbol. Verhalten (Ziehen der .mid-Datei) unverändert.
+- **Prüfung:** `[layout]`: Spalten fluchten (x und Breite), Aktionen am rechten Rand, Griff über zwei Spalten und breit genug für die Beschriftung; `[paint]`: Beschriftung nur mit Platz, Symbol immer. 6 Mutationen (Beschriftung nie/immer, Symbol ohne Seite, Stumm schmaler, Griff eine Spalte, „Hub öffnen“ in Spalte 2) werden erkannt.
+- **Offen:** Das Aussehen im Host ist wie bisher **H50**; ob Live und Logic den Zug aus dem Griff annehmen, prüft der Drag-&-Drop-Punkt in Teil H (H46).
+
+### D-198 – Manuelle Tests zuerst nur in Live (Phase 6)
+
+- **Entscheidung des Entwicklers:** Die manuellen Host-Prüfungen konzentrieren sich auf **Ableton Live 12 (macOS)**. Logic folgt später.
+- **Folgen:** Die Host-Checks (`docs/HOST-VERIFIKATION.md`) und die Testmatrix (Anhang der Roadmap) behalten alle Logic-Zeilen und -Spalten, sie bleiben vorerst leer. „Testmatrix v1.0 grün“ bedeutet bis auf Weiteres: Live-macOS-Spalte voll; für die **Abnahme v1.0** gilt Logic als nachzuholen, nicht als gestrichen. Die Logic-Variante (AU MIDI-FX) bleibt im Umfang von v1.0. Live Windows wartet ohnehin auf einen Windows-Build (D-189).
+- **Code und Tests:** unverändert; die Logic-spezifischen Wege (Setup-Hilfe-Seite „Logic Pro“, MIDI-FX-Variante) bleiben und sind durch Unit- und Glue-Tests gedeckt.

@@ -205,7 +205,7 @@ eigener Referenzen tauchen typische eigene Progressionen auf, ohne dass eine Ref
 Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set reproduzierbar.
 
 ## Phase 6 – Feinschliff, Vorlagen, v1.0-Abschluss
-- [x] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen und stufenlos am Eckgriff (D-190, D-195, H47), Theme und Voice-Fenster (D-193, H50), alle Dialoge im neuen Look (D-196)
+- [x] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen und stufenlos am Eckgriff (D-190, D-195, H47), Theme und Voice-Fenster (D-193, H50), alle Dialoge im neuen Look (D-196), Voice-Fenster auf Spalten und Griff mit Symbol (D-197)
 - [x] Performance-Messung gegen SPEC §11
 - [x] Slot-Aktionen: Kopieren, Einfügen, Leeren, Tauschen per Menü und Ziehen (SPEC §3.10, D-191)
 - [x] Playhead in der Piano-Roll, Hub und Voice-Fenster (D-192)
@@ -291,6 +291,8 @@ Euklidische Rhythmen als Feature
 ---
 
 ## Anhang: Manuelle Testmatrix
+
+> **Reihenfolge (D-198):** Die manuellen Tests laufen zuerst nur in **Live 12 macOS**. Die Spalten „Live 12 Win“ und „Logic“ folgen später; „Testmatrix v1.0 grün“ gilt bis dahin für die Live-macOS-Spalte, die Abnahme v1.0 wird um Logic ergänzt, sobald es nachgezogen ist.
 
 | Test | Release | Live 12 macOS | Live 12 Win | Logic | Abgedeckt durch |
 |---|---|---|---|---|---|

@@ -39,6 +39,10 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 
     const auto settings = processor_.instanceSettings();
     roleBox_.setComponentID("role");
+    voiceBox_.setComponentID("voice");
+    followBox_.setComponentID("follow");
+    takeOverButton_.setComponentID("takeOver");
+    dragHandle_->setComponentID("drag");
     roleBox_.addItem(tr(keys::kRoleSolo), 1);
     roleBox_.addItem(tr(keys::kRoleHub), 2);
     roleBox_.addItem(tr(keys::kRoleVoice), 3);
@@ -1115,29 +1119,34 @@ void PlaceholderEditor::layoutVoiceWindow() {
     constexpr int kInset = (kRow - kControl) / 2;
     auto area = getLocalBounds();
 
+    // Three columns that both rows share (110, 110 and 170 px), and the main action of each row at the right edge.
+    constexpr int kCol1 = 110;
+    constexpr int kCol2 = 110;
+    constexpr int kCol3 = 170;
+    constexpr int kAction = 130;
+
     auto footer = area.removeFromBottom(kRow).reduced(kPad, kInset);
     zoomBox_.setBounds(footer.removeFromRight(120));
     footer.removeFromRight(kGap);
     helpButton_.setBounds(footer.removeFromRight(90));
-    footer.removeFromRight(kGap);
-    dragHandle_->setBounds(footer);
+    dragHandle_->setBounds(footer.removeFromLeft(kCol1 + kGap + kCol2));
 
     auto roles = area.removeFromTop(kRow).reduced(kPad, kInset);
-    takeOverButton_.setBounds(roles.removeFromRight(120));
-    roleBox_.setBounds(roles.removeFromLeft(110));
+    takeOverButton_.setBounds(roles.removeFromRight(kAction));
+    roleBox_.setBounds(roles.removeFromLeft(kCol1));
     roles.removeFromLeft(kGap);
-    voiceBox_.setBounds(roles.removeFromLeft(110));
+    voiceBox_.setBounds(roles.removeFromLeft(kCol2));
     roles.removeFromLeft(kGap);
-    followBox_.setBounds(roles.removeFromLeft(170));
+    followBox_.setBounds(roles.removeFromLeft(kCol3));
     outputBox_.setBounds(followBox_.getBounds()); // never visible together
 
     auto actions = area.removeFromTop(kRow).reduced(kPad, kInset);
-    generateButton_.setBounds(actions.removeFromRight(130));
-    actions.removeFromRight(kGap);
-    openHubButton_.setBounds(actions.removeFromRight(110));
-    muteButton_.setBounds(actions.removeFromLeft(130));
+    generateButton_.setBounds(actions.removeFromRight(kAction));
+    muteButton_.setBounds(actions.removeFromLeft(kCol1));
     actions.removeFromLeft(kGap);
-    octaveBox_.setBounds(actions.removeFromLeft(110));
+    octaveBox_.setBounds(actions.removeFromLeft(kCol2));
+    actions.removeFromLeft(kGap);
+    openHubButton_.setBounds(actions.removeFromLeft(kCol2));
 
     statusLabel_.setBounds(area.removeFromBottom(30).reduced(kPad, 0));
     rollView_.setBounds(area.reduced(kPad, 2));
