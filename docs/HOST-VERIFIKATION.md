@@ -135,11 +135,11 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 
 | Nr. | Prüfung | Erwartung | Live | Logic | Bemerkung |
 |---|---|---|---|---|---|
-| H1 | Zwei Instanzen mit Rolle Hub und Voice | Hub zeigt „1 voice“, Voice „Mit dem Hub verbunden“ (Registry im Prozess geteilt) | | | |
-| H2 | Zweite Hub-Instanz anlegen | Zeigt „There is already a hub“, bleibt solo | | | |
-| H3 | Hub und zwei Voices spielen, Loop ein, Stop, Start | Alle im Takt, keine hängenden Noten, Voices folgen dem Hub-Slot | | | |
-| H4 | Slot-Parameter im Hub wechselt **weit vor** der Taktgrenze (z. B. auf Zählzeit 2) | Hub und Voices wechseln gemeinsam zum nächsten Takt | | | |
-| H5 | Slot-Parameter im Hub wechselt **etwa 50 ms vor** der Taktgrenze (Klick, nicht Automation) | Hub und Voices wechseln in demselben Takt (ein Takt später als bei H4 ist richtig); „(n late)“ bleibt 0. Fällt „n late“ größer 0 aus: Versatz notieren, Ergebnis in H12 | | | |
+| H1 | Zwei Instanzen mit Rolle Hub und Voice | Hub zeigt „1 voice“, Voice „Mit dem Hub verbunden“ (Registry im Prozess geteilt) |ok| | |
+| H2 | Zweite Hub-Instanz anlegen | Zeigt „There is already a hub“, bleibt solo |ok| | |
+| H3 | Hub und zwei Voices spielen, Loop ein, Stop, Start | Alle im Takt, keine hängenden Noten, Voices folgen dem Hub-Slot |ok| | |
+| H4 | Slot-Parameter im Hub wechselt **weit vor** der Taktgrenze (z. B. auf Zählzeit 2) | Hub und Voices wechseln gemeinsam zum nächsten Takt |ok| | |
+| H5 | Slot-Parameter im Hub wechselt **etwa 50 ms vor** der Taktgrenze (Klick, nicht Automation) | Hub und Voices wechseln in demselben Takt (ein Takt später als bei H4 ist richtig); „(n late)“ bleibt 0. Fällt „n late“ größer 0 aus: Versatz notieren, Ergebnis in H12 |ok| | |
 | H6 | Im Hub **Erzeugen** drücken, etwa 50 ms vor der Taktgrenze | Neues Pattern erscheint in Hub und Voices im selben Takt (D-144) | | | |
 | H7 | Slot-Automation im Hub, Start mitten im Arrangement (z. B. ab Takt 37) | Hub und Voices spielen sofort den dort automatisierten Slot; bei „Slot: folgt dem Hub“ keine Abweichung | | | |
 | H8 | Voice auf „Slot: eigener“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt | | | |
@@ -191,6 +191,7 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H54 | Slot ziehen bei **gestopptem** Transport: Feld auf ein anderes ziehen (tauschen), mit Option ziehen (kopieren) (Live) | Die Noten erscheinen sofort, ohne dass der Transport läuft; beim Ziehen mit Option zeigt der Zeiger ein „+“ und das Zielfeld ein grünes „+“; ohne Option kein „+“ |ok| | |
 | H55 | Rolle wechseln: eine Voice auf Hub stellen, solange ein Hub offen ist, dann im Rollenfeld wieder auf Voice (Live) | Das Rollenfeld ist im Hub-Fenster sichtbar und bedienbar; der Wechsel zurück auf Voice klappt, die Voice spielt wieder mit dem Hub | | | |
 | H56 | Roll-Titel: im Hub und im Voice-Fenster Noten in den obersten Zeilen erzeugen bzw. ansehen (Live) | Der Name der Stimme steht über den Noten in eigenem Streifen und überdeckt keine Note; Noten lassen sich an allen Stellen der Roll anklicken, ziehen und löschen; Geschwindigkeitsleiste unten wie vorher | | | |
+| H57 | „Hub öffnen“ in einer Stimme, einmal bei offenem und einmal bei **geschlossenem** Fenster des Hubs (Live) | Offen: das Fenster des Hubs kommt nach vorn; geschlossen: die Statuszeile sagt, dass das Gerät auf der Hub-Spur geöffnet werden muss | | | |
 
 **Messung für den Mindestvorlauf (H5, H6, H12):** Der Standard ist 150 ms (D-90). Kommen bei H5 oder H6 verspätete Wechsel
 vor oder ist H12 nicht sample-gleich, wiederholst du H5 mit Puffer 1024. Notiere Puffergröße, Samplerate und

@@ -38,8 +38,12 @@ public:
     virtual void onSnapshot(const SlotSnapshot& snapshot, std::optional<double> stampPpq) = 0;
     /// The status or, for a hub, the number of voices changed.
     virtual void onStatus(GroupStatus status, size_t voices) = 0;
-    /// Hub: a voice asked for `action`. The default ignores it.
-    virtual void onAction(GroupAction action) { (void)action; }
+    /// Hub: a voice asked for `action`. Returns false when it could not be done (the default ignores the action and
+    /// counts as done).
+    virtual bool onAction(GroupAction action) {
+        (void)action;
+        return true;
+    }
     /// The slot set of this member as it is now (the registry asks when a member becomes hub).
     virtual SlotSnapshot currentSlots() = 0;
 };

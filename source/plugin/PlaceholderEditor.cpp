@@ -676,6 +676,9 @@ void PlaceholderEditor::updateStatus() {
     case GenerationStatus::NoResult:
         statusLabel_.setText(tr(keys::kStatusNoResult), juce::dontSendNotification);
         break;
+    case GenerationStatus::HubWindowClosed:
+        statusLabel_.setText(tr(keys::kStatusHubClosed), juce::dontSendNotification);
+        break;
     case GenerationStatus::UseHub:
         statusLabel_.setText(tr(keys::kStatusUseHub), juce::dontSendNotification);
         break;

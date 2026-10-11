@@ -132,8 +132,7 @@ bool GroupRegistry::forward(MemberId id, GroupAction action) {
         return false;
     }
     const auto member = hub->member; // the callback may change the member list
-    member->onAction(action);
-    return true;
+    return member->onAction(action);
 }
 
 bool GroupRegistry::acceptOffer(MemberId id) {

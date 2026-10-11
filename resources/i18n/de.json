@@ -205,6 +205,7 @@
   "references.weight": "Gewicht {n}",
   "status.noResult": "Kein Ergebnis: der Slot bleibt unverändert",
   "status.useHub": "Kein Hub, für den diese Stimme erzeugen kann",
+  "status.hubClosed": "Das Fenster des Hubs ist zu: Öffne in der DAW das Gerät MidiMaid auf der Hub-Spur",
   "status.forwarded": "Hub zum Erzeugen aufgefordert",
   "status.late": " ({n} verspätet)",
   "slot.empty": "Slot {slot}: leer. Erzeugen füllt ihn.",
