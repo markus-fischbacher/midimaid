@@ -73,12 +73,9 @@ void RollView::paint(juce::Graphics& g) {
         g.drawLine(x, bounds.getY() + 1.0f, x, bounds.getBottom() - 1.0f, 1.5f);
     }
 
-    // The title with a dot in the colour of the voice.
-    g.setColour(accent_.withAlpha(alpha));
-    g.fillEllipse(11.0f, 10.0f, 7.0f, 7.0f);
     g.setColour(juce::Colour(0xff9ba1af));
     g.setFont(juce::FontOptions(13.0f));
-    g.drawText(empty_ ? tr(mm::core::text::kRollEmpty) : title_, getLocalBounds().reduced(8, 4).withTrimmedLeft(16),
+    g.drawText(empty_ ? tr(mm::core::text::kRollEmpty) : title_, getLocalBounds().reduced(8, 4),
                juce::Justification::topLeft);
 
     g.setColour(juce::Colour(0xff3a3e4a));
