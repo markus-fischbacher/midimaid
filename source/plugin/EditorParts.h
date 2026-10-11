@@ -52,7 +52,7 @@ private:
 /// One field of the slot strip (SPEC 3.10): a click selects the slot, a right click (or Ctrl-click) asks for the menu
 /// of the slot actions, and dragging it onto another field exchanges the two; with Alt held the drop copies instead.
 /// Slot numbers are 1-based, like the host parameter.
-class SlotButton : public juce::TextButton, public juce::DragAndDropTarget {
+class SlotButton : public juce::TextButton, public juce::DragAndDropTarget, private juce::Timer {
 public:
     explicit SlotButton(int slot);
 
@@ -80,10 +80,14 @@ public:
     static bool showsCopy(const juce::var& description, int slot, bool altHeld);
 
 private:
+    /// While a slot is over this field the Alt key is polled: pressing or releasing it changes the cursor and the plus
+    /// at once, not only with the next mouse move.
+    void timerCallback() override;
     static bool copyHeld();
 
     int slot_;
     bool dropTarget_ = false;
+    bool copyShown_ = false;
     bool menuAsked_ = false;
 };
 

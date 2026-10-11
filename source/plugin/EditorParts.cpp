@@ -352,6 +352,15 @@ void SlotButton::itemDragMove(const SourceDetails&) {
     repaint(); // the plus follows the Alt key
 }
 
+void SlotButton::timerCallback() {
+    const bool held = copyHeld();
+    if (held != copyShown_) {
+        copyShown_ = held;
+        repaint();
+        juce::Desktop::getInstance().getMainMouseSource().forceMouseCursorUpdate();
+    }
+}
+
 bool SlotButton::showsCopy(const juce::var& description, int slot, bool altHeld) {
     const int from = slotOf(description);
     return altHeld && from != 0 && from != slot;
@@ -373,15 +382,19 @@ bool SlotButton::isInterestedInDragSource(const SourceDetails& details) {
 
 void SlotButton::itemDragEnter(const SourceDetails&) {
     dropTarget_ = true;
+    copyShown_ = copyHeld();
+    startTimer(30);
     repaint();
 }
 
 void SlotButton::itemDragExit(const SourceDetails&) {
+    stopTimer();
     dropTarget_ = false;
     repaint();
 }
 
 void SlotButton::itemDropped(const SourceDetails& details) {
+    stopTimer();
     dropTarget_ = false;
     repaint();
     const int from = slotOf(details.description);

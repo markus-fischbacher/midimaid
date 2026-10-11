@@ -1205,9 +1205,10 @@ void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern p
     editSlots([&](mm::core::SlotBank& bank) {
         const auto index = static_cast<size_t>(job.slot);
         const auto* slot = bank.slot(index);
-        if (job.refine && (slot == nullptr || !slot->pattern || slot->pattern->lengthBars != pattern.lengthBars ||
-                           slot->pattern->voices.size() != pattern.voices.size())) {
-            discarded = true; // the slot was emptied or replaced while the AI worked: the answer no longer fits
+        // The answer belongs to the pattern that was sent, not to the slot number: a slot that was emptied, swapped,
+        // replaced or edited while the AI worked holds something else now, and the answer would overwrite it.
+        if (job.refine && (slot == nullptr || !slot->pattern || *slot->pattern != job.refine->pattern)) {
+            discarded = true;
             return;
         }
         // Locked voices survive whatever happened while the job ran (SPEC 3.5): they are put back from the slot as it
