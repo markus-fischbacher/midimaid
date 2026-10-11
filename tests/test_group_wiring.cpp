@@ -3711,3 +3711,49 @@ TEST_CASE("a drag of another slot with Alt held shows the copy cursor", "[group-
     CHECK_FALSE(SlotButton::showsCopy(from2, 2, true));  // the field itself
     CHECK_FALSE(SlotButton::showsCopy(juce::var("something else"), 5, true));
 }
+
+TEST_CASE("a voice that was switched to Hub next to a hub can be switched back to Voice", "[group-wiring][role]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    pumpMessages(20);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    pumpMessages(40);
+    auto* role = child<juce::ComboBox>(*editor, "role");
+    REQUIRE(role != nullptr);
+    role->setSelectedId(2, juce::sendNotificationSync); // Hub, but there is one already
+    pumpMessages(60);
+    INFO("status " << static_cast<int>(voice.processor.groupStatus()) << " role "
+                   << static_cast<int>(voice.processor.instanceSettings().role));
+    role = child<juce::ComboBox>(*editor, "role");
+    REQUIRE(role != nullptr);
+    CHECK(role->isVisible());
+    CHECK(role->isEnabled());
+    role->setSelectedId(3, juce::sendNotificationSync);
+    pumpMessages(60);
+    CHECK(voice.processor.instanceSettings().role == InstanceRole::Voice);
+    CHECK(voice.processor.groupStatus() == mm::core::GroupStatus::VoiceConnected);
+}
+
+TEST_CASE("the role box of the hub window is wide enough and covered by nothing", "[group-wiring][role][layout]") {
+    Quiet quiet;
+    for (const auto role : {InstanceRole::Solo, InstanceRole::Hub}) {
+        Instance instance("Test");
+        instance.setRole(role);
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        pumpMessages(40);
+        auto* box = child<juce::ComboBox>(*editor, "role");
+        REQUIRE(box != nullptr);
+        INFO("role " << static_cast<int>(role));
+        CHECK(box->getWidth() >= 100); // it was 0 px wide once the help button took its room
+        CHECK(editor->getLocalBounds().contains(box->getBounds()));
+        for (auto* other : editor->getChildren()) {
+            if (other != box && other->isVisible() && other->getWidth() > 0) {
+                INFO(other->getComponentID().toStdString());
+                CHECK_FALSE(box->getBounds().intersects(other->getBounds()));
+            }
+        }
+    }
+}

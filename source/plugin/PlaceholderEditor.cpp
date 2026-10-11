@@ -1186,8 +1186,7 @@ void PlaceholderEditor::resized() {
     roles.removeFromRight(8);
     libraryButton_.setBounds(roles.removeFromRight(110));
     roles.removeFromRight(8);
-    takeOverButton_.setBounds(roles.removeFromRight(120));
-    roles.removeFromRight(8);
+    takeOverButton_.setBounds({}); // only a voice offers to take over: no room reserved here, the role box needs it
     followBox_.setBounds(roles.removeFromRight(150));
     outputBox_.setBounds(followBox_.getBounds()); // never visible together
     roles.removeFromRight(8);
