@@ -1222,7 +1222,7 @@ TEST_CASE("the piano roll rows of the hub show the playhead in the playing slot 
     hub.setSlotParameter(1);
     hub.setPpq(1.0);
     drive(8);
-    REQUIRE(rolls()[0]->playheadTick().has_value());
+    REQUIRE(waitFor([&] { return rolls()[0]->playheadTick().has_value(); })); // the editor's timer is not instant
     hub.setPlaying(false);
     hub.step();
     REQUIRE(waitFor([&] { return !rolls()[0]->playheadTick().has_value(); }, 2000));
