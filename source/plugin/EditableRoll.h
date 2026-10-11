@@ -82,6 +82,7 @@ public:
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
     static constexpr int kGutter = 34; ///< width of the key labels at the left
+    static constexpr int kTitleHeight = 20; ///< the strip with the name of the voice above the notes
     static constexpr int kRowPixels = 7;
     static constexpr int kLaneHeight = 40; ///< the velocity lane under the notes
     static constexpr int kMenuAccent = 1;
@@ -92,6 +93,10 @@ private:
     enum class Mode { Idle, Moving, Resizing, Rubber, Velocity, Draw };
 
     juce::Rectangle<int> field() const;
+    /// A mouse position in the coordinates of the notes (the gutter and the title strip cut off), and in those of the
+    /// velocity lane under them.
+    juce::Point<double> fieldPoint(const juce::MouseEvent& event) const;
+    juce::Point<double> lanePoint(const juce::MouseEvent& event) const;
     int laneHeight() const;
     void flipFlag(bool accent);
     void stepVelocity(double y);

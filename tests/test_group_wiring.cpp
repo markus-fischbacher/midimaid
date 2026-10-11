@@ -2172,8 +2172,9 @@ juce::MouseEvent mouseEventAt(juce::Component& component, juce::Point<float> pos
 TEST_CASE("the mouse handlers of the roll translate into gestures with the key gutter taken off", "[roll][editor]") {
     RollRig rig;
     const auto gutter = static_cast<float>(mm::plugin::EditableRoll::kGutter);
+    const auto title = static_cast<float>(mm::plugin::EditableRoll::kTitleHeight); // the name sits above the notes
     const auto onNote = rig.at(960, 64);
-    const juce::Point<float> position(static_cast<float>(onNote.x) + gutter, static_cast<float>(onNote.y));
+    const juce::Point<float> position(static_cast<float>(onNote.x) + gutter, static_cast<float>(onNote.y) + title);
 
     rig.roll.mouseDown(mouseEventAt(rig.roll, position));
     rig.roll.mouseUp(mouseEventAt(rig.roll, position));
@@ -2189,7 +2190,7 @@ TEST_CASE("the mouse handlers of the roll translate into gestures with the key g
 
     // the second press of a double click deletes the note under it (the first one only selected)
     const auto moved = rig.at(1440, 64);
-    const juce::Point<float> second(static_cast<float>(moved.x) + gutter, static_cast<float>(moved.y));
+    const juce::Point<float> second(static_cast<float>(moved.x) + gutter, static_cast<float>(moved.y) + title);
     rig.roll.mouseDown(mouseEventAt(rig.roll, second, 2));
     rig.roll.mouseUp(mouseEventAt(rig.roll, second, 2));
     CHECK(rig.melody().size() == 3);
@@ -2519,7 +2520,8 @@ TEST_CASE("the mouse handlers reach the velocity lane below the notes", "[roll][
     // the field above the lane still selects notes
     rig.refresh();
     const auto onNote = rig.at(0, 60);
-    const juce::Point<float> inField(static_cast<float>(onNote.x) + gutter, static_cast<float>(onNote.y));
+    const auto title = static_cast<float>(mm::plugin::EditableRoll::kTitleHeight);
+    const juce::Point<float> inField(static_cast<float>(onNote.x) + gutter, static_cast<float>(onNote.y) + title);
     rig.roll.mouseDown(mouseEventAt(rig.roll, inField));
     rig.roll.mouseUp(mouseEventAt(rig.roll, inField));
     CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(0)});
@@ -3710,4 +3712,40 @@ TEST_CASE("a drag of another slot with Alt held shows the copy cursor", "[group-
     CHECK_FALSE(SlotButton::showsCopy(from2, 5, false)); // an exchange
     CHECK_FALSE(SlotButton::showsCopy(from2, 2, true));  // the field itself
     CHECK_FALSE(SlotButton::showsCopy(juce::var("something else"), 5, true));
+}
+
+TEST_CASE("the title of a roll lies above the notes, never over them", "[roll][editor][layout]") {
+    RollRig rig;
+    const auto title = mm::plugin::EditableRoll::kTitleHeight;
+    const auto field = rig.roll.getLocalBounds().withTrimmedTop(title);
+    CHECK(title >= 16);
+    // a note of the lowest/highest row is still drawn below the strip: a click in the strip hits nothing
+    const juce::Point<float> inStrip(static_cast<float>(mm::plugin::EditableRoll::kGutter + 40), static_cast<float>(title) - 4.0f);
+    rig.roll.mouseDown(mouseEventAt(rig.roll, inStrip));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, inStrip));
+    CHECK(rig.roll.selection().empty());
+    CHECK(rig.roll.geometry().height == field.getHeight() - static_cast<int>(kLane));
+}
+
+TEST_CASE("the read-only roll keeps a strip for the title: a note in the top row does not reach it", "[group-wiring][paint][layout]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::RollView view;
+    view.setBounds(0, 0, 400, 160);
+    mm::core::RollLayout layout;
+    layout.bars = 1;
+    layout.notes.push_back({0.3f, 0.0f, 0.3f, 0.1f, 127}); // the highest row, in the middle of the roll
+    view.setContent(layout, "Slot 1 - Bass", false);
+    const auto image = view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f);
+    const auto accentInRows = [&](int from, int to) {
+        int count = 0;
+        for (int y = from; y < to; ++y) {
+            for (int x = 40; x < image.getWidth() - 40; ++x) {
+                const auto pixel = image.getPixelAt(x, y);
+                count += (pixel.getGreen() > 150 && pixel.getRed() < 120) ? 1 : 0;
+            }
+        }
+        return count;
+    };
+    CHECK(accentInRows(0, mm::plugin::RollView::kTitleHeight) == 0);
+    CHECK(accentInRows(mm::plugin::RollView::kTitleHeight, mm::plugin::RollView::kTitleHeight + 30) > 100);
 }

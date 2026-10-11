@@ -46,8 +46,17 @@ int EditableRoll::laneHeight() const {
     return std::min(kLaneHeight, getHeight() / 3);
 }
 
+juce::Point<double> EditableRoll::fieldPoint(const juce::MouseEvent& event) const {
+    return (event.position - juce::Point<float>(static_cast<float>(kGutter), static_cast<float>(kTitleHeight))).toDouble();
+}
+
+juce::Point<double> EditableRoll::lanePoint(const juce::MouseEvent& event) const {
+    return {static_cast<double>(event.position.x) - kGutter,
+            static_cast<double>(event.position.y) - static_cast<double>(field().getBottom())};
+}
+
 juce::Rectangle<int> EditableRoll::field() const {
-    return getLocalBounds().withTrimmedLeft(kGutter).withTrimmedBottom(laneHeight());
+    return getLocalBounds().withTrimmedLeft(kGutter).withTrimmedTop(kTitleHeight).withTrimmedBottom(laneHeight());
 }
 
 int EditableRoll::rowsForHeight() const {
@@ -584,9 +593,9 @@ void EditableRoll::visibilityChanged() {
 }
 
 void EditableRoll::mouseDown(const juce::MouseEvent& event) {
-    const auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
+    const auto point = fieldPoint(event);
     if (event.position.y >= static_cast<float>(field().getBottom())) {
-        pressLane({point.x, point.y - field().getBottom()}, event.mods);
+        pressLane(lanePoint(event), event.mods);
         return;
     }
     if (event.mods.isPopupMenu()) {
@@ -614,23 +623,15 @@ void EditableRoll::mouseDown(const juce::MouseEvent& event) {
 }
 
 void EditableRoll::mouseDrag(const juce::MouseEvent& event) {
-    auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
-    if (mode_ == Mode::Velocity || mode_ == Mode::Draw) {
-        point.y -= field().getBottom();
-    }
-    drag(point);
+    drag(mode_ == Mode::Velocity || mode_ == Mode::Draw ? lanePoint(event) : fieldPoint(event));
 }
 
 void EditableRoll::mouseUp(const juce::MouseEvent& event) {
-    auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
-    if (mode_ == Mode::Velocity || mode_ == Mode::Draw) {
-        point.y -= field().getBottom();
-    }
-    release(point);
+    release(mode_ == Mode::Velocity || mode_ == Mode::Draw ? lanePoint(event) : fieldPoint(event));
 }
 
 void EditableRoll::mouseMove(const juce::MouseEvent& event) {
-    const auto point = (event.position - juce::Point<float>(static_cast<float>(kGutter), 0.0f)).toDouble();
+    const auto point = fieldPoint(event);
     if (event.position.y >= static_cast<float>(field().getBottom())) {
         const bool bar = haveView_ && mm::core::hitVelocityBar(geometry(), source_, point.x) != 0;
         setMouseCursor(bar ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
@@ -754,7 +755,7 @@ void EditableRoll::paint(juce::Graphics& g) {
         }
         if (mode_ == Mode::Rubber && dragged_) {
             const auto band = juce::Rectangle<float>(
-                static_cast<float>(pressPoint_.x) + static_cast<float>(origin.x), static_cast<float>(pressPoint_.y),
+                static_cast<float>(pressPoint_.x) + static_cast<float>(origin.x), static_cast<float>(pressPoint_.y) + static_cast<float>(origin.y),
                 static_cast<float>(rubberEnd_.x - pressPoint_.x), static_cast<float>(rubberEnd_.y - pressPoint_.y));
             g.setColour(juce::Colours::white.withAlpha(0.08f));
             g.fillRect(band);
@@ -805,7 +806,7 @@ void EditableRoll::paint(juce::Graphics& g) {
     // Key labels: the C of every octave, in the naming of Ableton and Logic (C3 = 60).
     g.setFont(juce::FontOptions(10.0f));
     for (int pitch = viewport_.lowPitch; pitch < viewport_.lowPitch + viewport_.rows; ++pitch) {
-        const auto y = static_cast<float>(geo.pitchToY(pitch));
+        const auto y = static_cast<float>(geo.pitchToY(pitch)) + static_cast<float>(origin.y);
         if (isBlackKey(pitch)) {
             g.setColour(juce::Colours::black.withAlpha(0.25f));
             g.fillRect(juce::Rectangle<float>(2.0f, y, static_cast<float>(kGutter) - 6.0f,
@@ -820,7 +821,9 @@ void EditableRoll::paint(juce::Graphics& g) {
 
     g.setColour(juce::Colours::white.withAlpha(0.6f));
     g.setFont(juce::FontOptions(13.0f));
-    g.drawText(empty_ ? tr(mm::core::text::kRollEmpty) : title_, area.reduced(8, 4), juce::Justification::topLeft);
+    g.drawText(empty_ ? tr(mm::core::text::kRollEmpty) : title_,
+               juce::Rectangle<int>(kGutter, 0, getWidth() - kGutter, kTitleHeight).reduced(8, 0),
+               juce::Justification::centredLeft);
 }
 
 } // namespace mm::plugin
