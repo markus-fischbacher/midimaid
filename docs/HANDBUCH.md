@@ -90,6 +90,11 @@ bei einem 27B-Modell nimm mindestens 600.
 - **Klick** wählt eine Note, **Ziehen im Leeren** zieht einen Auswahlrahmen, **Doppelklick** setzt eine Note oder löscht
   die getroffene. Eine Note **ziehen** verschiebt die Auswahl, ihren **rechten Rand** ziehen ändert die Länge.
   **Cmd/Strg + Mausrad** zoomt, das Mausrad scrollt (Umschalt: seitwärts).
+  Im Hub zeigen **alle Rolls denselben Zeitausschnitt**: Zoomen und seitwärts Scrollen gilt für alle Stimmen; die
+  Tonhöhe scrollt je Roll für sich. Die Roll im Fenster einer **Stimme** zoomt und scrollt genauso.
+- **Folgen** (Hub: rechts neben Rückgängig und Verlauf, Stimme: unten neben Hilfe) hält den **Playhead im Bild**: Ist der
+  Schalter an, springt der Ausschnitt seitenweise weiter, sobald der Playhead ihn verlässt, und beim Loop-Sprung
+  zurück an den Anfang. Zum freien Scrollen ausschalten. Der Zustand wird mit dem Projekt gespeichert.
 - Die **Anschlagstärke** stellst du in der Leiste unter den Noten ein: Balken ziehen; mit Alt setzt ein Strich über
   leere Leiste alle Balken, die er kreuzt.
 - **Raster**, **Triolen** und **Einrasten** (nur im Experten-Modus sichtbar): Das Raster bestimmt die Schrittweite,

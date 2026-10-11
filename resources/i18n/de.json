@@ -220,6 +220,7 @@
   "group.refused": "Es gibt bereits einen Hub",
   "group.sandboxHint": " (liegt der Hub in diesem Projekt: der Host startet Plug-ins evtl. in getrennten Prozessen)",
   "button.help": "Hilfe",
+  "button.follow": "Folgen",
   "help.title": "Hilfe: Aufbau mit Hub und Voices",
   "help.tab.general": "Prinzip",
   "help.tab.live": "Ableton Live",

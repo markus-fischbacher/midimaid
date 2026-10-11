@@ -5,6 +5,7 @@
 #include "plugin/ProcessorBase.h"
 #include "plugin/RollView.h"
 
+#include <functional>
 #include <map>
 #include <set>
 
@@ -70,6 +71,11 @@ public:
     void zoomAt(double x, double factor);
     /// Scrolls by ticks and rows.
     void scrollBy(int64_t deltaTicks, int deltaRows);
+    /// The hub keeps the time window of all its rolls equal: a roll that zooms or scrolls in time tells the editor
+    /// (start and width in ticks), which hands the window to the other rolls with `setTimeView`.
+    std::function<void(uint32_t, uint32_t)> onTimeViewChanged;
+    /// Takes over a time window from outside (clamped to this pattern). The pitch rows stay; no callback.
+    void setTimeView(uint32_t startTick, uint32_t spanTicks);
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -118,6 +124,7 @@ private:
     std::string scaleId_;
     mm::core::EditGrid grid_;
     mm::core::PitchSnap pitchSnap_ = mm::core::PitchSnap::Scale;
+    void notifyTimeView(const mm::core::RollViewport& before);
     mm::core::RollViewport viewport_;
     bool haveView_ = false;
     std::set<uint32_t> selection_;
