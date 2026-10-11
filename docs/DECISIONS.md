@@ -708,3 +708,10 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Test:** „the role box of the hub window is wide enough and covered by nothing“ für Solo und Hub (Breite ≥ 100 px, im Fenster, nichts darüber; Mutation mit der alten Reservierung: Breite 0 → rot) und „a voice that was switched to Hub next to a hub can be switched back to Voice“ (Ablauf mit zwei Instanzen).
 - **Hinweis:** Ein zweiter Hub wird von der Registry abgelehnt (Status „Hub abgelehnt“, die Instanz bleibt Solo); die Anzeige „Hub“ im Feld bleibt, bis man die Rolle wieder ändert.
 
+### D-207 – „Hub öffnen“ sagt, wenn das Fenster des Hubs zu ist (Phase 6)
+
+- **Meldung:** „Hub öffnen“ in einer Stimme tat nichts. Das Fenster des Hubs war in Live geschlossen.
+- **Befund:** Der Ablauf funktioniert (Klick erreicht den Button bei 75 bis 150 %, der Hub bekommt die Anfrage, auch nach einem Rollenwechsel). Ein **geschlossenes** Fenster kann ein Plugin im Host aber nicht öffnen, es kann nur ein offenes nach vorn holen (`toFront`). Das ist eine Eigenschaft der Hosts (VST3, AU), kein Fehler.
+- **Entscheidung:** `GroupMember::onAction` meldet, ob die Aktion ausgeführt wurde; der Hub meldet bei „Fenster zeigen“ `false`, wenn er keinen offenen Editor hat. Die Stimme zeigt dann in der Statuszeile: „Das Fenster des Hubs ist zu: Öffne in der DAW das Gerät MidiMaid auf der Hub-Spur“ (`status.hubClosed`). Zusätzlich schreiben beide Seiten eine Protokollzeile (`[group] open hub asked`, `hub asked to come to the front: its window is not open` bzw. `raised`).
+- **Tests:** „Open hub says what to do when the window of the hub is closed“ (Mutation: immer „erledigt“ melden → rot), „a click on the Open hub button reaches it, also when the window is scaled“ und „Open hub works again after the voice was set to Hub and back“. Der Test-Mock von `GroupMember` gibt jetzt `true` zurück (Signatur geändert, Prüfungen unverändert).
+

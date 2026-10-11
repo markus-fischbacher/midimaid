@@ -3801,3 +3801,33 @@ TEST_CASE("Open hub works again after the voice was set to Hub and back", "[grou
     button->triggerClick();
     CHECK(waitFor([&] { return hub.processor.frontRequests() == 1; }));
 }
+
+TEST_CASE("Open hub says what to do when the window of the hub is closed", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* button = child<juce::TextButton>(*editor, "openHub");
+    REQUIRE(button != nullptr);
+    REQUIRE(waitFor([&] { return button->isEnabled(); }));
+    auto* status = dynamic_cast<juce::Label*>(find(*editor, "status"));
+    REQUIRE(status != nullptr);
+
+    voice.processor.showHub(); // the hub has no editor
+    CHECK(waitFor([&] { return voice.processor.generationStatus() == mm::plugin::GenerationStatus::HubWindowClosed; }));
+    CHECK(waitFor([&] { return status->getText().contains("Fenster des Hubs ist zu"); }));
+
+    // with the window of the hub open the request is done and the message stays away
+    std::unique_ptr<juce::AudioProcessorEditor> hubEditor(hub.processor.createEditorAndMakeActive());
+    REQUIRE(hubEditor != nullptr);
+    voice.processor.noteHubWindowClosed(); // anything but the closed state, then ask again
+    voice.processor.generate();
+    voice.processor.showHub();
+    pumpMessages(60);
+    CHECK(voice.processor.generationStatus() != mm::plugin::GenerationStatus::HubWindowClosed);
+    CHECK(hub.processor.frontRequests() >= 1);
+    hub.processor.editorBeingDeleted(hubEditor.get()); // what the host wrapper does
+    hubEditor.reset();
+}

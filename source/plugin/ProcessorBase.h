@@ -36,6 +36,7 @@ enum class GenerationStatus {
     DoneLocked,
     NoResult,
     UseHub,
+    HubWindowClosed, ///< "Open hub" found the window of the hub closed
     Forwarded,
     AllLocked,
     Varied,
@@ -168,7 +169,11 @@ public:
     /// Voice: asks the hub to bring its window to the front, as far as the host allows (SPEC 8.1).
     void showHub();
     /// Message thread: brings the window of this instance's editor to the front, if there is one.
-    void bringEditorToFront();
+    /// Brings the editor window of this instance to the front; false when no editor is open (a host window that is
+    /// closed cannot be opened from a plug-in).
+    bool bringEditorToFront();
+    /// A voice asked for the hub window and it is not open: the status line says what to do. Message thread.
+    void noteHubWindowClosed() { generationStatus_ = GenerationStatus::HubWindowClosed; }
     /// How often this instance was asked to bring its window to the front (for tests and diagnosis).
     uint32_t frontRequests() const { return frontRequests_.load(); }
     /// Message thread: makes the exported file match what this instance plays now (the playing slot's pattern for its

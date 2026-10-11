@@ -1509,7 +1509,7 @@ void ProcessorBase::showHub() {
     AppLog::instance().write(LogLevel::Info, "group", "open hub asked");
 }
 
-void ProcessorBase::bringEditorToFront() {
+bool ProcessorBase::bringEditorToFront() {
     frontRequests_.fetch_add(1);
     auto* editor = getActiveEditor();
     auto* top = editor != nullptr ? editor->getTopLevelComponent() : nullptr;
@@ -1517,9 +1517,11 @@ void ProcessorBase::bringEditorToFront() {
     AppLog::instance().write(LogLevel::Info, "group",
                              juce::String("hub asked to come to the front: ") +
                                  (editor == nullptr ? "its window is not open" : top == nullptr ? "no window" : "raised"));
-    if (top != nullptr) {
-        top->toFront(true);
+    if (top == nullptr) {
+        return false;
     }
+    top->toFront(true);
+    return true;
 }
 
 void ProcessorBase::updateExport() {
