@@ -89,7 +89,8 @@ bei einem 27B-Modell nimm mindestens 600.
 
 - **Klick** wählt eine Note, **Ziehen im Leeren** zieht einen Auswahlrahmen, **Doppelklick** setzt eine Note oder löscht
   die getroffene. Eine Note **ziehen** verschiebt die Auswahl, ihren **rechten Rand** ziehen ändert die Länge.
-  **Cmd/Strg + Mausrad** zoomt, das Mausrad scrollt (Umschalt: seitwärts).
+  **Cmd/Strg + Mausrad** oder **Pinch** (zwei Finger auseinanderziehen) zoomt, das Mausrad scrollt (Umschalt: seitwärts);
+  auf dem Trackpad scrollt es in beide Richtungen stufenlos.
   Im Hub zeigen **alle Rolls denselben Zeitausschnitt**: Zoomen und seitwärts Scrollen gilt für alle Stimmen; die
   Tonhöhe scrollt je Roll für sich. Die Roll im Fenster einer **Stimme** zoomt und scrollt genauso.
 - **Folgen** (Hub: rechts neben Rückgängig und Verlauf, Stimme: unten neben Hilfe) hält den **Playhead im Bild**: Ist der

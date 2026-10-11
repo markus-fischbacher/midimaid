@@ -4105,3 +4105,72 @@ TEST_CASE("the read-only roll draws only the visible part of the pattern, notes 
     view.setTimeView(0, 3840); // the first bar: no note in view
     CHECK(accentColumns().empty());
 }
+
+TEST_CASE("the roll scrolls in the pitch by parts of a row and a note is hit where it is drawn", "[roll][editor][smooth]") {
+    RollRig rig;
+    juce::MouseWheelDetails tiny;
+    tiny.deltaX = 0.0f;
+    tiny.deltaY = 0.02f; // a trackpad step of 0.16 of a row
+    const auto yBefore = rig.roll.geometry().pitchToY(64);
+    rig.roll.mouseWheelMove(mouseEventAt(rig.roll, {100.0f, 100.0f}), tiny);
+    CHECK(rig.roll.viewport().pitchOffset == Catch::Approx(0.16).margin(1e-6)); // moved at once, not after a whole row
+    CHECK(rig.roll.geometry().pitchToY(64) > yBefore);                            // the notes slid down a little
+    CHECK(rig.roll.geometry().pitchToY(64) - yBefore < rig.roll.geometry().rowHeight());
+
+    // a click on the note where it is now drawn selects it
+    rig.roll.mouseWheelMove(mouseEventAt(rig.roll, {100.0f, 100.0f}), tiny);
+    rig.refresh();
+    const auto onNote = rig.at(960, 64);
+    const auto position = juce::Point<float>(static_cast<float>(onNote.x) + mm::plugin::EditableRoll::kGutter,
+                                             static_cast<float>(onNote.y) + mm::plugin::EditableRoll::kTitleHeight + 2.0f);
+    rig.roll.mouseDown(mouseEventAt(rig.roll, position));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, position));
+    CHECK(rig.roll.selection() == std::set<uint32_t>{rig.idAt(1)});
+
+    // the other way: back to where it was, the offset ends at zero, not below it
+    juce::MouseWheelDetails back = tiny;
+    back.deltaY = -1.0f;
+    rig.roll.mouseWheelMove(mouseEventAt(rig.roll, {100.0f, 100.0f}), back);
+    rig.roll.mouseWheelMove(mouseEventAt(rig.roll, {100.0f, 100.0f}), back);
+    CHECK(rig.roll.viewport().pitchOffset >= 0.0);
+    CHECK(rig.roll.viewport().pitchOffset < 1.0);
+}
+
+TEST_CASE("pinching zooms the roll of the hub and of the voice window, and the rolls of the hub together",
+          "[group-wiring][follow][pinch]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::RollView view;
+    view.setBounds(0, 0, 400, 160);
+    view.setContent(mm::core::layoutRoll({}, 8 * mm::core::kTicksPerBar), "Slot 1 - Bass", false);
+    const auto event = [](juce::Component& component) { return mouseEventAt(component, {100.0f, 100.0f}); };
+    const auto whole = view.viewSpan();
+    view.mouseMagnify(event(view), 2.0f); // fingers apart: closer
+    CHECK(view.viewSpan() < whole);
+    const auto closer = view.viewSpan();
+    view.mouseMagnify(event(view), 0.5f); // together: further away
+    CHECK(view.viewSpan() > closer);
+    view.mouseMagnify(event(view), 0.0f); // nonsense changes nothing
+    view.mouseMagnify(event(view), -1.0f);
+
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots(
+        [](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, mm::core::makeEmptyPattern(8, "peak_time"))); });
+    hub.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    std::vector<mm::plugin::EditableRoll*> rolls;
+    REQUIRE(waitFor([&] {
+        rolls.clear();
+        for (auto* component : editor->getChildren()) {
+            if (auto* row = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+                rolls.push_back(&row->roll());
+            }
+        }
+        return rolls.size() >= 2 && rolls[0]->patternTicks() == 8 * mm::core::kTicksPerBar;
+    }));
+    const auto before = rolls[0]->viewport().spanTicks;
+    rolls[0]->mouseMagnify(event(*rolls[0]), 2.0f);
+    CHECK(rolls[0]->viewport().spanTicks < before);
+    CHECK(rolls[1]->viewport().spanTicks == rolls[0]->viewport().spanTicks);
+}

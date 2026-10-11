@@ -23,6 +23,10 @@ RollViewport clampViewport(RollViewport viewport, uint32_t patternTicks) {
     viewport.startTick = static_cast<uint32_t>(clampInt64(viewport.startTick, 0, total - viewport.spanTicks));
     viewport.rows = static_cast<int>(clampInt64(viewport.rows, kMinRollRows, kMaxRollRows));
     viewport.lowPitch = static_cast<int>(clampInt64(viewport.lowPitch, 0, 128 - viewport.rows));
+    viewport.pitchOffset = std::isfinite(viewport.pitchOffset) ? std::clamp(viewport.pitchOffset, 0.0, 0.999) : 0.0;
+    if (viewport.lowPitch + viewport.rows >= 128) { // at the top of the keyboard there is nothing above to shift in
+        viewport.pitchOffset = 0.0;
+    }
     return viewport;
 }
 
@@ -83,6 +87,18 @@ RollViewport scrollViewport(RollViewport viewport, int64_t deltaTicks, int delta
     return clampViewport(viewport, patternTicks);
 }
 
+RollViewport scrollPitch(RollViewport viewport, double deltaRows, uint32_t patternTicks) {
+    viewport = clampViewport(viewport, patternTicks);
+    if (!std::isfinite(deltaRows)) {
+        return viewport;
+    }
+    const double top = 128.0 - viewport.rows;
+    const double position = std::clamp(viewport.lowPitch + viewport.pitchOffset + deltaRows, 0.0, top);
+    viewport.lowPitch = static_cast<int>(std::floor(position));
+    viewport.pitchOffset = position - viewport.lowPitch;
+    return clampViewport(viewport, patternTicks);
+}
+
 double RollGeometry::ticksPerPixel() const {
     return static_cast<double>(viewport.spanTicks) / std::max(width, 1.0);
 }
@@ -102,12 +118,12 @@ uint32_t RollGeometry::xToTick(double x) const {
 }
 
 double RollGeometry::pitchToY(int pitch) const {
-    return static_cast<double>(viewport.lowPitch + viewport.rows - 1 - pitch) * rowHeight();
+    return (static_cast<double>(viewport.lowPitch + viewport.rows - 1 - pitch) + viewport.pitchOffset) * rowHeight();
 }
 
 int RollGeometry::yToPitch(double y) const {
-    const int fromTop = static_cast<int>(std::floor(y / rowHeight()));
-    return std::clamp(viewport.lowPitch + viewport.rows - 1 - fromTop, 0, 127);
+    const double top = static_cast<double>(viewport.lowPitch + viewport.rows - 1) + viewport.pitchOffset;
+    return std::clamp(static_cast<int>(std::ceil(top - y / rowHeight())), 0, 127);
 }
 
 RollBox noteBox(const RollGeometry& geometry, const RollNote& note) {

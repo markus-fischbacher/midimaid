@@ -1,8 +1,10 @@
 #include "core/RollEdit.h"
 
 #include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
+#include <limits>
 
 using namespace mm::core;
 
@@ -133,6 +135,42 @@ TEST_CASE("the window follows the playhead page by page", "[roll-edit][follow]")
     // an odd width: the pages still tile the pattern, the last one is pulled back inside
     const RollViewport odd{0, 3 * kTicksPerBar, 48, 24};
     CHECK(followViewport(odd, 7.5 * kTicksPerBar, total).startTick + 3 * kTicksPerBar == total);
+}
+
+TEST_CASE("scrolling in the pitch by a part of a row keeps the part and stops at the ends", "[roll-edit][smooth]") {
+    const uint32_t total = 4 * kTicksPerBar;
+    RollViewport v{0, total, 48, 24};
+    auto s = scrollPitch(v, 0.25, total);
+    CHECK(s.lowPitch == 48);
+    CHECK(s.pitchOffset == Catch::Approx(0.25));
+    s = scrollPitch(s, 0.9, total); // 1.15 rows in all
+    CHECK(s.lowPitch == 49);
+    CHECK(s.pitchOffset == Catch::Approx(0.15));
+    s = scrollPitch(s, -0.4, total); // back below a whole row
+    CHECK(s.lowPitch == 48);
+    CHECK(s.pitchOffset == Catch::Approx(0.75));
+    // the ends: nothing below the lowest note, nothing above the keyboard
+    s = scrollPitch(v, -1000.0, total);
+    CHECK(s.lowPitch == 0);
+    CHECK(s.pitchOffset == 0.0);
+    s = scrollPitch(v, 1000.0, total);
+    CHECK(s.lowPitch == 128 - 24);
+    CHECK(s.pitchOffset == 0.0);
+    CHECK(scrollPitch(v, std::numeric_limits<double>::quiet_NaN(), total) == clampViewport(v, total));
+    // a wild offset is brought into range
+    RollViewport wild{0, total, 48, 24, 7.5};
+    CHECK(clampViewport(wild, total).pitchOffset < 1.0);
+}
+
+TEST_CASE("the pixels follow the shifted window", "[roll-edit][smooth]") {
+    auto g = geometryOf(4 * kTicksPerBar, 0, 3840, 48, 24); // 240 px high: 10 px per row
+    const double flat = g.pitchToY(60);
+    g.viewport.pitchOffset = 0.5; // the content moves down by half a row
+    CHECK(g.pitchToY(60) == Catch::Approx(flat + 5.0));
+    CHECK(g.yToPitch(g.pitchToY(60) + 1.0) == 60); // the row is hit where it is drawn
+    CHECK(g.yToPitch(g.pitchToY(60) + 9.0) == 60);
+    CHECK(g.yToPitch(g.pitchToY(60) + 11.0) == 59);
+    CHECK(g.yToPitch(2.0) == 72); // the row that peeks in at the top is the one above the top row
 }
 
 TEST_CASE("pixels and ticks convert both ways", "[roll-edit]") {

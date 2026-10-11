@@ -33,6 +33,9 @@ struct RollViewport {
     uint32_t spanTicks = 4 * kTicksPerBar;
     int lowPitch = 48; ///< lowest visible pitch row
     int rows = 24;     ///< number of visible pitch rows
+    /// A part of a row (0 to under 1) the window is shifted up, for scrolling in the pitch that is smooth instead of
+    /// row by row; the window then shows `rows` rows from `lowPitch + pitchOffset`. 0 at the top of the keyboard.
+    double pitchOffset = 0.0;
 
     bool operator==(const RollViewport&) const = default;
 };
@@ -58,6 +61,9 @@ RollViewport zoomViewport(RollViewport viewport, double factor, uint32_t anchorT
 
 /// Moves the window by ticks and rows (positive: later, higher). The result is clamped.
 RollViewport scrollViewport(RollViewport viewport, int64_t deltaTicks, int deltaRows, uint32_t patternTicks);
+
+/// Moves the window in the pitch by a part of a row (positive: higher), keeping the part in `pitchOffset`. Clamped.
+RollViewport scrollPitch(RollViewport viewport, double deltaRows, uint32_t patternTicks);
 
 /// The window that follows a playhead page by page: unchanged while `playheadTick` is inside it, otherwise the window
 /// of the same width that holds the playhead, on a multiple of the width (so the page after the last one is the first

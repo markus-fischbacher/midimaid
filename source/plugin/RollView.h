@@ -39,6 +39,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+    void mouseMagnify(const juce::MouseEvent& event, float scaleFactor) override;
 
     const mm::core::RollLayout& layout() const { return layout_; }
 

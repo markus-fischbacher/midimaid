@@ -55,6 +55,12 @@ void RollView::scrollBy(int64_t deltaTicks) {
     }
 }
 
+void RollView::mouseMagnify(const juce::MouseEvent& event, float scaleFactor) {
+    if (scaleFactor > 0.0f) { // pinch: spreading the fingers (a factor above 1) zooms in
+        zoomAt(static_cast<double>(event.position.x), 1.0 / static_cast<double>(scaleFactor));
+    }
+}
+
 void RollView::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) {
     if (event.mods.isCommandDown()) {
         zoomAt(static_cast<double>(event.position.x), std::exp(-static_cast<double>(wheel.deltaY) * 2.0));
