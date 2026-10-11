@@ -39,6 +39,7 @@ public:
 struct NoteOn {
     long long sample;
     int pitch;
+    int velocity = 0;
 };
 
 /// One plugin instance with its own transport: block by block like a host would drive it.
@@ -83,8 +84,8 @@ public:
         for (const auto metadata : midi_) {
             const auto message = metadata.getMessage();
             if (message.isNoteOn()) {
-                notes_.push_back(
-                    {std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition, message.getNoteNumber()});
+                notes_.push_back({std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition,
+                                  message.getNoteNumber(), message.getVelocity()});
             } else if (message.isNoteOff()) {
                 offs_.push_back(
                     {std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition, message.getNoteNumber()});
@@ -4237,15 +4238,18 @@ mm::core::Pattern evolvePattern(Instance& hub, uint64_t seed) {
     return result.pattern;
 }
 
-/// The pitches the instance sounded between two PPQ positions, in order.
-std::vector<int> pitchesBetween(const Instance& instance, double fromPpq, double toPpq) {
-    std::vector<int> pitches;
+/// What the instance sounded between two PPQ positions, in order: pitch and the time from the start of each note on, so
+/// that a stage that moves a note is told from the stage before (the velocity is left out: the output stage varies it
+/// from pass to pass).
+std::vector<long long> pitchesBetween(const Instance& instance, double fromPpq, double toPpq) {
+    std::vector<long long> sound;
     for (const auto& note : instance.notes()) {
         if (note.sample >= at(fromPpq) && note.sample < at(toPpq)) {
-            pitches.push_back(note.pitch);
+            sound.push_back(note.pitch);
+            sound.push_back((note.sample - at(fromPpq) + 500) / 1000); // a block's rounding is no change
         }
     }
-    return pitches;
+    return sound;
 }
 
 /// Drives the hub block by block up to `ppq` and calls the timer of the Evolve layer after each block.
@@ -4275,6 +4279,7 @@ TEST_CASE("evolve: a new stage every N passes plays from the pass after, the slo
     const mm::core::Pattern original = evolvePattern(hub, 1);
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
     hub.processor.setEvolveSettings(evolveEvery(2));
+    hub.processor.setEvolveSeed(7);
     hub.processor.setEvolve(true);
     REQUIRE(hub.processor.evolveOn());
 
@@ -4303,6 +4308,7 @@ TEST_CASE("evolve: nothing happens while the transport stands, and counting star
     hub.setRole(InstanceRole::Hub);
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 2))); });
     hub.processor.setEvolveSettings(evolveEvery(1));
+    hub.processor.setEvolveSeed(7);
     hub.processor.setEvolve(true);
     hub.setPlaying(false);
     for (int i = 0; i < 40; ++i) {
@@ -4325,6 +4331,7 @@ TEST_CASE("evolve: from the original every stage varies the slot, not the stage 
         const mm::core::Pattern original = evolvePattern(hub, 3);
         hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
         hub.processor.setEvolveSettings(evolveEvery(1, fromOriginal, 30));
+        hub.processor.setEvolveSeed(7);
         hub.processor.setEvolve(true);
         runEvolve(hub, 8.0 * 8 + 0.1);
         INFO("fromOriginal " << fromOriginal);
@@ -4342,6 +4349,7 @@ TEST_CASE("evolve: keep takes the stage into the slot as a history entry and an 
     const mm::core::Pattern original = evolvePattern(hub, 4);
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
     hub.processor.setEvolveSettings(evolveEvery(1));
+    hub.processor.setEvolveSeed(7);
     CHECK_FALSE(hub.processor.evolveKeep()); // off: nothing to keep
     CHECK(hub.processor.generationStatus() == mm::plugin::GenerationStatus::EvolveNothingToKeep);
     hub.processor.setEvolve(true);
@@ -4374,6 +4382,7 @@ TEST_CASE("evolve: back plays one of the last stages again, no further than 8", 
     hub.setRole(InstanceRole::Hub);
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 5))); });
     hub.processor.setEvolveSettings(evolveEvery(1));
+    hub.processor.setEvolveSeed(7);
     hub.processor.setEvolve(true);
     CHECK_FALSE(hub.processor.evolveBack());
     runEvolve(hub, 8.0 * 4 + 0.1);
@@ -4393,6 +4402,7 @@ TEST_CASE("evolve: switching off plays the unchanged slot again from the next ba
     hub.setRole(InstanceRole::Hub);
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 6))); });
     hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
     hub.processor.setEvolve(true);
     runEvolve(hub, 8.0 * 3 + 0.1);
     REQUIRE(hub.processor.evolveInfo().changed);
@@ -4418,6 +4428,7 @@ TEST_CASE("evolve: a slot change ends the layer of the old slot without taking i
         REQUIRE(bank.setResult(1, evolvePattern(hub, 8)));
     });
     hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
     hub.processor.setEvolve(true);
     runEvolve(hub, 8.0 * 3 + 0.1);
     REQUIRE(hub.processor.evolveInfo().changed);
@@ -4443,6 +4454,7 @@ TEST_CASE("evolve: a manual action works on the stage that sounds, nothing the m
     const mm::core::Pattern original = evolvePattern(hub, 9);
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
     hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
     hub.processor.setEvolve(true);
     runEvolve(hub, 8.0 * 3 + 0.1);
     REQUIRE(hub.processor.evolveInfo().changed);
@@ -4468,6 +4480,7 @@ TEST_CASE("evolve: a manual result restarts the layer from the new slot content"
     hub.setRole(InstanceRole::Hub);
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 10))); });
     hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
     hub.processor.setEvolve(true);
     runEvolve(hub, 8.0 * 3 + 0.1);
     REQUIRE(hub.processor.evolveInfo().stage > 0);
@@ -4489,6 +4502,7 @@ TEST_CASE("evolve: an offline render switches it off, a voice cannot switch it o
         hub.setRole(InstanceRole::Hub);
         hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 12))); });
         hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+        hub.processor.setEvolveSeed(7);
         hub.processor.setEvolve(true);
         runEvolve(hub, 8.0 * 3 + 0.1);
         REQUIRE(hub.processor.evolveInfo().changed);
@@ -4617,6 +4631,7 @@ TEST_CASE("evolve: a stage starts exactly with a pass of the pattern, never in t
         hub.setRole(InstanceRole::Hub);
         hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, seed))); });
         hub.processor.setEvolveSettings(evolveEvery(2, true, 100));
+        hub.processor.setEvolveSeed(7);
         hub.processor.setEvolve(true);
         runEvolve(hub, 8.0 * 4 + 0.1);
         // The stage made at the start of pass 2 (8 PPQ long) plays from pass 3: pass 2, with both of its bars, is

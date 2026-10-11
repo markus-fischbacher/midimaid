@@ -212,6 +212,9 @@ public:
     bool evolveKeep();
     /// Goes back one stage of the last 8; it plays at the next bar line. False at the end of the memory.
     bool evolveBack();
+    /// Message thread: fixes the seed the layer takes for its stages (default: a random one per layer), so that the
+    /// stages repeat. For tests and diagnosis.
+    void setEvolveSeed(std::optional<uint64_t> seed) { evolveSeed_ = seed; }
     /// Message thread: the settings of the layer (clamped); they act from the next stage.
     void setEvolveSettings(const mm::core::EvolveSettings& settings);
     /// What the timer of the layer does every 40 ms: follows the slot, counts the passes of the pattern by the playhead
@@ -416,7 +419,7 @@ private:
     void updateSlotMode(); // message thread
     void evolveEnd(bool restoreSlot);
     void evolveCommitBefore(size_t slotIndex);
-    void evolveRepublish();
+    uint64_t newEvolveSeed() const;
     /// A new instance takes the key the user chose last (global settings, D-162) once the file is read.
     void applyStartKey();
 
@@ -465,6 +468,7 @@ private:
     std::unique_ptr<ParkTimer> startKeyTimer_; // message thread
     // The Evolve layer (message thread; `evolveLayer_` and the counters under `slotsLock_`)
     bool evolveOn_ = false;
+    std::optional<uint64_t> evolveSeed_;
     mm::core::EvolveLayer evolveLayer_;
     uint64_t evolveRevision_ = 0;           // revision of the slot the layer started from
     bool evolveStagePublished_ = false;     // the engine holds a stage that is not the slot content

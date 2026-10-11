@@ -251,6 +251,10 @@ void ProcessorBase::setEvolveSettings(const mm::core::EvolveSettings& evolve) {
     settings_.evolve = mm::core::clampEvolveSettings(evolve);
 }
 
+uint64_t ProcessorBase::newEvolveSeed() const {
+    return evolveSeed_ ? *evolveSeed_ : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
+}
+
 void ProcessorBase::evolveEnd(bool restoreSlot) {
     const juce::ScopedLock lock(slotsLock_);
     if (evolveLayer_.active() && restoreSlot && evolveStagePublished_) {
@@ -311,8 +315,7 @@ bool ProcessorBase::evolveKeep() {
         // The stage is the slot now: the layer goes on from there; the engine already plays this content.
         const juce::ScopedLock lock(slotsLock_);
         if (const auto* slot = slots_.slot(slotIndex); slot != nullptr && slot->pattern) {
-            evolveLayer_.start(slotIndex, *slot->pattern,
-                               static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64()));
+            evolveLayer_.start(slotIndex, *slot->pattern, newEvolveSeed());
             evolveRevision_ = revision;
             evolveStagePublished_ = false;
         }
@@ -367,7 +370,7 @@ void ProcessorBase::evolveTick() {
     }
     if (!evolveLayer_.active() || slot->revision != evolveRevision_) {
         // New layer, or the slot got a manual result: the layer starts again from what the slot holds now (SPEC 6.8).
-        evolveLayer_.start(slotIndex, *slot->pattern, static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64()));
+        evolveLayer_.start(slotIndex, *slot->pattern, newEvolveSeed());
         evolveRevision_ = slot->revision;
         evolveStagePublished_ = false;
         evolveLastPass_.reset();
