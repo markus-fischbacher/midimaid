@@ -676,7 +676,8 @@ void EditableRoll::mouseWheelMove(const juce::MouseEvent& event, const juce::Mou
     }
     const double ticksPerPixel = geometry().ticksPerPixel();
     if (event.mods.isShiftDown() || std::abs(wheel.deltaX) > std::abs(wheel.deltaY)) {
-        const double amount = event.mods.isShiftDown() ? wheel.deltaY : -wheel.deltaX;
+        // the content follows the fingers: a positive delta moves it to the right, the window to the earlier ticks
+        const double amount = event.mods.isShiftDown() ? wheel.deltaY : wheel.deltaX;
         scrollBy(static_cast<int64_t>(std::llround(-amount * 300.0 * ticksPerPixel)), 0);
         return;
     }

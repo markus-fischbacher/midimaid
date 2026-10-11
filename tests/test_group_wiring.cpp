@@ -4106,6 +4106,54 @@ TEST_CASE("the read-only roll draws only the visible part of the pattern, notes 
     CHECK(accentColumns().empty());
 }
 
+TEST_CASE("a sideways swipe moves the content with the fingers, in the roll of the hub and of the voice",
+          "[group-wiring][follow][scroll]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::MouseWheelDetails right; // fingers to the right: the content goes right, the window to earlier ticks
+    right.deltaX = 0.2f;
+    right.deltaY = 0.0f;
+    auto left = right;
+    left.deltaX = -0.2f;
+
+    mm::plugin::RollView view;
+    view.setBounds(0, 0, 400, 160);
+    view.setContent(mm::core::layoutRoll({}, 8 * mm::core::kTicksPerBar), "Slot 1 - Bass", false);
+    view.setTimeView(3 * mm::core::kTicksPerBar, mm::core::kTicksPerBar);
+    const auto event = [](juce::Component& component) { return mouseEventAt(component, {100.0f, 100.0f}); };
+    view.mouseWheelMove(event(view), right);
+    CHECK(view.viewStart() < 3 * mm::core::kTicksPerBar);
+    view.setTimeView(3 * mm::core::kTicksPerBar, mm::core::kTicksPerBar);
+    view.mouseWheelMove(event(view), left);
+    CHECK(view.viewStart() > 3 * mm::core::kTicksPerBar);
+
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots(
+        [](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, mm::core::makeEmptyPattern(8, "peak_time"))); });
+    hub.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    mm::plugin::EditableRoll* roll = nullptr;
+    REQUIRE(waitFor([&] {
+        for (auto* component : editor->getChildren()) {
+            if (auto* row = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+                roll = &row->roll();
+                return roll->patternTicks() == 8 * mm::core::kTicksPerBar;
+            }
+        }
+        return false;
+    }));
+    roll->zoomAt(0.0, 0.25);
+    roll->scrollBy(3 * mm::core::kTicksPerBar, 0);
+    const auto before = roll->viewport().startTick;
+    REQUIRE(before > 0);
+    roll->mouseWheelMove(event(*roll), right);
+    CHECK(roll->viewport().startTick < before);
+    const auto earlier = roll->viewport().startTick;
+    roll->mouseWheelMove(event(*roll), left);
+    CHECK(roll->viewport().startTick > earlier);
+}
+
 TEST_CASE("the roll scrolls in the pitch by parts of a row and a note is hit where it is drawn", "[roll][editor][smooth]") {
     RollRig rig;
     juce::MouseWheelDetails tiny;
