@@ -39,10 +39,14 @@ public:
     /// Publishes `pattern` as a result of slot `index` (the Evolve layer, SPEC 6.7): it plays at the next multiple of
     /// `gridPpq` like a result, but the bank is not touched and the slot keeps counting as published with the revision
     /// it has, so a later `sync` does not replace the stage.
-    void publishPattern(size_t index, const core::Pattern& pattern, double gridPpq);
+    /// With `stampPpq` (planned by the hub, D-144) it takes effect at that position; a stamp already behind falls back
+    /// to the next grid point.
+    void publishPattern(size_t index, const core::Pattern& pattern, double gridPpq,
+                        std::optional<double> stampPpq = std::nullopt);
     /// Publishes the slot content of the bank again as a result (the Evolve layer ended): the unchanged slot plays
     /// from the next multiple of `gridPpq`. False when the slot is empty.
-    bool restoreSlot(const core::SlotBank& bank, size_t index, double gridPpq = 4.0);
+    bool restoreSlot(const core::SlotBank& bank, size_t index, double gridPpq = 4.0,
+                     std::optional<double> stampPpq = std::nullopt);
     /// Forgets which revisions were published, so the next `sync` publishes every slot that has content (and every
     /// slot that was published before) again.
     void reset();

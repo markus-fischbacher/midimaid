@@ -39,6 +39,10 @@ public:
         statuses.push_back(s);
         voices = v;
     }
+    void onOverlay(const OverlayPtr& overlay, std::optional<double> stampPpq) override {
+        overlays.push_back(overlay);
+        overlayStamps.push_back(stampPpq);
+    }
     bool onAction(GroupAction action) override {
         actions.push_back(action);
         return true;
@@ -59,6 +63,8 @@ public:
     std::vector<std::optional<double>> stamps;
     std::vector<GroupStatus> statuses;
     std::vector<GroupAction> actions;
+    std::vector<OverlayPtr> overlays;
+    std::vector<std::optional<double>> overlayStamps;
     size_t voices = 0;
     std::function<void()> onSnapshotHook;
 };
@@ -330,4 +336,97 @@ TEST_CASE("a voice can ask the hub to show itself", "[group]") {
     REQUIRE(hub->actions.size() == 1);
     CHECK(hub->actions[0] == GroupAction::ShowHub);
     CHECK(voice->actions.empty());
+}
+
+namespace {
+
+OverlayPtr stageOf(size_t slot, uint8_t pitch) {
+    auto overlay = std::make_shared<SlotOverlay>();
+    overlay->slot = slot;
+    overlay->pattern = std::make_shared<const Pattern>(marked(pitch));
+    return overlay;
+}
+
+} // namespace
+
+TEST_CASE("the hub's Evolve stage reaches the voices with its stamp, and only the hub may send it", "[group-registry][evolve]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(40);
+    auto voiceA = std::make_shared<FakeMember>();
+    auto voiceB = std::make_shared<FakeMember>();
+    auto solo = std::make_shared<FakeMember>();
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    registry.add(voiceA, InstanceRole::Voice);
+    registry.add(voiceB, InstanceRole::Voice);
+    const auto soloId = registry.add(solo, InstanceRole::Solo);
+    CHECK(voiceA->overlays.empty()); // nothing to hear yet
+
+    const auto stage = stageOf(0, 55);
+    CHECK_FALSE(registry.publishOverlay(soloId, stage));
+    REQUIRE(registry.publishOverlay(hubId, stage, 16.0));
+    for (const auto& voice : {voiceA, voiceB}) {
+        REQUIRE(voice->overlays.size() == 1);
+        CHECK(voice->overlays[0] == stage);
+        CHECK(voice->overlayStamps[0] == 16.0);
+    }
+    CHECK(hub->overlays.empty()); // the hub keeps its own stage
+    CHECK(solo->overlays.empty());
+
+    // The same stage again is no news; a slot publish does not repeat it either
+    registry.publishOverlay(hubId, stage, 24.0);
+    registry.publish(hubId, bankWith(41));
+    CHECK(voiceA->overlays.size() == 1);
+
+    // The end of the layer is a null stage, with its own stamp
+    registry.publishOverlay(hubId, nullptr, 32.0);
+    REQUIRE(voiceA->overlays.size() == 2);
+    CHECK(voiceA->overlays[1] == nullptr);
+    CHECK(voiceA->overlayStamps[1] == 32.0);
+    registry.publishOverlay(hubId, nullptr, 40.0);
+    CHECK(voiceA->overlays.size() == 2);
+}
+
+TEST_CASE("a voice that joins while the stage plays hears it without a stamp", "[group-registry][evolve]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(40);
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    const auto stage = stageOf(2, 60);
+    registry.publishOverlay(hubId, stage, 16.0);
+    auto late = std::make_shared<FakeMember>();
+    registry.add(late, InstanceRole::Voice);
+    REQUIRE(late->overlays.size() == 1);
+    CHECK(late->overlays[0] == stage);
+    CHECK_FALSE(late->overlayStamps[0].has_value());
+}
+
+TEST_CASE("the stage ends with the hub: a new hub starts without one", "[group-registry][evolve]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(40);
+    auto voice = std::make_shared<FakeMember>();
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    registry.add(voice, InstanceRole::Voice);
+    registry.publishOverlay(hubId, stageOf(0, 55), 16.0);
+    REQUIRE(voice->overlays.size() == 1);
+    registry.remove(hubId);
+    REQUIRE(voice->overlays.size() == 2);
+    CHECK(voice->overlays[1] == nullptr); // the voices drop the stage of a hub that is gone
+    auto next = std::make_shared<FakeMember>(50);
+    registry.add(next, InstanceRole::Hub);
+    CHECK(voice->overlays.size() == 2); // nothing new from the new hub yet
+}
+
+TEST_CASE("a voice that joins again hears the stage again", "[group-registry][evolve]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(40);
+    auto voice = std::make_shared<FakeMember>();
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    const auto voiceId = registry.add(voice, InstanceRole::Voice);
+    const auto stage = stageOf(0, 55);
+    registry.publishOverlay(hubId, stage, 16.0);
+    REQUIRE(voice->overlays.size() == 1);
+    registry.setRole(voiceId, InstanceRole::Solo);
+    registry.setRole(voiceId, InstanceRole::Voice);
+    REQUIRE(voice->overlays.size() == 2);
+    CHECK(voice->overlays[1] == stage);
+    CHECK_FALSE(voice->overlayStamps[1].has_value());
 }

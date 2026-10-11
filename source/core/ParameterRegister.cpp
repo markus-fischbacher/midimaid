@@ -29,8 +29,8 @@ constexpr std::array<ParamSpec, kParameterCount> kRegister{{
     {"variation_7", "Variation 7", Bool, 0, 1, 0, V1_1},
     {"variation_8", "Variation 8", Bool, 0, 1, 0, V1_1},
     {"variation_all", "Variation All", Bool, 0, 1, 0, V1_1},
-    {"evolve", "Evolve", Bool, 0, 1, 0, V1_1},
-    {"evolve_keep", "Evolve Keep", Bool, 0, 1, 0, V1_1},
+    {"evolve", "Evolve", Bool, 0, 1, 0, V1_1Live},
+    {"evolve_keep", "Evolve Keep", Bool, 0, 1, 0, V1_1Live},
     {"creativity", "Creativity", Int, 0, 100, 40, Backlog},
     {"energy", "Energy", Int, 0, 100, 50, Backlog},
 }};

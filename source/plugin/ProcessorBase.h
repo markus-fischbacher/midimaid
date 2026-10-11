@@ -387,6 +387,9 @@ public:
     void onGroupStatusChanged(mm::core::GroupStatus status);
     /// Planned slot changes that reached this voice too late for their point (SPEC 6.5, D-142).
     uint32_t lateSwitches() const { return groupSync_.lateSwitches(); }
+    /// Called by the group link on the message thread: a voice takes over the hub's Evolve stage (null: none) and plays
+    /// it in that slot from the stamp (or the next bar line) on. Other roles ignore it. The stage is not kept.
+    void adoptHubOverlay(const mm::core::OverlayPtr& overlay, std::optional<double> stampPpq = std::nullopt);
     /// Called by the group link on the message thread: a voice takes over the hub's slot set. Other roles ignore it.
     void adoptHubSlots(const mm::core::SlotSnapshot& snapshot, std::optional<double> stampPpq = std::nullopt);
     /// Slots that were left empty by the last state load because their data was bad (path and reason).
@@ -398,6 +401,11 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
 private:
+    /// What a hub tells its voices about its Evolve stage (sent after the instance lock is released).
+    struct OverlayMessage {
+        mm::core::OverlayPtr overlay;
+        std::optional<double> stamp;
+    };
     bool stepUndo(bool back);
     bool browseHistory(bool back, std::optional<size_t> slot);
     void writeEvents(juce::MidiBuffer& midi) const;
@@ -417,9 +425,19 @@ private:
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
     void updateSlotMode(); // message thread
-    void evolveEnd(bool restoreSlot);
+    std::optional<OverlayMessage> evolveEnd(bool restoreSlot);
     void evolveCommitBefore(size_t slotIndex);
     uint64_t newEvolveSeed() const;
+    bool evolveCompany() const; // under `slotsLock_`: a hub with voices around it
+    std::optional<double> evolveBarStamp() const;
+    /// Under `slotsLock_`: plays `stage` in `slot` (the hub's own engine) from the stamp or the next grid point and
+    /// returns what goes to the voices (sent after the lock is released); null `stage`: the slot content again.
+    OverlayMessage evolveShow(size_t slot, const mm::core::Pattern* stage, double gridPpq,
+                              std::optional<double> stamp);
+    void sendOverlay(const std::optional<OverlayMessage>& message);
+    void evolveTickLocked(std::optional<OverlayMessage>& message);
+    void onEvolveParameter(const juce::String& id, bool on);
+    void setEvolveParameter(bool on);
     /// A new instance takes the key the user chose last (global settings, D-162) once the file is read.
     void applyStartKey();
 
@@ -474,7 +492,12 @@ private:
     bool evolveStagePublished_ = false;     // the engine holds a stage that is not the slot content
     std::optional<int64_t> evolveLastPass_; // the pass of the pattern the last tick saw
     int evolvePasses_ = 0;                  // passes seen since the layer started
+    bool evolveAdvanceDue_ = false;         // the next stage is due: it is made in the middle of the pass
     std::unique_ptr<ParkTimer> evolveTimer_;
+    class EvolveParameterListener;
+    std::unique_ptr<EvolveParameterListener> evolveListener_;
+    std::atomic<bool> loadingState_{false}; // the host sets the parameters from a saved state: no Evolve events
+    mm::core::OverlayPtr voiceOverlay_;     // voice: the stage the hub plays (message thread, under `slotsLock_`)
     mm::engine::PatternPlayer player_;
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;

@@ -4318,8 +4318,10 @@ TEST_CASE("evolve: nothing happens while the transport stands, and counting star
     CHECK(hub.processor.evolveInfo().stage == 0);
     CHECK(hub.processor.evolveInfo().layerActive);
     hub.setPlaying(true);
-    runEvolve(hub, 0.5);
-    CHECK(hub.processor.evolveInfo().stage == 1); // every pass: the first pass already prepares the next stage
+    runEvolve(hub, 3.9);
+    CHECK(hub.processor.evolveInfo().stage == 0); // not yet: the stage is made in the middle of the pass (8 PPQ)
+    runEvolve(hub, 4.2);
+    CHECK(hub.processor.evolveInfo().stage == 1); // every pass: the first pass already prepares the next stage, in its middle
 }
 
 TEST_CASE("evolve: from the original every stage varies the slot, not the stage before", "[group-wiring][evolve]") {
@@ -4644,4 +4646,237 @@ TEST_CASE("evolve: a stage starts exactly with a pass of the pattern, never in t
         hub.processor.setEvolve(false);
     }
     CHECK(anyChange);
+}
+
+namespace {
+
+/// Steps all instances block by block (hub first) up to `ppq`; the hub's Evolve layer ticks after its block.
+void runEvolveGroup(std::vector<Instance*> instances, double ppq) {
+    while (instances.front()->ppq() < ppq - 1e-9) {
+        for (auto* instance : instances) {
+            instance->step();
+        }
+        instances.front()->processor.evolveTick();
+    }
+}
+
+} // namespace
+
+TEST_CASE("evolve in a group: the voices play the hub's stage and switch at the same position", "[group-wiring][evolve][group]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    Instance bass("Bass");
+    Instance melody("Melody");
+    hub.setRole(InstanceRole::Hub);
+    bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    melody.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+    const mm::core::Pattern original = evolvePattern(hub, 21);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+    hub.processor.setEvolveSettings(evolveEvery(2, false, 100));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    runEvolveGroup({&hub, &bass, &melody}, 8.0 * 8 + 0.1);
+
+    const auto pass = [&](const Instance& instance, int n) { return pitchesBetween(instance, 8.0 * n, 8.0 * (n + 1)); };
+    REQUIRE_FALSE(pass(bass, 1).empty());
+    REQUIRE_FALSE(pass(melody, 1).empty());
+    bool bassChanged = false;
+    bool melodyChanged = false;
+    for (int n = 0; n < 8; ++n) {
+        INFO("pass " << n);
+        // the hub plays the bass too (output voice 1): the bass voice sounds exactly as the hub, pass by pass
+        CHECK(pass(bass, n) == pass(hub, n));
+        bassChanged = bassChanged || pass(bass, n) != pass(bass, 0);
+        melodyChanged = melodyChanged || pass(melody, n) != pass(melody, 0);
+    }
+    CHECK(bassChanged);
+    CHECK(melodyChanged);
+    // and the voices changed with the stages: pass 1 is stage 0 for all, the first change comes with pass 2 or later
+    CHECK(pass(bass, 0) == pass(bass, 1));
+    CHECK(pass(melody, 0) == pass(melody, 1));
+    // the voices keep the slot set of the hub as it is: nothing of the stage is kept in them
+    CHECK(sameNotes(*bass.processor.slotsSnapshot().slot(0)->pattern, original));
+    CHECK(sameNotes(*melody.processor.slotsSnapshot().slot(0)->pattern, original));
+}
+
+TEST_CASE("evolve in a group: switching off brings every voice back to the slot at the same bar line",
+          "[group-wiring][evolve][group]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    Instance bass("Bass");
+    Instance melody("Melody");
+    hub.setRole(InstanceRole::Hub);
+    bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    melody.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 22))); });
+    hub.processor.setEvolveSettings(evolveEvery(1, false, 100));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    runEvolveGroup({&hub, &bass, &melody}, 8.0 * 5 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().changed);
+    hub.processor.setEvolve(false);
+    runEvolveGroup({&hub, &bass, &melody}, 8.0 * 9);
+    const auto pass = [&](const Instance& instance, int n) { return pitchesBetween(instance, 8.0 * n, 8.0 * (n + 1)); };
+    for (const Instance* instance : {&hub, &bass, &melody}) {
+        INFO(instance->processor.getName().toStdString());
+        // from the pass after the switch-off (pass 7 at the latest) the slot plays again, exactly as in the first pass
+        CHECK(pass(*instance, 8) == pass(*instance, 0));
+        CHECK(pass(*instance, 7) == pass(*instance, 0));
+    }
+}
+
+TEST_CASE("evolve in a group: a voice that joins while a stage plays gets it", "[group-wiring][evolve][group]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    Instance bass("Bass");
+    hub.setRole(InstanceRole::Hub);
+    bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 23))); });
+    hub.processor.setEvolveSettings(evolveEvery(1, false, 100));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    runEvolveGroup({&hub, &bass}, 8.0 * 5 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().changed);
+    Instance late("Late");
+    late.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    late.setPpq(bass.ppq());
+    runEvolveGroup({&hub, &bass, &late}, 8.0 * 9 + 0.1);
+    const auto pass = [&](const Instance& instance, int n) { return pitchesBetween(instance, 8.0 * n, 8.0 * (n + 1)); };
+    // The newcomer sounds like the hub and the other voice from the second full pass after it joined on
+    CHECK(pass(late, 8) == pass(hub, 8));
+    CHECK(pass(late, 8) == pass(bass, 8));
+    CHECK(pass(late, 8) != pass(hub, 0));
+}
+
+TEST_CASE("evolve parameters: the host switches the layer, a trigger keeps the stage", "[group-wiring][evolve][parameters]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 24))); });
+    hub.processor.setEvolveSettings(evolveEvery(1, false, 100));
+    hub.processor.setEvolveSeed(7);
+    auto* evolve = hub.processor.parameters().getParameter("evolve");
+    auto* keep = hub.processor.parameters().getParameter("evolve_keep");
+    REQUIRE((evolve != nullptr && keep != nullptr));
+    CHECK(evolve->isAutomatable());
+    CHECK(keep->isAutomatable());
+    CHECK_FALSE(hub.processor.evolveOn());
+
+    evolve->setValueNotifyingHost(1.0f);
+    pumpMessages(20);
+    CHECK(hub.processor.evolveOn());
+    runEvolve(hub, 8.0 * 3 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().changed);
+
+    keep->setValueNotifyingHost(1.0f); // the rising edge keeps the sounding stage
+    pumpMessages(20);
+    CHECK(hub.processor.generationStatus() == mm::plugin::GenerationStatus::EvolveKept);
+    CHECK(hub.processor.slotsSnapshot().slot(0)->history.size() == 2);
+    CHECK(keep->getValue() == 0.0f); // and it is a trigger again
+    CHECK(hub.processor.evolveOn());
+
+    evolve->setValueNotifyingHost(0.0f);
+    pumpMessages(20);
+    CHECK_FALSE(hub.processor.evolveOn());
+    CHECK_FALSE(hub.processor.evolveInfo().layerActive);
+
+    // the toggle of the window moves the parameter, and a switch-off through the object does too
+    hub.processor.setEvolve(true);
+    CHECK(evolve->getValue() == 1.0f);
+    hub.processor.setEvolve(false);
+    CHECK(evolve->getValue() == 0.0f);
+}
+
+TEST_CASE("evolve parameters: an offline render ignores them, a loaded state does not switch the layer on",
+          "[group-wiring][evolve][parameters]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 25))); });
+    hub.processor.setNonRealtime(true);
+    hub.processor.parameters().getParameter("evolve")->setValueNotifyingHost(1.0f);
+    pumpMessages(20);
+    CHECK_FALSE(hub.processor.evolveOn());
+    hub.processor.setNonRealtime(false);
+
+    // a state saved with the parameter at 1 (the layer itself is not saved)
+    Instance source("Source");
+    source.processor.parameters().getParameter("evolve")->setValueNotifyingHost(1.0f);
+    pumpMessages(20);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    source.processor.setEvolve(false);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    pumpMessages(40);
+    CHECK_FALSE(target.processor.evolveOn());
+}
+
+TEST_CASE("evolve parameters: a voice cannot be switched on by the host either", "[group-wiring][evolve][parameters]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    voice.processor.parameters().getParameter("evolve")->setValueNotifyingHost(1.0f);
+    pumpMessages(20);
+    CHECK_FALSE(voice.processor.evolveOn());
+}
+
+TEST_CASE("evolve in a group: the end is planned for the whole group, also for a voice that runs behind",
+          "[group-wiring][evolve][group]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    Instance bass("Bass");
+    hub.setRole(InstanceRole::Hub);
+    bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 26))); });
+    hub.processor.setEvolveSettings(evolveEvery(4, false, 100)); // no stage is waiting when the layer ends
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    hub.setPpq(0.5); // the hub's block runs half a PPQ ahead of the voice's: the voice reaches a bar line later
+    runEvolveGroup({&hub, &bass}, 8.0 * 5 + 4.1); // stage 1 sounds since the pass at 32
+    REQUIRE(hub.processor.evolveInfo().changed);
+    // The hub is just behind the bar line at 44, the voice is not there yet. Without a plan the voice would go back to
+    // the slot at its own bar line 44 and the hub at 48; planned, both go at 48 on their own clock.
+    hub.processor.setEvolve(false);
+    runEvolveGroup({&hub, &bass}, 8.0 * 8 + 0.1);
+    // Between 44 and 48 on their own clocks both still play the stage, and alike
+    CHECK(pitchesBetween(bass, 44.0, 48.0) == pitchesBetween(hub, 44.0, 48.0));
+    // From 48 on both play the slot again
+    CHECK(pitchesBetween(bass, 56.0, 60.0) == pitchesBetween(hub, 56.0, 60.0));
+    CHECK(pitchesBetween(bass, 48.0, 52.0) == pitchesBetween(hub, 48.0, 52.0));
+    // the stage in 44..48 is not the slot (else the checks above would prove nothing)
+    CHECK(pitchesBetween(hub, 44.0, 48.0) != pitchesBetween(hub, 52.0, 56.0));
+}
+
+TEST_CASE("evolve in a group: a voice that runs behind the hub still plays every stage, also when each pass has a new one",
+          "[group-wiring][evolve][group]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    for (const double lag : {0.1, 0.5, 2.0}) {
+        Instance hub("Hub");
+        Instance bass("Bass");
+        hub.setRole(InstanceRole::Hub);
+        bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+        hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 26))); });
+        hub.processor.setEvolveSettings(evolveEvery(1, false, 100));
+        hub.processor.setEvolveSeed(7);
+        hub.processor.setEvolve(true);
+        hub.setPpq(lag); // the hub's block runs `lag` PPQ ahead of the voice's
+        runEvolveGroup({&hub, &bass}, 8.0 * 8 + 0.1);
+        // Both play the same pattern on their own clock, pass by pass; the voice neither skips nor repeats a stage
+        const auto pass = [&](const Instance& instance, int n) { return pitchesBetween(instance, 8.0 * n, 8.0 * (n + 1)); };
+        INFO("lag " << lag);
+        for (int n = 2; n < 7; ++n) { // the voice has played up to 8 * 8 + 0.1 - lag
+            INFO("pass " << n);
+            CHECK(pass(bass, n) == pass(hub, n));
+        }
+        CHECK(pass(bass, 3) != pass(bass, 4));
+        hub.processor.setEvolve(false);
+    }
 }

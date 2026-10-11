@@ -62,6 +62,14 @@ void GroupLink::publish(mm::core::SlotSnapshot snapshot, std::optional<double> s
     });
 }
 
+void GroupLink::publishOverlay(mm::core::OverlayPtr overlay, std::optional<double> stampPpq) {
+    onMessageThread([self = shared_from_this(), overlay = std::move(overlay), stampPpq] {
+        if (self->id_ != 0) {
+            processGroup().publishOverlay(self->id_, overlay, stampPpq);
+        }
+    });
+}
+
 void GroupLink::forward(mm::core::GroupAction action) {
     onMessageThread([self = shared_from_this(), action] {
         if (self->id_ == 0) {
@@ -104,6 +112,13 @@ void GroupLink::onSnapshot(const mm::core::SlotSnapshot& snapshot, std::optional
     const juce::ScopedLock lock(lock_);
     if (owner_ != nullptr) {
         owner_->adoptHubSlots(snapshot, stampPpq);
+    }
+}
+
+void GroupLink::onOverlay(const mm::core::OverlayPtr& overlay, std::optional<double> stampPpq) {
+    const juce::ScopedLock lock(lock_);
+    if (owner_ != nullptr) {
+        owner_->adoptHubOverlay(overlay, stampPpq);
     }
 }
 

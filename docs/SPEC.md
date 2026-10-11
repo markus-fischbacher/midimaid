@@ -348,8 +348,8 @@ angelegten Parameter.
 | `generate` | Generieren | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
 | `variation_1` … `variation_8` | Variation Stimme 1 … 8 | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
 | `variation_all` | Variation alle | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
-| `evolve` | Auto-Evolve | Schalter | aus | §6.7 | v1.1 |
-| `evolve_keep` | Evolve behalten | Trigger (Schalter) | aus | übernimmt die klingende Stufe in den Slot | v1.1 |
+| `evolve` | Auto-Evolve | Schalter | aus | §6.7; **aktiv** (D-214): schaltet die Evolve-Ebene des Hubs; Voices und Offline-Render ignorieren ihn | v1.1 |
+| `evolve_keep` | Evolve behalten | Trigger (Schalter) | aus | übernimmt die klingende Stufe in den Slot; **aktiv** (D-214), springt nach der Flanke von selbst auf 0 zurück | v1.1 |
 | `creativity` | Kreativität | 0–100 % | 40 % | wirkt erst bei der nächsten Generierung (§7.6) | Backlog |
 | `energy` | Energie | 0–100 % | 50 % (Startwert) | wirkt erst bei der nächsten Generierung | Backlog |
 
@@ -1109,7 +1109,10 @@ Auto-Evolve verändert **nie** den Slot selbst. Es spielt auf einer eigenen Eben
   Stufe noch zu behalten
 - **Verwerfen/Aus:** Auto-Evolve aus → zum nächsten Quantisierungspunkt spielt wieder der unveränderte Slot
 - **Slot-Wechsel** beendet die Ebene des alten Slots ohne Übernahme
-- In einer Hub-Gruppe gehört die Ebene dem Hub; Voices spielen ihre Stimme der aktuellen Stufe
+- In einer Hub-Gruppe gehört die Ebene dem Hub; Voices spielen ihre Stimme der aktuellen Stufe. **Umsetzung (D-214):** Der Hub meldet
+  seine Stufe über die Registry als Überlagerung eines Slots (`SlotOverlay`, nicht Teil der Slot-Sätze, nichts davon landet im State
+  der Voices) mit PPQ-Zeitstempel: der Beginn einer neuen Stufe ist der Anfang des nächsten Durchlaufs, Ende, Zurück und Behalten
+  gelten ab dem nächsten Takt (geplant wie ein Slot-Wechsel, D-144).
 - Die Ebene wird **nicht** im Projekt gespeichert. Ein Bounce spielt deshalb immer den gespeicherten Slot.
 - Die UI zeigt deutlich, dass gerade die Evolve-Ebene klingt (z. B. Slot-Rahmen pulsiert, Stufenzähler)
 
