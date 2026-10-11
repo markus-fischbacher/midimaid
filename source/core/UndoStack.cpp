@@ -37,44 +37,95 @@ void UndoStack::recordResult(size_t slot, std::optional<Pattern> before, size_t 
     push(std::move(step));
 }
 
-bool UndoStack::undo(SlotBank& bank, size_t* slot) {
+void UndoStack::recordSwap(size_t first, size_t second) {
+    Step step;
+    step.kind = Step::Kind::Swap;
+    step.slot = first;
+    step.other = second;
+    push(std::move(step));
+}
+
+void UndoStack::recordClear(size_t slot, Slot before) {
+    Step step;
+    step.kind = Step::Kind::Clear;
+    step.slot = slot;
+    step.clearedSlot = std::move(before);
+    push(std::move(step));
+}
+
+bool UndoStack::undo(SlotBank& bank, size_t* slot, size_t* second) {
     if (undo_.empty()) {
         return false;
     }
     Step step = std::move(undo_.back());
     undo_.pop_back();
-    const bool done = step.kind == Step::Kind::Edit ? step.before.has_value() && bank.edit(step.slot, *step.before)
-                                                    : bank.undoResult(step.slot, step.before, step.beforeCursor);
+    bool done = false;
+    switch (step.kind) {
+    case Step::Kind::Edit:
+        done = step.before.has_value() && bank.edit(step.slot, *step.before);
+        break;
+    case Step::Kind::Result:
+        done = bank.undoResult(step.slot, step.before, step.beforeCursor);
+        break;
+    case Step::Kind::Swap:
+        done = bank.swap(step.slot, step.other); // a swap undoes itself
+        break;
+    case Step::Kind::Clear:
+        done = step.clearedSlot.has_value() && bank.slot(step.slot) != nullptr;
+        if (done) {
+            bank.restore(step.slot, *step.clearedSlot);
+        }
+        break;
+    }
     if (!done) {
         return false;
     }
     if (slot != nullptr) {
         *slot = step.slot;
+    }
+    if (second != nullptr) {
+        *second = step.other;
     }
     redo_.push_back(std::move(step));
     return true;
 }
 
-bool UndoStack::redo(SlotBank& bank, size_t* slot) {
+bool UndoStack::redo(SlotBank& bank, size_t* slot, size_t* second) {
     if (redo_.empty()) {
         return false;
     }
     Step step = std::move(redo_.back());
     redo_.pop_back();
-    const bool done =
-        step.kind == Step::Kind::Edit ? bank.edit(step.slot, step.after) : bank.setResult(step.slot, step.after);
+    bool done = false;
+    switch (step.kind) {
+    case Step::Kind::Edit:
+        done = bank.edit(step.slot, step.after);
+        break;
+    case Step::Kind::Result:
+        done = bank.setResult(step.slot, step.after);
+        break;
+    case Step::Kind::Swap:
+        done = bank.swap(step.slot, step.other);
+        break;
+    case Step::Kind::Clear:
+        done = bank.clear(step.slot);
+        break;
+    }
     if (!done) {
         return false;
     }
     if (slot != nullptr) {
         *slot = step.slot;
+    }
+    if (second != nullptr) {
+        *second = step.other;
     }
     undo_.push_back(std::move(step));
     return true;
 }
 
 void UndoStack::discardSlot(size_t slot) {
-    const auto of = [slot](const Step& step) { return step.slot == slot; };
+    const auto of = [slot](const Step& step) { return step.slot == slot || step.other == slot; };
     undo_.erase(std::remove_if(undo_.begin(), undo_.end(), of), undo_.end());
     redo_.erase(std::remove_if(redo_.begin(), redo_.end(), of), redo_.end());
 }

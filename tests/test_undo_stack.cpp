@@ -248,3 +248,76 @@ TEST_CASE("undoing a result puts the history cursor back where it was", "[undo]"
     CHECK(bank.slot(0)->pattern->styleId == "a");
     CHECK(bank.slot(0)->history.size() == 2);
 }
+
+TEST_CASE("a swap is a step: undo and redo exchange the two slots, with history, name and colour", "[undo]") {
+    SlotBank bank;
+    REQUIRE(bank.setResult(0, result("a")));
+    REQUIRE(bank.setResult(0, result("a2"))); // a history of two
+    REQUIRE(bank.setResult(3, result("b")));
+    bank.setName(0, "First");
+    const Slot first = *bank.slot(0);
+    const Slot fourth = *bank.slot(3);
+    UndoStack stack;
+    REQUIRE(bank.swap(0, 3));
+    stack.recordSwap(0, 3);
+    CHECK(stack.canUndo());
+
+    size_t slot = 99;
+    size_t second = UndoStack::kNoSlot;
+    REQUIRE(stack.undo(bank, &slot, &second));
+    CHECK(slot == 0);
+    CHECK(second == 3);
+    CHECK(sameSlot(*bank.slot(0), first));
+    CHECK(bank.slot(0)->name == "First");
+    CHECK(sameSlot(*bank.slot(3), fourth));
+    REQUIRE(stack.redo(bank, &slot, &second));
+    CHECK(sameSlot(*bank.slot(3), first));
+    CHECK(sameSlot(*bank.slot(0), fourth));
+    // browsing the history of one of the slots ends the steps that touch it, also as the second slot
+    stack.discardSlot(3);
+    CHECK_FALSE(stack.canUndo());
+    CHECK_FALSE(stack.canRedo());
+}
+
+TEST_CASE("a clear is a step: undo brings the whole slot back, redo clears it again", "[undo]") {
+    SlotBank bank;
+    REQUIRE(bank.setResult(2, result("a")));
+    REQUIRE(bank.setResult(2, result("a2")));
+    bank.setName(2, "Intro");
+    const Slot before = *bank.slot(2);
+    UndoStack stack;
+    stack.recordClear(2, before);
+    REQUIRE(bank.clear(2));
+    REQUIRE(bank.isEmpty(2));
+
+    size_t slot = 99;
+    size_t second = 99;
+    REQUIRE(stack.undo(bank, &slot, &second));
+    CHECK(slot == 2);
+    CHECK(second == UndoStack::kNoSlot);
+    CHECK(sameSlot(*bank.slot(2), before));
+    CHECK(bank.slot(2)->name == "Intro");
+    REQUIRE(stack.redo(bank, &slot, nullptr));
+    CHECK(bank.isEmpty(2));
+    CHECK(bank.slot(2)->history.empty());
+}
+
+TEST_CASE("steps of other kinds stay in order around a swap and a clear", "[undo]") {
+    SlotBank bank;
+    UndoStack stack;
+    REQUIRE(bank.setResult(0, result("a")));
+    stack.recordResult(0, std::nullopt, 0, *bank.slot(0)->pattern);
+    REQUIRE(bank.swap(0, 1));
+    stack.recordSwap(0, 1);
+    const Slot one = *bank.slot(1);
+    stack.recordClear(1, one);
+    REQUIRE(bank.clear(1));
+    REQUIRE(stack.undo(bank)); // the clear
+    CHECK(bank.slot(1)->pattern.has_value());
+    REQUIRE(stack.undo(bank)); // the swap
+    CHECK(bank.slot(0)->pattern.has_value());
+    CHECK_FALSE(bank.slot(1)->pattern.has_value());
+    REQUIRE(stack.undo(bank)); // the result
+    CHECK(bank.isEmpty(0));
+    CHECK_FALSE(stack.canUndo());
+}

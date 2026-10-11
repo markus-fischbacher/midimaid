@@ -11,6 +11,7 @@
 #include "core/Variation.h"
 #include "plugin/AiBackend.h"
 #include "plugin/AiConnection.h"
+#include "plugin/AppLog.h"
 #include "plugin/EmbeddedPrompts.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/EmbeddedTranslation.h"
@@ -302,11 +303,12 @@ bool ProcessorBase::stepUndo(bool back) {
             return false;
         }
         size_t slot = 0;
-        if (!(back ? undo_.undo(slots_, &slot) : undo_.redo(slots_, &slot))) {
+        size_t second = mm::core::UndoStack::kNoSlot;
+        if (!(back ? undo_.undo(slots_, &slot, &second) : undo_.redo(slots_, &slot, &second))) {
             return false;
         }
-        if (!publisher_.publishEdit(slots_, slot)) {
-            publisher_.sync(slots_); // the slot is empty again: the engine drops its pattern at the next bar line
+        if (second != mm::core::UndoStack::kNoSlot || !publisher_.publishEdit(slots_, slot)) {
+            publisher_.sync(slots_); // two slots changed, or one is empty again: the engine drops its pattern at the next bar line
         }
         if (settings_.role == mm::core::InstanceRole::Hub) {
             forVoices = std::make_shared<const mm::core::SlotBank>(slots_);
@@ -1122,12 +1124,23 @@ bool ProcessorBase::clearSlot(size_t index) {
         return false;
     }
     bool cleared = false;
+    bool wasFilled = false;
     editSlots([&](mm::core::SlotBank& bank) {
+        const auto* current = bank.slot(index);
+        wasFilled = current != nullptr && current->pattern.has_value();
+        std::optional<mm::core::Slot> before;
+        if (current != nullptr) {
+            before = *current;
+        }
         cleared = bank.clear(index);
         if (cleared) {
-            undo_.discardSlot(index);
+            undo_.recordClear(index, std::move(*before)); // the way back: a slot is not lost for good
         }
     });
+    if (cleared) { // the log says what was done to the slots, for a report like "my pattern is gone"
+        AppLog::instance().write(LogLevel::Info, "slots",
+                                 "clear slot " + juce::String(static_cast<int>(index) + 1) + (wasFilled ? " (was filled)" : " (was empty)"));
+    }
     generationStatus_ = cleared ? GenerationStatus::SlotCleared : GenerationStatus::SlotNothingToCopy;
     return cleared;
 }
@@ -1138,14 +1151,22 @@ bool ProcessorBase::swapSlots(size_t first, size_t second) {
         return false;
     }
     bool swapped = false;
+    bool firstFilled = false;
+    bool secondFilled = false;
     editSlots([&](mm::core::SlotBank& bank) {
+        const auto* a = bank.slot(first);
+        const auto* b = bank.slot(second);
+        firstFilled = a != nullptr && a->pattern.has_value();
+        secondFilled = b != nullptr && b->pattern.has_value();
         swapped = first != second && bank.swap(first, second);
         if (swapped) {
-            undo_.discardSlot(first);
-            undo_.discardSlot(second);
+            undo_.recordSwap(first, second); // the way back: undo exchanges them again
         }
     });
     if (swapped) {
+        AppLog::instance().write(LogLevel::Info, "slots",
+                                 "swap slots " + juce::String(static_cast<int>(first) + 1) + (firstFilled ? " (filled)" : " (empty)") +
+                                     " and " + juce::String(static_cast<int>(second) + 1) + (secondFilled ? " (filled)" : " (empty)"));
         generationStatus_ = GenerationStatus::SlotsSwapped;
     }
     return swapped;
