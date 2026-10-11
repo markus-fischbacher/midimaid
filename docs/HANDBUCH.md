@@ -61,8 +61,9 @@ Slot selbst (ein fester Kern mit wechselnden Varianten). Gesperrte Stimmen bleib
 klingt, in den Slot (ein Verlaufseintrag, *Rückgängig* geht zurück), Evolve läuft von dort weiter. **◀** holt eine der letzten 8 Stufen
 zurück. Schaltest du *Evolve* aus oder wechselst den Slot, spielt wieder der unveränderte Slot. Änderst du von Hand etwas (Variation, Neu, Noten
 bearbeiten), wirkt es auf die Stufe, die du gerade hörst. Das Intervall, **Vom Original** und die **Evolve-Stärke** (Standard 20 %) stehen im
-Experten-Modus. Die Ebene wird nicht im Projekt gespeichert, ein Bounce spielt den Slot, und die Voices folgen der Stufe noch nicht (kommt
-mit der nächsten Etappe).
+Experten-Modus. Die Ebene wird nicht im Projekt gespeichert, ein Bounce spielt den Slot. **Die Stimmen der Gruppe spielen die Stufe des Hubs mit**
+und wechseln zugleich mit ihm (zum Beginn des nächsten Durchlaufs). Die Host-Parameter **Evolve** (Schalter) und **Evolve Keep**
+(Trigger, springt nach dem Auslösen von selbst zurück) lassen sich automatisieren oder auf einen Controller legen.
 
 **Slots kopieren, tauschen, leeren:** Ein Rechtsklick auf ein Feld der Slot-Leiste öffnet das Menü *Slot kopieren*, *Slot einfügen*, *Slot leeren* und *Tauschen mit …*. Du kannst auch ein Feld auf ein anderes **ziehen**: Das tauscht die beiden Slots, mit gehaltener **Alt-Taste** (Option) kopiert es; der Zeiger zeigt dann ein „+“. Einfügen ist ein Ergebnis wie *Erzeugen* (◀ und *Rückgängig* gehen zurück). **Leeren und Tauschen** lassen sich mit *Rückgängig* zurücknehmen (der ganze Slot kommt mit Verlauf, Name und Farbe wieder); das Durchblättern des Verlaufs (◀ ▶) beendet die Schritte des Slots.
 
@@ -153,7 +154,7 @@ Aufnahme, Freeze, Arrangement).
 
 ## 10. Automation
 
-Die Host-Parameter heißen **Slot** (1–16) und **Mute 1 … Mute 8**. Damit schaltest du Patterns und Stimmen im
+Die Host-Parameter heißen **Slot** (1–16), **Mute 1 … Mute 8**, **Evolve** und **Evolve Keep** (nur am Hub wirksam). Damit schaltest du Patterns und Stimmen im
 Arrangement um. In einer Gruppe automatisierst du den **Slot im Hub**; eine Stimme kann auf *Slot: eigener* gestellt
 werden, wenn sie ihren Slot selbst automatisieren soll (Bounce, Freeze). Die Wechsel greifen zum nächsten Takt.
 

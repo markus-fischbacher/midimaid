@@ -18,8 +18,9 @@ constexpr int kParameterVersionHint = 1;
 enum class ParamType { Int, Bool };
 
 /// The release from which a parameter has an effect. Parameters of later releases already exist with their final ID
-/// and name but do nothing and are marked as not automatable.
-enum class ParamActive { V1_0, V1_1, Backlog };
+/// and name but do nothing and are marked as not automatable. `V1_1Live`: a v1.1 parameter whose function exists
+/// already (it is automatable like the v1.0 ones, D-214).
+enum class ParamActive { V1_0, V1_1, Backlog, V1_1Live };
 
 struct ParamSpec {
     std::string_view id;
@@ -30,7 +31,7 @@ struct ParamSpec {
     int defaultValue;
     ParamActive active;
 
-    bool isActive() const { return active == ParamActive::V1_0; }
+    bool isActive() const { return active == ParamActive::V1_0 || active == ParamActive::V1_1Live; }
 };
 
 constexpr size_t kParameterCount = 24;

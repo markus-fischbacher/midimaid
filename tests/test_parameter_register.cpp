@@ -64,17 +64,20 @@ TEST_CASE("ranges, defaults and types follow SPEC 3.13", "[parameters]") {
     }
 }
 
-TEST_CASE("only slot and the eight mutes are active in v1.0", "[parameters]") {
+TEST_CASE("only slot, the eight mutes and the two Evolve parameters are active", "[parameters]") {
+    // v1.0 activated slot and mute_1..8; the Evolve parameters followed with the Evolve layer (D-214).
     size_t active = 0;
     for (const ParamSpec& spec : parameterRegister()) {
         const std::string id(spec.id);
-        const bool expectedActive = id == "slot" || id.rfind("mute_", 0) == 0;
+        const bool expectedActive = id == "slot" || id.rfind("mute_", 0) == 0 || id == "evolve" || id == "evolve_keep";
         CHECK(spec.isActive() == expectedActive);
         active += spec.isActive() ? 1 : 0;
     }
-    CHECK(active == 9);
+    CHECK(active == 11);
     CHECK(findParameter("transpose")->active == ParamActive::V1_1);
-    CHECK(findParameter("evolve_keep")->active == ParamActive::V1_1);
+    CHECK(findParameter("evolve")->active == ParamActive::V1_1Live);
+    CHECK(findParameter("evolve_keep")->active == ParamActive::V1_1Live);
+    CHECK(findParameter("slot")->active == ParamActive::V1_0);
     CHECK(findParameter("creativity")->active == ParamActive::Backlog);
 }
 

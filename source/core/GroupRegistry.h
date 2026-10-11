@@ -25,6 +25,15 @@ enum class GroupStatus {
 /// instances).
 using SlotSnapshot = std::shared_ptr<const SlotBank>;
 
+/// The Evolve stage of one slot (SPEC 6.7): what the hub plays in that slot instead of its content while the layer is on.
+/// It is not part of the slot set (voices neither keep nor save it); a null `pattern` says the layer ended and the slot
+/// content plays again.
+struct SlotOverlay {
+    size_t slot = 0; ///< 0-based
+    std::shared_ptr<const Pattern> pattern;
+};
+using OverlayPtr = std::shared_ptr<const SlotOverlay>;
+
 /// What a voice asks of the hub (SPEC 6.5: voice actions are forwarded to the hub).
 enum class GroupAction { Generate, ShowHub };
 
@@ -36,6 +45,12 @@ public:
     /// position at which the hub's changes take effect, when the hub planned one (D-144); it is only sent with the
     /// change itself, never to a voice that joins later.
     virtual void onSnapshot(const SlotSnapshot& snapshot, std::optional<double> stampPpq) = 0;
+    /// Voice: the hub's Evolve stage (null: none) to play, sent when it changes and when the voice joins. `stampPpq` as
+    /// for `onSnapshot`. The default ignores it.
+    virtual void onOverlay(const OverlayPtr& overlay, std::optional<double> stampPpq) {
+        (void)overlay;
+        (void)stampPpq;
+    }
     /// The status or, for a hub, the number of voices changed.
     virtual void onStatus(GroupStatus status, size_t voices) = 0;
     /// Hub: a voice asked for `action`. Returns false when it could not be done (the default ignores the action and
@@ -71,6 +86,9 @@ public:
     /// The hub reports a new slot set, optionally with the PPQ stamp at which it takes effect. False when `id` is not
     /// the hub.
     bool publish(MemberId id, SlotSnapshot snapshot, std::optional<double> stampPpq = std::nullopt);
+    /// The hub reports its Evolve stage (null: the layer ended), optionally with the PPQ stamp at which it takes effect.
+    /// False when `id` is not the hub.
+    bool publishOverlay(MemberId id, OverlayPtr overlay, std::optional<double> stampPpq = std::nullopt);
     /// A voice forwards `action` to the hub. False when `id` is not a voice or there is no hub.
     bool forward(MemberId id, GroupAction action);
     /// A member with status `HubOffered` becomes the hub. False when it is not offered the role.
@@ -93,6 +111,7 @@ private:
         GroupStatus sentStatus = GroupStatus::Solo;
         size_t sentVoices = 0;
         SlotSnapshot sentSnapshot;
+        OverlayPtr sentOverlay;
     };
 
     Entry* find(MemberId id);
@@ -105,6 +124,7 @@ private:
     std::vector<Entry> members_; ///< in order of id
     MemberId hub_ = 0;
     SlotSnapshot hubSnapshot_;
+    OverlayPtr hubOverlay_;
     std::optional<double> hubStamp_; ///< stamp of the change being distributed; only set during `publish`
     MemberId nextId_ = 1;
 };

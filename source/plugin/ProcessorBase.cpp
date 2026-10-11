@@ -65,6 +65,34 @@ private:
     std::function<void()> retry_;
 };
 
+// The listener of the two Evolve parameters (SPEC 3.13): the host may set them from any thread, the layer lives on the
+// message thread.
+class ProcessorBase::EvolveParameterListener : public juce::AudioProcessorValueTreeState::Listener {
+public:
+    EvolveParameterListener(ProcessorBase& owner, std::shared_ptr<bool> alive)
+        : owner_(owner), alive_(std::move(alive)) {}
+
+    void parameterChanged(const juce::String& id, float value) override {
+        if (owner_.loadingState_.load()) {
+            return; // a saved state sets the parameters: the layer itself is not saved
+        }
+        const bool on = value >= 0.5f;
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            owner_.onEvolveParameter(id, on);
+        } else if (juce::MessageManager::getInstanceWithoutCreating() != nullptr) {
+            juce::MessageManager::callAsync([alive = alive_, owner = &owner_, id, on] {
+                if (*alive) {
+                    owner->onEvolveParameter(id, on);
+                }
+            });
+        }
+    }
+
+private:
+    ProcessorBase& owner_;
+    std::shared_ptr<bool> alive_;
+};
+
 ProcessorBase::ReturnCollector::ReturnCollector(mm::engine::PatternHandover& handover) : handover_(handover) {
     startTimer(kReturnCollectIntervalMs);
 }
@@ -114,6 +142,9 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
             parameters_.getRawParameterValue(mm::core::muteParameterId(voice));
     }
     player_.attach(&handover_);
+    evolveListener_ = std::make_unique<EvolveParameterListener>(*this, libraryAlive_);
+    parameters_.addParameterListener("evolve", evolveListener_.get());
+    parameters_.addParameterListener("evolve_keep", evolveListener_.get());
     groupLink_ = GroupLink::create(*this);
     groupLink_->setRole(settings_.role, settings_.outputVoice);
     applyStartKey();
@@ -149,6 +180,8 @@ void ProcessorBase::applyStartKey() {
 }
 
 ProcessorBase::~ProcessorBase() {
+    parameters_.removeParameterListener("evolve", evolveListener_.get());
+    parameters_.removeParameterListener("evolve_keep", evolveListener_.get());
     evolveTimer_.reset();
     *libraryAlive_ = false;
     groupLink_->detach();                              // first: from here on no registry callback reaches this instance
@@ -208,6 +241,64 @@ void ProcessorBase::updateSlotMode() {
     slotMode_.store(static_cast<int>(mode), std::memory_order_release);
 }
 
+void ProcessorBase::onEvolveParameter(const juce::String& id, bool on) {
+    if (id == "evolve") {
+        if (!isNonRealtime()) { // an offline render ignores it (SPEC 6.6)
+            setEvolve(on);
+        }
+    } else if (id == "evolve_keep" && on) {
+        if (!isNonRealtime()) {
+            evolveKeep();
+        }
+        if (auto* parameter = parameters_.getParameter("evolve_keep")) { // a trigger: back to 0 for the next edge
+            parameter->setValueNotifyingHost(0.0f);
+        }
+    }
+}
+
+void ProcessorBase::setEvolveParameter(bool on) {
+    if (auto* parameter = parameters_.getParameter("evolve")) {
+        const float value = on ? 1.0f : 0.0f;
+        if (parameter->getValue() != value) {
+            parameter->setValueNotifyingHost(value);
+        }
+    }
+}
+
+void ProcessorBase::sendOverlay(const std::optional<OverlayMessage>& message) {
+    if (message) {
+        groupLink_->publishOverlay(message->overlay, message->stamp); // outside the lock: the registry may call back
+    }
+}
+
+bool ProcessorBase::evolveCompany() const {
+    return settings_.role == mm::core::InstanceRole::Hub && groupLink_->status() == mm::core::GroupStatus::Hub &&
+           mm::engine::processGroupChannel().memberCount() > 1;
+}
+
+std::optional<double> ProcessorBase::evolveBarStamp() const {
+    return evolveCompany() ? mm::engine::plannedStamp(mm::engine::processGroupChannel(), lastKnownBpm())
+                           : std::nullopt;
+}
+
+ProcessorBase::OverlayMessage ProcessorBase::evolveShow(size_t slot, const mm::core::Pattern* stage, double gridPpq,
+                                                        std::optional<double> stamp) {
+    if (stage != nullptr) {
+        publisher_.publishPattern(slot, *stage, gridPpq, stamp);
+    } else {
+        publisher_.restoreSlot(slots_, slot, gridPpq, stamp);
+    }
+    OverlayMessage message;
+    message.stamp = stamp;
+    auto overlay = std::make_shared<mm::core::SlotOverlay>();
+    overlay->slot = slot;
+    if (stage != nullptr) {
+        overlay->pattern = std::make_shared<const mm::core::Pattern>(*stage);
+    }
+    message.overlay = std::move(overlay);
+    return message;
+}
+
 void ProcessorBase::setEvolve(bool on) {
     if (on == evolveOn_) {
         if (!on) {
@@ -229,8 +320,9 @@ void ProcessorBase::setEvolve(bool on) {
         }
     } else {
         evolveTimer_.reset();
-        evolveEnd(true);
+        sendOverlay(evolveEnd(true));
     }
+    setEvolveParameter(on);
 }
 
 ProcessorBase::EvolveInfo ProcessorBase::evolveInfo() const {
@@ -255,15 +347,20 @@ uint64_t ProcessorBase::newEvolveSeed() const {
     return evolveSeed_ ? *evolveSeed_ : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
 }
 
-void ProcessorBase::evolveEnd(bool restoreSlot) {
-    const juce::ScopedLock lock(slotsLock_);
-    if (evolveLayer_.active() && restoreSlot && evolveStagePublished_) {
-        publisher_.restoreSlot(slots_, evolveLayer_.slot());
+std::optional<ProcessorBase::OverlayMessage> ProcessorBase::evolveEnd(bool restoreSlot) {
+    std::optional<OverlayMessage> message;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (evolveLayer_.active() && restoreSlot && evolveStagePublished_) {
+            message = evolveShow(evolveLayer_.slot(), nullptr, 4.0, evolveBarStamp());
+        }
+        evolveLayer_.stop();
+        evolveStagePublished_ = false;
+        evolveLastPass_.reset();
+        evolvePasses_ = 0;
+        evolveAdvanceDue_ = false;
     }
-    evolveLayer_.stop();
-    evolveStagePublished_ = false;
-    evolveLastPass_.reset();
-    evolvePasses_ = 0;
+    return message;
 }
 
 void ProcessorBase::evolveCommitBefore(size_t slotIndex) {
@@ -311,26 +408,37 @@ bool ProcessorBase::evolveKeep() {
         generationStatus_ = GenerationStatus::EvolveNothingToKeep;
         return false;
     }
+    std::optional<OverlayMessage> message;
     {
-        // The stage is the slot now: the layer goes on from there; the engine already plays this content.
+        // The stage is the slot now: the layer goes on from there; the engine already plays this content. The voices
+        // get the slot set with it (above) and drop their copy of the stage.
         const juce::ScopedLock lock(slotsLock_);
         if (const auto* slot = slots_.slot(slotIndex); slot != nullptr && slot->pattern) {
             evolveLayer_.start(slotIndex, *slot->pattern, newEvolveSeed());
             evolveRevision_ = revision;
             evolveStagePublished_ = false;
+            if (evolveCompany()) {
+                message = OverlayMessage{nullptr, std::nullopt};
+            }
         }
     }
+    sendOverlay(message);
     generationStatus_ = GenerationStatus::EvolveKept;
     return true;
 }
 
 bool ProcessorBase::evolveBack() {
-    const juce::ScopedLock lock(slotsLock_);
-    if (!evolveOn_ || !evolveLayer_.back()) {
-        return false;
+    std::optional<OverlayMessage> message;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (!evolveOn_ || !evolveLayer_.back()) {
+            return false;
+        }
+        const mm::core::Pattern stage = evolveLayer_.current();
+        message = evolveShow(evolveLayer_.slot(), &stage, 4.0, evolveBarStamp());
+        evolveStagePublished_ = true;
     }
-    publisher_.publishPattern(evolveLayer_.slot(), evolveLayer_.current(), 4.0);
-    evolveStagePublished_ = true;
+    sendOverlay(message);
     return true;
 }
 
@@ -341,13 +449,21 @@ void ProcessorBase::evolveTick() {
     if (isNonRealtime()) { // an offline render plays the saved slots only (SPEC 6.6)
         // Not `setEvolve`: it would destroy the timer whose callback is running. The idle timer goes with the next toggle.
         evolveOn_ = false;
-        evolveEnd(true);
+        sendOverlay(evolveEnd(true));
         return;
     }
+    std::optional<OverlayMessage> message;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        evolveTickLocked(message);
+    }
+    sendOverlay(message);
+}
+
+void ProcessorBase::evolveTickLocked(std::optional<OverlayMessage>& message) {
     const auto slotIndex =
         static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
     const std::optional<double> ppq = playheadPpq();
-    const juce::ScopedLock lock(slotsLock_);
     if (settings_.role == mm::core::InstanceRole::Voice) {
         return;
     }
@@ -363,7 +479,7 @@ void ProcessorBase::evolveTick() {
     if (evolveLayer_.active() && evolveLayer_.slot() != slotIndex) {
         // A slot change ends the layer of the old slot without taking it over (SPEC 6.7).
         if (evolveStagePublished_) {
-            publisher_.restoreSlot(slots_, evolveLayer_.slot());
+            message = evolveShow(evolveLayer_.slot(), nullptr, 4.0, evolveBarStamp());
         }
         evolveLayer_.stop();
         evolveStagePublished_ = false;
@@ -375,9 +491,11 @@ void ProcessorBase::evolveTick() {
         evolveStagePublished_ = false;
         evolveLastPass_.reset();
         evolvePasses_ = 0;
+        evolveAdvanceDue_ = false;
     }
     if (!ppq) {
         evolveLastPass_.reset(); // the transport stands: counting starts again at the next start
+        evolveAdvanceDue_ = false;
         return;
     }
     const double lengthPpq = static_cast<double>(slot->pattern->lengthBars) * 4.0;
@@ -385,14 +503,18 @@ void ProcessorBase::evolveTick() {
         return;
     }
     const auto pass = static_cast<int64_t>(std::floor(*ppq / lengthPpq));
-    if (evolveLastPass_ && *evolveLastPass_ == pass) {
+    if (!evolveLastPass_ || *evolveLastPass_ != pass) {
+        evolveLastPass_ = pass;
+        ++evolvePasses_;
+        evolveAdvanceDue_ = evolvePasses_ % settings_.evolve.everyPasses == 0;
+    }
+    // The stage is made in the middle of the pass, not at its start: the switch of the stage before sits at the start
+    // of this pass, and a voice that runs a little behind the hub must have taken it before the next stage reaches it
+    // (one pending result per slot would replace it, D-214).
+    if (!evolveAdvanceDue_ || *ppq - static_cast<double>(pass) * lengthPpq < lengthPpq / 2.0) {
         return;
     }
-    evolveLastPass_ = pass;
-    ++evolvePasses_;
-    if (evolvePasses_ % settings_.evolve.everyPasses != 0) {
-        return;
-    }
+    evolveAdvanceDue_ = false;
     const auto* style = styles_.findOrFallback(slot->pattern->styleId);
     if (style == nullptr) {
         return;
@@ -401,9 +523,29 @@ void ProcessorBase::evolveTick() {
     archetype.energyPct = settings_.generation.energyPct;
     archetype.creativityPct = settings_.generation.creativityPct;
     if (evolveLayer_.advance(*slot->pattern, *style, archetype, settings_.evolve)) {
-        // The stage plays from the next pass: the pass that has just begun is the last one of the stage before.
-        publisher_.publishPattern(slotIndex, evolveLayer_.current(), lengthPpq);
+        // The stage plays from the next pass: the pass that has just begun is the last one of the stage before. In a
+        // group the start is stamped, so that hub and voices switch at the same position.
+        const mm::core::Pattern stage = evolveLayer_.current();
+        std::optional<double> stamp;
+        if (evolveCompany()) {
+            stamp = static_cast<double>(pass + 1) * lengthPpq;
+        }
+        message = evolveShow(slotIndex, &stage, lengthPpq, stamp);
         evolveStagePublished_ = true;
+    }
+}
+
+void ProcessorBase::adoptHubOverlay(const mm::core::OverlayPtr& overlay, std::optional<double> stampPpq) {
+    const juce::ScopedLock lock(slotsLock_);
+    if (settings_.role != mm::core::InstanceRole::Voice) {
+        return;
+    }
+    if (overlay != nullptr && overlay->pattern != nullptr) {
+        voiceOverlay_ = overlay;
+        publisher_.publishPattern(overlay->slot, *overlay->pattern, 4.0, stampPpq);
+    } else if (voiceOverlay_ != nullptr) {
+        publisher_.restoreSlot(slots_, voiceOverlay_->slot, 4.0, stampPpq);
+        voiceOverlay_.reset();
     }
 }
 
@@ -540,6 +682,9 @@ void ProcessorBase::adoptHubSlots(const mm::core::SlotSnapshot& snapshot, std::o
     if (settings_.role != mm::core::InstanceRole::Voice || snapshot == nullptr) {
         return;
     }
+    if (slots_.origin() != snapshot->origin()) {
+        voiceOverlay_.reset(); // the publisher starts over with another bank: nothing of the old stage is left
+    }
     slots_ = *snapshot; // a copy: the hub's snapshot stays immutable
     undo_.clear();
     publisher_.sync(slots_, 4.0, stampPpq);
@@ -590,8 +735,12 @@ void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& 
     outputVoice_.store(settings_.outputVoice);
     publisher_.setOutputVoice(settings_.outputVoice);
     publisher_.sync(slots_);
-    if (evolveStagePublished_ && evolveLayer_.active()) { // a new voice or octave published the slots again
+    // A new voice or octave published the slots again: the stage that sounds goes to the engine once more.
+    if (evolveStagePublished_ && evolveLayer_.active()) {
         publisher_.publishPattern(evolveLayer_.slot(), evolveLayer_.current(), 4.0);
+    } else if (voiceOverlay_ != nullptr && voiceOverlay_->pattern != nullptr &&
+               settings_.role == mm::core::InstanceRole::Voice) {
+        publisher_.publishPattern(voiceOverlay_->slot, *voiceOverlay_->pattern, 4.0);
     }
 }
 
@@ -1886,7 +2035,9 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     startKeyPending_ = false; // the project has its own key
     startKeyTimer_.reset();
     if (const auto* parameters = root->getChildByName(parameters_.state.getType())) {
+        loadingState_.store(true);
         parameters_.replaceState(juce::ValueTree::fromXml(*parameters));
+        loadingState_.store(false);
     }
 
     mm::core::InstanceSettings settings;

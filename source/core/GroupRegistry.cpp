@@ -71,6 +71,7 @@ void GroupRegistry::remove(MemberId id) {
     if (hub_ == id) {
         hub_ = 0;
         hubSnapshot_.reset();
+        hubOverlay_.reset();
     }
     notify();
 }
@@ -82,6 +83,7 @@ InstanceRole GroupRegistry::setRole(MemberId id, InstanceRole role) {
     }
     entry->refused = false;
     entry->sentSnapshot.reset(); // a voice that joins (again) hears the hub's slot set
+    entry->sentOverlay.reset();  // and its stage
     if (role == InstanceRole::Hub) {
         if (hub_ != 0 && hub_ != id) {
             entry->role = InstanceRole::Solo;
@@ -90,6 +92,7 @@ InstanceRole GroupRegistry::setRole(MemberId id, InstanceRole role) {
             // The hub's slot set is the state of the group from now on.
             entry->role = InstanceRole::Hub;
             hub_ = id;
+            hubOverlay_.reset(); // a new hub starts without a stage
             hubSnapshot_ = entry->member->currentSlots();
             entry = find(id); // the callback may have changed the member list
         }
@@ -97,6 +100,7 @@ InstanceRole GroupRegistry::setRole(MemberId id, InstanceRole role) {
         if (hub_ == id) {
             hub_ = 0;
             hubSnapshot_.reset();
+            hubOverlay_.reset();
         }
         entry->role = role;
     }
@@ -116,6 +120,17 @@ bool GroupRegistry::publish(MemberId id, SlotSnapshot snapshot, std::optional<do
         return false;
     }
     hubSnapshot_ = std::move(snapshot);
+    hubStamp_ = stampPpq;
+    notify();
+    hubStamp_.reset();
+    return true;
+}
+
+bool GroupRegistry::publishOverlay(MemberId id, OverlayPtr overlay, std::optional<double> stampPpq) {
+    if (id == 0 || id != hub_) {
+        return false;
+    }
+    hubOverlay_ = std::move(overlay);
     hubStamp_ = stampPpq;
     notify();
     hubStamp_.reset();
@@ -152,12 +167,14 @@ void GroupRegistry::notify() {
         size_t voices = 0;
         SlotSnapshot snapshot;
         std::optional<double> stamp;
+        bool overlayChanged = false;
+        OverlayPtr overlay;
     };
     std::vector<Call> calls;
     const std::optional<double> stamp = hubStamp_; // callbacks may publish again
     const size_t voices = voiceCount();
     for (auto& entry : members_) {
-        Call call{entry.id, entry.member, false, GroupStatus::Solo, 0, nullptr, std::nullopt};
+        Call call{entry.id, entry.member, false, GroupStatus::Solo, 0, nullptr, std::nullopt, false, nullptr};
         const GroupStatus now = statusOf(entry);
         const size_t count = entry.role == InstanceRole::Hub ? voices : 0;
         if (!entry.statusSent || entry.sentStatus != now || entry.sentVoices != count) {
@@ -173,7 +190,13 @@ void GroupRegistry::notify() {
             call.snapshot = hubSnapshot_;
             call.stamp = stamp;
         }
-        if (call.status || call.snapshot) {
+        if (entry.role == InstanceRole::Voice && entry.sentOverlay != hubOverlay_) {
+            entry.sentOverlay = hubOverlay_;
+            call.overlayChanged = true;
+            call.overlay = hubOverlay_;
+            call.stamp = stamp;
+        }
+        if (call.status || call.snapshot || call.overlayChanged) {
             calls.push_back(std::move(call));
         }
     }
@@ -184,6 +207,9 @@ void GroupRegistry::notify() {
         }
         if (call.snapshot) {
             call.member->onSnapshot(call.snapshot, call.stamp);
+        }
+        if (call.overlayChanged) {
+            call.member->onOverlay(call.overlay, call.stamp);
         }
         if (call.status) {
             call.member->onStatus(call.newStatus, call.voices);
