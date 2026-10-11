@@ -30,6 +30,25 @@ private:
     bool dragging_ = false;
 };
 
+/// The grip in the bottom right corner of the window: dragging it sets the size of the editor continuously (SPEC 8.1).
+/// It reports the movement in screen pixels, which does not change while the window follows the mouse.
+class ScaleCorner : public juce::Component {
+public:
+    ScaleCorner();
+
+    /// Called when a drag starts.
+    std::function<void()> onDragStart;
+    /// Called while dragging with the distance from the start on screen; to the right is larger.
+    std::function<void(double)> onDrag;
+
+    void paint(juce::Graphics& g) override;
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+
+private:
+    int startScreenX_ = 0; ///< taken at the press: the corner itself moves while the window grows under the mouse
+};
+
 /// One field of the slot strip (SPEC 3.10): a click selects the slot, a right click (or Ctrl-click) asks for the menu
 /// of the slot actions, and dragging it onto another field exchanges the two; with Alt held the drop copies instead.
 /// Slot numbers are 1-based, like the host parameter.

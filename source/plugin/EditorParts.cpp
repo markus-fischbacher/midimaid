@@ -23,6 +23,34 @@ void DragHandle::paint(juce::Graphics& g) {
     }
 }
 
+ScaleCorner::ScaleCorner() {
+    setComponentID("scaleCorner");
+    setMouseCursor(juce::MouseCursor::BottomRightCornerResizeCursor);
+}
+
+void ScaleCorner::paint(juce::Graphics& g) {
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour(juce::Colour(0xff9ba1af).withAlpha(0.7f));
+    for (int i = 0; i < 3; ++i) {
+        const float offset = 4.0f + static_cast<float>(i) * 4.0f;
+        g.drawLine(bounds.getRight() - offset - 1.0f, bounds.getBottom() - 2.0f, bounds.getRight() - 2.0f,
+                   bounds.getBottom() - offset - 1.0f, 1.2f);
+    }
+}
+
+void ScaleCorner::mouseDown(const juce::MouseEvent& event) {
+    startScreenX_ = event.getScreenX();
+    if (onDragStart) {
+        onDragStart();
+    }
+}
+
+void ScaleCorner::mouseDrag(const juce::MouseEvent& event) {
+    if (onDrag) {
+        onDrag(static_cast<double>(event.getScreenX() - startScreenX_));
+    }
+}
+
 juce::File DragHandle::file() const {
     return voice_ == 0 ? exporter_.readyFile() : exporter_.readyFile(voice_);
 }
