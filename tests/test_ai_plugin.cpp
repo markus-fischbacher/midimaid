@@ -789,3 +789,32 @@ TEST_CASE("a failed AI request shows what the provider said, shortened", "[ai-pl
     CHECK(label->getText().contains("...")); // the detail is cut
     CHECK(label->getText().length() < 400);
 }
+
+TEST_CASE("the status message uses the whole width, and only the room the shown buttons leave", "[ai-plugin][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* label = statusLabelOf(*editor);
+    auto* retry = dynamic_cast<juce::TextButton*>(findById(*editor, "retry"));
+    auto* settingsHelp = dynamic_cast<juce::TextButton*>(findById(*editor, "errorSettings"));
+    REQUIRE((label != nullptr && retry != nullptr && settingsHelp != nullptr));
+    const int full = editor->getWidth() - 32;
+    CHECK(label->getWidth() == full); // no error: nothing beside it
+
+    auto provider = mock();
+    provider->enqueueError(mm::ai::AiStatus::AuthFailed, "bad key", 401);
+    ScopedAiBackend backend(backendWith(provider));
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(pumpUntil([&] { return retry->isVisible() && settingsHelp->isVisible(); }));
+    CHECK(label->getWidth() < full - 200); // the buttons take their room
+    CHECK(label->getRight() <= retry->getX());
+    CHECK(label->getRight() <= settingsHelp->getX());
+    CHECK_FALSE(retry->getBounds().intersects(settingsHelp->getBounds()));
+
+    provider->enqueueText(validAnswer(processor));
+    processor.generate(); // a fresh request: the buttons go, the message has the width again
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(pumpUntil([&] { return !retry->isVisible(); }));
+    CHECK(label->getWidth() == full);
+}

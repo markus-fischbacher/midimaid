@@ -131,6 +131,7 @@ private:
     juce::ComboBox zoomBox_; // the size of the window (SPEC 8.1), both layouts
     ScaleCorner scaleCorner_; // continuous size by dragging the corner, both layouts
     juce::TextButton helpButton_; // opens the help dialog (SPEC 6.5)
+    int statusButtons_ = 0; // which of the buttons beside the status message are shown
     int cornerStartPct_ = 100;
     double cornerStartWidth_ = 0.0;
     RollView rollView_;
