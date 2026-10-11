@@ -38,9 +38,10 @@ void RollView::setPlayheadTick(std::optional<double> tick) {
 }
 
 void RollView::paint(juce::Graphics& g) {
-    const auto bounds = getLocalBounds().toFloat();
+    const auto frame = getLocalBounds().toFloat();
     g.setColour(juce::Colour(0xff1f2128));
-    g.fillRoundedRectangle(bounds, 7.0f);
+    g.fillRoundedRectangle(frame, 7.0f);
+    const auto bounds = frame.withTrimmedTop(kTitleHeight); // the notes lie below the title, never under it
 
     // Bar lines, with a fainter line on every quarter note.
     const float width = bounds.getWidth();

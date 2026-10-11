@@ -708,6 +708,12 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Test:** „the role box of the hub window is wide enough and covered by nothing“ für Solo und Hub (Breite ≥ 100 px, im Fenster, nichts darüber; Mutation mit der alten Reservierung: Breite 0 → rot) und „a voice that was switched to Hub next to a hub can be switched back to Voice“ (Ablauf mit zwei Instanzen).
 - **Hinweis:** Ein zweiter Hub wird von der Registry abgelehnt (Status „Hub abgelehnt“, die Instanz bleibt Solo); die Anzeige „Hub“ im Feld bleibt, bis man die Rolle wieder ändert.
 
+### D-206 – Der Name der Stimme steht in einem eigenen Streifen über den Noten (Phase 6, ändert D-193)
+
+- **Meldung:** Der Name der Stimme in der Piano-Roll („Slot 1 – Bass“) überdeckt Noten in den obersten Zeilen.
+- **Entscheidung:** Der farbige Punkt vor dem Namen entfällt (der Name genügt). Beide Rolls, die Hub-Roll (`EditableRoll`) und die Roll des Voice-Fensters (`RollView`), reservieren oben einen Streifen von 20 px für den Namen; die Noten, Taktlinien und der Playhead beginnen darunter. In der Hub-Roll rechnen die Mauskoordinaten den Streifen mit (`fieldPoint`, `lanePoint`), ebenso die Tastenbeschriftung und das Gummiband; ein Klick im Streifen trifft nichts. Die Roll zeigt dadurch eine Zeile weniger.
+- **Tests:** „the title of a roll lies above the notes, never over them“ und „the read-only roll keeps a strip for the title…“ (Mutation: Streifen entfernen → rot). Zwei Tests der Hub-Roll rechnen Feldkoordinaten in Fensterkoordinaten um und kannten den Streifen nicht; sie wurden um den Versatz ergänzt, ihre Prüfungen blieben unverändert.
+
 ### D-207 – „Hub öffnen“ sagt, wenn das Fenster des Hubs zu ist (Phase 6)
 
 - **Meldung:** „Hub öffnen“ in einer Stimme tat nichts. Das Fenster des Hubs war in Live geschlossen.
