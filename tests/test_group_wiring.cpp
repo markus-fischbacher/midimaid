@@ -1118,6 +1118,52 @@ TEST_CASE("the roll of the voice window shows the playhead too", "[group-wiring]
     CHECK(waitFor([&] { return !roll->playheadTick().has_value(); }, 2000));
 }
 
+TEST_CASE("the voice window sits on one grid: margins, one control height, no overlap", "[group-wiring][editor][layout]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    REQUIRE(editor->getWidth() == 600);
+    REQUIRE(editor->getHeight() == 320);
+    const auto inner = editor->getLocalBounds().reduced(16, 0);
+    std::vector<juce::Component*> shown;
+    for (auto* component : editor->getChildren()) {
+        if (component->isVisible() && component->getWidth() > 0) {
+            shown.push_back(component);
+        }
+    }
+    REQUIRE(shown.size() >= 8);
+    for (auto* component : shown) {
+        INFO(component->getComponentID().toStdString());
+        CHECK(inner.contains(component->getBounds())); // 16 px at the sides
+        // the controls share one height; the roll, the status line and the drag handle are not controls
+        const bool control = dynamic_cast<juce::ComboBox*>(component) != nullptr ||
+                             dynamic_cast<juce::TextButton*>(component) != nullptr ||
+                             dynamic_cast<juce::ToggleButton*>(component) != nullptr;
+        if (control) {
+            CHECK(component->getHeight() == 34);
+        }
+    }
+    for (size_t i = 0; i < shown.size(); ++i) {
+        for (size_t j = i + 1; j < shown.size(); ++j) {
+            INFO(shown[i]->getComponentID().toStdString() << " / " << shown[j]->getComponentID().toStdString());
+            CHECK_FALSE(shown[i]->getBounds().intersects(shown[j]->getBounds()));
+        }
+    }
+    // rows line up: the controls of one row have the same top edge, the first column starts at the margin
+    auto* role = child<juce::ComboBox>(*editor, "role");
+    auto* mute = child<juce::ToggleButton>(*editor, "mute");
+    auto* zoom = child<juce::ComboBox>(*editor, "zoom");
+    REQUIRE((role != nullptr && mute != nullptr && zoom != nullptr));
+    CHECK(role->getX() == 16);
+    CHECK(mute->getX() == 16);
+    CHECK(zoom->getRight() == 600 - 16);
+    CHECK(child<juce::TextButton>(*editor, "generate")->getRight() == 600 - 16);
+    CHECK(child<juce::TextButton>(*editor, "generate")->getY() == mute->getY());
+    CHECK(child<juce::ComboBox>(*editor, "octave")->getY() == mute->getY());
+    CHECK(child<juce::TextButton>(*editor, "openHub")->getY() == mute->getY());
+}
+
 TEST_CASE("the octave box sets the octave of the instance and shows it", "[group-wiring][editor]") {
     Quiet quiet;
     Instance voice("Voice");
@@ -3292,3 +3338,43 @@ TEST_CASE("the editable roll draws the playhead line at the tick, with the zoom 
     CHECK(differingColumns(plain, rig.roll.createComponentSnapshot(rig.roll.getLocalBounds(), false, 1.0f)).empty());
 }
 
+
+namespace {
+
+void writePng(const juce::Image& image, const juce::String& name) {
+    const auto folder = juce::SystemStats::getEnvironmentVariable("MM_SNAPSHOT_DIR", {});
+    REQUIRE(folder.isNotEmpty());
+    const auto file = juce::File(folder).getChildFile(name);
+    juce::FileOutputStream stream(file);
+    REQUIRE(stream.openedOk());
+    stream.setPosition(0);
+    stream.truncate();
+    juce::PNGImageFormat png;
+    REQUIRE(png.writeImageToStream(image, stream));
+}
+
+} // namespace
+
+// Renders the windows to PNG files for a look at the design (not a check): MM_SNAPSHOT_DIR=<folder> run with "[.snapshot]".
+TEST_CASE("snapshot of the voice window and the hub window", "[.snapshot]") {
+    Quiet quiet;
+    for (const bool hubWindow : {false, true}) {
+        Instance instance("Snapshot");
+        instance.setRole(hubWindow ? InstanceRole::Hub : InstanceRole::Voice);
+        mm::core::GenerationRequest request;
+        request.lengthBars = 4;
+        request.seed = 7;
+        const auto result = mm::core::generatePattern(*instance.processor.styles().find("peak_time"), request);
+        REQUIRE(result.success);
+        instance.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, result.pattern)); });
+        instance.setSlotParameter(1);
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        instance.setPpq(5.0);
+        for (int i = 0; i < 12; ++i) {
+            instance.step();
+            pumpMessages(40);
+        }
+        const auto image = editor->createComponentSnapshot(editor->getLocalBounds(), false, 2.0f);
+        writePng(image, hubWindow ? "hub.png" : "voice.png");
+    }
+}

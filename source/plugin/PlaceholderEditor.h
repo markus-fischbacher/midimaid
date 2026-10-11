@@ -1,6 +1,7 @@
 #pragma once
 
 #include "plugin/EditorParts.h"
+#include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/ProcessorBase.h"
 #include "plugin/RollView.h"
 
@@ -40,6 +41,7 @@ private:
     /// Switches between the voice UI and the placeholder layout (size and visible controls).
     void applyLayout(bool voiceLayout);
     void applyScale();
+    void layoutVoiceWindow();
     /// The playhead of the piano rolls (30 times a second): the host position as a line in the roll of the slot that
     /// plays, in the hub rows and in the voice window.
     void updatePlayhead();
@@ -69,6 +71,7 @@ private:
     void saveEditSettings();
 
     ProcessorBase& processor_;
+    MidiMaidLookAndFeel lookAndFeel_; // declared before the components that use it
     struct PlayheadTicker : juce::Timer {
         std::function<void()> tick;
         void timerCallback() override { tick(); }
