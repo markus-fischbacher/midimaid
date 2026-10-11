@@ -91,4 +91,26 @@ bool SlotPublisher::publishEdit(const core::SlotBank& bank, size_t index) {
     return true;
 }
 
+void SlotPublisher::publishPattern(size_t index, const core::Pattern& pattern, double gridPpq) {
+    if (index >= kSlotCount) {
+        return;
+    }
+    core::Slot stage;
+    stage.pattern = pattern;
+    handover_.publishResult(index, render(stage), gridPpq);
+    handover_.collectReturned();
+}
+
+bool SlotPublisher::restoreSlot(const core::SlotBank& bank, size_t index, double gridPpq) {
+    const core::Slot* slot = bank.slot(index);
+    if (slot == nullptr || !slot->pattern) {
+        return false;
+    }
+    handover_.publishResult(index, render(*slot), gridPpq);
+    published_[index] = slot->revision;
+    everPublished_[index] = true;
+    handover_.collectReturned();
+    return true;
+}
+
 } // namespace mm::engine

@@ -39,6 +39,7 @@ public:
 struct NoteOn {
     long long sample;
     int pitch;
+    int velocity = 0;
 };
 
 /// One plugin instance with its own transport: block by block like a host would drive it.
@@ -83,8 +84,8 @@ public:
         for (const auto metadata : midi_) {
             const auto message = metadata.getMessage();
             if (message.isNoteOn()) {
-                notes_.push_back(
-                    {std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition, message.getNoteNumber()});
+                notes_.push_back({std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition,
+                                  message.getNoteNumber(), message.getVelocity()});
             } else if (message.isNoteOff()) {
                 offs_.push_back(
                     {std::llround(ppq_ * kSamplesPerPpq) + metadata.samplePosition, message.getNoteNumber()});
@@ -4221,4 +4222,426 @@ TEST_CASE("pinching zooms the roll of the hub and of the voice window, and the r
     rolls[0]->mouseMagnify(event(*rolls[0]), 2.0f);
     CHECK(rolls[0]->viewport().spanTicks < before);
     CHECK(rolls[1]->viewport().spanTicks == rolls[0]->viewport().spanTicks);
+}
+
+namespace {
+
+/// A generated two-bar pattern of the shipped styles for the Evolve tests (8 PPQ per pass).
+mm::core::Pattern evolvePattern(Instance& hub, uint64_t seed) {
+    const auto* style = hub.processor.styles().findOrFallback("peak_time");
+    REQUIRE(style != nullptr);
+    mm::core::GenerationRequest request;
+    request.lengthBars = 2;
+    request.seed = seed;
+    const auto result = mm::core::generatePattern(*style, request);
+    REQUIRE(result.success);
+    return result.pattern;
+}
+
+/// What the instance sounded between two PPQ positions, in order: pitch and the time from the start of each note on, so
+/// that a stage that moves a note is told from the stage before (the velocity is left out: the output stage varies it
+/// from pass to pass).
+std::vector<long long> pitchesBetween(const Instance& instance, double fromPpq, double toPpq) {
+    std::vector<long long> sound;
+    for (const auto& note : instance.notes()) {
+        if (note.sample >= at(fromPpq) && note.sample < at(toPpq)) {
+            sound.push_back(note.pitch);
+            sound.push_back((note.sample - at(fromPpq) + 500) / 1000); // a block's rounding is no change
+        }
+    }
+    return sound;
+}
+
+/// Drives the hub block by block up to `ppq` and calls the timer of the Evolve layer after each block.
+void runEvolve(Instance& hub, double ppq) {
+    while (hub.ppq() < ppq - 1e-9) {
+        hub.step();
+        hub.processor.evolveTick();
+    }
+}
+
+/// The notes of both patterns are the same (the bank gives every stored pattern its own version).
+bool sameNotes(const mm::core::Pattern& a, const mm::core::Pattern& b) {
+    return a.voices == b.voices;
+}
+
+mm::core::EvolveSettings evolveEvery(int passes, bool fromOriginal = false, int strength = 40) {
+    return {passes, fromOriginal, strength};
+}
+
+} // namespace
+
+TEST_CASE("evolve: a new stage every N passes plays from the pass after, the slot stays as it is", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    const mm::core::Pattern original = evolvePattern(hub, 1);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+    hub.processor.setEvolveSettings(evolveEvery(2));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    REQUIRE(hub.processor.evolveOn());
+
+    runEvolve(hub, 8.0 * 6 + 0.1);
+    // Passes of 8 PPQ: 1 and 2 are stage 0, 3 and 4 stage 1 (made at the start of pass 2), 5 and 6 stage 2.
+    const auto pass = [&](int n) { return pitchesBetween(hub, 8.0 * n, 8.0 * (n + 1)); };
+    REQUIRE_FALSE(pass(0).empty());
+    CHECK(pass(0) == pass(1));
+    CHECK(pass(2) != pass(1));
+    CHECK(pass(2) == pass(3));
+    CHECK(pass(4) != pass(3));
+    CHECK(pass(4) == pass(5));
+    CHECK(hub.processor.evolveInfo().stage == 3); // stage 3 was made at the start of pass 6 for pass 7
+    CHECK(hub.processor.evolveInfo().changed);
+    // The slot itself never changed (SPEC 6.7)
+    const auto bank = hub.processor.slotsSnapshot();
+    CHECK(sameNotes(*bank.slot(0)->pattern, original));
+    CHECK(bank.slot(0)->history.size() == 1);
+}
+
+TEST_CASE("evolve: nothing happens while the transport stands, and counting starts again with the next start",
+          "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 2))); });
+    hub.processor.setEvolveSettings(evolveEvery(1));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    hub.setPlaying(false);
+    for (int i = 0; i < 40; ++i) {
+        hub.step();
+        hub.processor.evolveTick();
+    }
+    CHECK(hub.processor.evolveInfo().stage == 0);
+    CHECK(hub.processor.evolveInfo().layerActive);
+    hub.setPlaying(true);
+    runEvolve(hub, 0.5);
+    CHECK(hub.processor.evolveInfo().stage == 1); // every pass: the first pass already prepares the next stage
+}
+
+TEST_CASE("evolve: from the original every stage varies the slot, not the stage before", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    for (const bool fromOriginal : {false, true}) {
+        Instance hub("Hub");
+        hub.setRole(InstanceRole::Hub);
+        const mm::core::Pattern original = evolvePattern(hub, 3);
+        hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+        hub.processor.setEvolveSettings(evolveEvery(1, fromOriginal, 30));
+        hub.processor.setEvolveSeed(7);
+        hub.processor.setEvolve(true);
+        runEvolve(hub, 8.0 * 8 + 0.1);
+        INFO("fromOriginal " << fromOriginal);
+        CHECK(hub.processor.evolveInfo().stage >= 7);
+        CHECK(sameNotes(*hub.processor.slotsSnapshot().slot(0)->pattern, original));
+    }
+}
+
+TEST_CASE("evolve: keep takes the stage into the slot as a history entry and an undo step, and Evolve goes on",
+          "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    const mm::core::Pattern original = evolvePattern(hub, 4);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+    hub.processor.setEvolveSettings(evolveEvery(1));
+    hub.processor.setEvolveSeed(7);
+    CHECK_FALSE(hub.processor.evolveKeep()); // off: nothing to keep
+    CHECK(hub.processor.generationStatus() == mm::plugin::GenerationStatus::EvolveNothingToKeep);
+    hub.processor.setEvolve(true);
+    CHECK_FALSE(hub.processor.evolveKeep()); // stage 0 is the slot itself
+    runEvolve(hub, 8.0 * 3 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().changed);
+    REQUIRE(hub.processor.evolveKeep());
+    CHECK(hub.processor.generationStatus() == mm::plugin::GenerationStatus::EvolveKept);
+    const auto bank = hub.processor.slotsSnapshot();
+    CHECK_FALSE(sameNotes(*bank.slot(0)->pattern, original));
+    CHECK(bank.slot(0)->history.size() == 2);
+    CHECK(hub.processor.canUndo());
+    const auto info = hub.processor.evolveInfo();
+    CHECK(info.on);
+    CHECK(info.layerActive);
+    CHECK(info.stage == 0); // goes on from the kept stage
+    CHECK_FALSE(info.changed);
+    runEvolve(hub, 8.0 * 5 + 0.1);
+    CHECK(hub.processor.evolveInfo().stage >= 1);
+    CHECK(sameNotes(*hub.processor.slotsSnapshot().slot(0)->pattern, *bank.slot(0)->pattern)); // the slot stays at the kept stage
+    // one undo step takes the kept stage back
+    REQUIRE(hub.processor.undo());
+    CHECK(sameNotes(*hub.processor.slotsSnapshot().slot(0)->pattern, original));
+}
+
+TEST_CASE("evolve: back plays one of the last stages again, no further than 8", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 5))); });
+    hub.processor.setEvolveSettings(evolveEvery(1));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    CHECK_FALSE(hub.processor.evolveBack());
+    runEvolve(hub, 8.0 * 4 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().canBack);
+    const auto before = pitchesBetween(hub, 8.0 * 2, 8.0 * 3);
+    REQUIRE(hub.processor.evolveBack());
+    runEvolve(hub, 8.0 * 6 + 0.1);
+    // after going back, the layer goes on from the stage that sounds: the stage numbers keep counting
+    CHECK(hub.processor.evolveInfo().stage >= 3);
+    CHECK_FALSE(before.empty());
+}
+
+TEST_CASE("evolve: switching off plays the unchanged slot again from the next bar line", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 6))); });
+    hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    runEvolve(hub, 8.0 * 3 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().changed);
+    const auto stage = pitchesBetween(hub, 8.0 * 2, 8.0 * 2 + 4.0); // first bar of the pass that plays stage 2
+    hub.processor.setEvolve(false);
+    CHECK_FALSE(hub.processor.evolveOn());
+    CHECK_FALSE(hub.processor.evolveInfo().layerActive);
+    runEvolve(hub, 8.0 * 5);
+    // The first pass after the switch-off is the slot again: it equals the very first pass
+    const auto slotAgain = pitchesBetween(hub, 8.0 * 4, 8.0 * 4 + 4.0);
+    CHECK(slotAgain == pitchesBetween(hub, 0.0, 4.0));
+    CHECK(slotAgain != stage);
+}
+
+TEST_CASE("evolve: a slot change ends the layer of the old slot without taking it over", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    const mm::core::Pattern first = evolvePattern(hub, 7);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(0, first));
+        REQUIRE(bank.setResult(1, evolvePattern(hub, 8)));
+    });
+    hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    runEvolve(hub, 8.0 * 3 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().changed);
+    hub.setSlotParameter(2);
+    runEvolve(hub, 8.0 * 4 + 0.1);
+    CHECK(hub.processor.evolveInfo().layerActive); // a new layer on slot 2
+    CHECK(sameNotes(*hub.processor.slotsSnapshot().slot(0)->pattern, first));
+    CHECK(hub.processor.slotsSnapshot().slot(0)->history.size() == 1);
+    CHECK(hub.processor.evolveInfo().stage <= 2);
+    // Back to slot 1: it plays its own content, not the stage the old layer left in the engine
+    hub.processor.setEvolve(false);
+    hub.setSlotParameter(1);
+    runEvolve(hub, 8.0 * 7);
+    CHECK(pitchesBetween(hub, 8.0 * 6, 8.0 * 6 + 4.0) == pitchesBetween(hub, 0.0, 4.0));
+}
+
+TEST_CASE("evolve: a manual action works on the stage that sounds, nothing the musician heard is lost",
+          "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    const mm::core::Pattern original = evolvePattern(hub, 9);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+    hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    runEvolve(hub, 8.0 * 3 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().changed);
+    // A note edit
+    REQUIRE(hub.processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        return mm::core::setVoiceLocked(pattern, 0, true);
+    }));
+    const auto bank = hub.processor.slotsSnapshot();
+    CHECK(bank.slot(0)->history.size() == 2);  // the stage became a result first
+    CHECK_FALSE(sameNotes(*bank.slot(0)->pattern, original));
+    CHECK(hub.processor.evolveInfo().layerActive);
+    CHECK_FALSE(hub.processor.evolveInfo().changed); // and the layer goes on from there
+    // undo: the edit, then the kept stage
+    REQUIRE(hub.processor.undo());
+    REQUIRE(hub.processor.undo());
+    CHECK(sameNotes(*hub.processor.slotsSnapshot().slot(0)->pattern, original));
+}
+
+TEST_CASE("evolve: a manual result restarts the layer from the new slot content", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 10))); });
+    hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+    hub.processor.setEvolveSeed(7);
+    hub.processor.setEvolve(true);
+    runEvolve(hub, 8.0 * 3 + 0.1);
+    REQUIRE(hub.processor.evolveInfo().stage > 0);
+    const mm::core::Pattern fresh = evolvePattern(hub, 11);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, fresh)); });
+    hub.setPlaying(false); // the tick restarts the layer without counting a pass
+    hub.step();
+    hub.processor.evolveTick();
+    CHECK(hub.processor.evolveInfo().stage == 0); // the stage was dropped: the manual result wins (SPEC 6.8)
+    CHECK_FALSE(hub.processor.evolveInfo().changed);
+    CHECK(sameNotes(*hub.processor.slotsSnapshot().slot(0)->pattern, fresh));
+}
+
+TEST_CASE("evolve: an offline render switches it off, a voice cannot switch it on", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    {
+        Instance hub("Hub");
+        hub.setRole(InstanceRole::Hub);
+        hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 12))); });
+        hub.processor.setEvolveSettings(evolveEvery(1, false, 60));
+        hub.processor.setEvolveSeed(7);
+        hub.processor.setEvolve(true);
+        runEvolve(hub, 8.0 * 3 + 0.1);
+        REQUIRE(hub.processor.evolveInfo().changed);
+        hub.processor.setNonRealtime(true);
+        hub.processor.evolveTick();
+        CHECK_FALSE(hub.processor.evolveOn());
+        CHECK_FALSE(hub.processor.evolveInfo().layerActive);
+        hub.processor.setNonRealtime(false);
+        hub.processor.setEvolve(false); // takes the idle timer away
+    }
+    {
+        Instance voice("Voice");
+        voice.setRole(InstanceRole::Voice);
+        voice.processor.setEvolve(true);
+        CHECK_FALSE(voice.processor.evolveOn());
+        CHECK(voice.processor.generationStatus() == mm::plugin::GenerationStatus::UseHub);
+    }
+}
+
+TEST_CASE("evolve: the settings are saved when they differ from the default, the switch is not saved",
+          "[group-wiring][evolve]") {
+    Quiet quiet;
+    Instance source("Source");
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("evolveEvery"));
+    CHECK_FALSE(root->hasAttribute("evolveStrength"));
+    CHECK_FALSE(root->hasAttribute("evolveFromOriginal"));
+
+    source.processor.setEvolveSettings({8, true, 55});
+    source.processor.setEvolve(true);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    const auto evolve = target.processor.instanceSettings().evolve;
+    CHECK(evolve.everyPasses == 8);
+    CHECK(evolve.fromOriginal);
+    CHECK(evolve.strengthPct == 55);
+    CHECK_FALSE(target.processor.evolveOn()); // the layer is not saved (SPEC 6.7)
+    source.processor.setEvolve(false);
+
+    // Values out of range are brought into range
+    auto bad = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(bad != nullptr);
+    bad->setAttribute("evolveEvery", 99);
+    bad->setAttribute("evolveStrength", 0);
+    juce::MemoryBlock badBlock;
+    juce::AudioProcessor::copyXmlToBinary(*bad, badBlock);
+    target.processor.setStateInformation(badBlock.getData(), static_cast<int>(badBlock.getSize()));
+    CHECK(target.processor.instanceSettings().evolve.everyPasses == mm::core::kEvolveMaxPasses);
+    CHECK(target.processor.instanceSettings().evolve.strengthPct == 1);
+}
+
+TEST_CASE("evolve: the controls are in the hub window, the settings only at the expert level, and nothing overlaps",
+          "[group-wiring][editor][layout][evolve]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 13))); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    auto* toggle = child<juce::TextButton>(*editor, "evolve");
+    auto* back = child<juce::TextButton>(*editor, "evolve_back");
+    auto* keep = child<juce::TextButton>(*editor, "evolve_keep");
+    auto* stage = child<juce::Label>(*editor, "evolve_stage");
+    REQUIRE((toggle != nullptr && back != nullptr && keep != nullptr && stage != nullptr));
+    CHECK(toggle->isVisible());
+    CHECK(toggle->getButtonText() == "Evolve");
+    CHECK(keep->getButtonText() == "Behalten");
+    CHECK_FALSE(back->isEnabled());
+    CHECK_FALSE(keep->isEnabled());
+    CHECK(stage->getText() == "Stufe –");
+    for (auto* component : std::initializer_list<juce::Component*>{toggle, back, keep, stage}) {
+        CHECK(editor->getLocalBounds().contains(component->getBounds()));
+        for (auto* other : editor->getChildren()) {
+            if (other != component && other->isVisible() && other->getWidth() > 0 &&
+                dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+                INFO(component->getComponentID().toStdString() << " vs " << other->getComponentID().toStdString());
+                CHECK_FALSE(component->getBounds().intersects(other->getBounds()));
+            }
+        }
+    }
+    // the toggle switches the layer
+    toggle->setToggleState(true, juce::dontSendNotification);
+    toggle->onClick();
+    CHECK(hub.processor.evolveOn());
+    toggle->setToggleState(false, juce::dontSendNotification);
+    toggle->onClick();
+    CHECK_FALSE(hub.processor.evolveOn());
+
+    // expert level: the row with the settings
+    auto* every = child<juce::ComboBox>(*editor, "evolve_every");
+    auto* original = child<juce::ToggleButton>(*editor, "evolve_original");
+    auto* strength = child<juce::Slider>(*editor, "evolve_strength");
+    REQUIRE((every != nullptr && original != nullptr && strength != nullptr));
+    CHECK_FALSE(every->isVisible());
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(true, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK(every->isVisible());
+    CHECK(original->isVisible());
+    CHECK(strength->isVisible());
+    CHECK(editor->getLocalBounds().contains(every->getBounds()));
+    every->setSelectedId(6, juce::sendNotificationSync);
+    original->setToggleState(true, juce::dontSendNotification);
+    original->onClick();
+    strength->setValue(70.0, juce::sendNotificationSync);
+    const auto evolve = hub.processor.instanceSettings().evolve;
+    CHECK(evolve.everyPasses == 6);
+    CHECK(evolve.fromOriginal);
+    CHECK(evolve.strengthPct == 70);
+    // back to the basic level (the stored expert flag of the global settings is not touched by the other tests)
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+}
+
+TEST_CASE("evolve: a stage starts exactly with a pass of the pattern, never in the middle", "[group-wiring][evolve]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    bool anyChange = false;
+    for (uint64_t seed = 1; seed <= 6; ++seed) {
+        Instance hub("Hub");
+        hub.setRole(InstanceRole::Hub);
+        hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, seed))); });
+        hub.processor.setEvolveSettings(evolveEvery(2, true, 100));
+        hub.processor.setEvolveSeed(7);
+        hub.processor.setEvolve(true);
+        runEvolve(hub, 8.0 * 4 + 0.1);
+        // The stage made at the start of pass 2 (8 PPQ long) plays from pass 3: pass 2, with both of its bars, is
+        // still the slot as it was in pass 1.
+        const auto pass = [&](int n) { return pitchesBetween(hub, 8.0 * n, 8.0 * (n + 1)); };
+        INFO("seed " << seed);
+        REQUIRE_FALSE(pass(0).empty());
+        CHECK(pass(0) == pass(1));
+        anyChange = anyChange || pass(2) != pass(1);
+        hub.processor.setEvolve(false);
+    }
+    CHECK(anyChange);
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/EvolveLayer.h"
 #include "core/Pattern.h"
 #include "core/Theory.h"
 
@@ -49,6 +50,7 @@ struct InstanceSettings {
     GenerationSettings generation;
     SlotFollow slotFollow = SlotFollow::Hub; ///< only a voice looks at it
     int octave = 0;                          ///< -2 to +2: this instance plays its voice that many octaves up (D-147)
+    EvolveSettings evolve{};                 ///< what the Evolve layer does when it is on (SPEC 6.7); on/off is not saved
 
     bool operator==(const InstanceSettings&) const = default;
 };

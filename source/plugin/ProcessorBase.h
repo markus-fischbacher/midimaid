@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Library.h"
+#include "core/EvolveLayer.h"
 #include "core/InstanceSettings.h"
 #include "core/ParameterRegister.h"
 #include "core/RollEdit.h"
@@ -76,7 +77,9 @@ enum class GenerationStatus {
     SlotPasted,          ///< the clipboard became the result of a slot
     SlotNothingToCopy,   ///< the slot is empty, or nothing is on the clipboard
     SlotCleared,         ///< a slot was reset completely
-    SlotsSwapped         ///< two slots changed places
+    SlotsSwapped,        ///< two slots changed places
+    EvolveKept,          ///< the stage that sounded went into the slot (SPEC 6.7)
+    EvolveNothingToKeep  ///< no stage other than the slot sounds, or Evolve is off
 };
 
 /// Shared base of both plugin variants (instrument and MIDI-FX). Phase 0 behaviour: silent
@@ -189,6 +192,34 @@ public:
     void editPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern);
     /// Message thread: result for `slot` (1 to 16); it plays at the next grid point once that slot is selected.
     void submitResult(int slot, std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq = 4.0);
+    /// The Evolve layer (SPEC 6.7, v1.1), message thread, hub and solo only (a voice says "use the hub"). While it is on,
+    /// a stage (a variation of the slot or of the stage before) is made every `EvolveSettings::everyPasses` passes
+    /// of the pattern and plays from the pass after; the slot itself stays as it is. Without a playing transport
+    /// nothing happens, and an offline render switches it off (SPEC 6.6). It is not saved with the project.
+    struct EvolveInfo {
+        bool on = false;
+        bool layerActive = false; ///< a layer exists (on, with a pattern in the selected slot)
+        uint32_t stage = 0;       ///< number of the stage that plays (0: the unchanged slot)
+        bool canBack = false;
+        bool changed = false; ///< a stage other than the slot sounds: "keep" does something
+        bool operator==(const EvolveInfo&) const = default;
+    };
+    void setEvolve(bool on);
+    bool evolveOn() const { return evolveOn_; }
+    EvolveInfo evolveInfo() const;
+    /// Takes the stage that sounds into the slot (a history entry and an undo step, SPEC 6.7); Evolve goes on from there.
+    /// False when no stage other than the slot sounds.
+    bool evolveKeep();
+    /// Goes back one stage of the last 8; it plays at the next bar line. False at the end of the memory.
+    bool evolveBack();
+    /// Message thread: fixes the seed the layer takes for its stages (default: a random one per layer), so that the
+    /// stages repeat. For tests and diagnosis.
+    void setEvolveSeed(std::optional<uint64_t> seed) { evolveSeed_ = seed; }
+    /// Message thread: the settings of the layer (clamped); they act from the next stage.
+    void setEvolveSettings(const mm::core::EvolveSettings& settings);
+    /// What the timer of the layer does every 40 ms: follows the slot, counts the passes of the pattern by the playhead
+    /// and makes the next stage. Public so that tests drive it without waiting for the timer.
+    void evolveTick();
     /// Message thread: sets the host parameter `slot` (1 to 16) as if the user had moved it. The audio thread reads
     /// the parameter at each block start and never writes it (SPEC 3.13).
     void selectSlot(int slot);
@@ -386,6 +417,9 @@ private:
     void applyGenerated(const GenerationJob& job, mm::core::Pattern pattern);
     void setInstanceSettingsLocked(const mm::core::InstanceSettings& settings);
     void updateSlotMode(); // message thread
+    void evolveEnd(bool restoreSlot);
+    void evolveCommitBefore(size_t slotIndex);
+    uint64_t newEvolveSeed() const;
     /// A new instance takes the key the user chose last (global settings, D-162) once the file is read.
     void applyStartKey();
 
@@ -432,6 +466,15 @@ private:
     std::atomic<int> uiScalePct_{mm::core::kDefaultUiScale}; // the host may set the state from any thread
     bool startKeyPending_ = true;              // message thread
     std::unique_ptr<ParkTimer> startKeyTimer_; // message thread
+    // The Evolve layer (message thread; `evolveLayer_` and the counters under `slotsLock_`)
+    bool evolveOn_ = false;
+    std::optional<uint64_t> evolveSeed_;
+    mm::core::EvolveLayer evolveLayer_;
+    uint64_t evolveRevision_ = 0;           // revision of the slot the layer started from
+    bool evolveStagePublished_ = false;     // the engine holds a stage that is not the slot content
+    std::optional<int64_t> evolveLastPass_; // the pass of the pattern the last tick saw
+    int evolvePasses_ = 0;                  // passes seen since the layer started
+    std::unique_ptr<ParkTimer> evolveTimer_;
     mm::engine::PatternPlayer player_;
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;

@@ -29,6 +29,7 @@ namespace mm::plugin {
 namespace {
 
 constexpr int kReturnCollectIntervalMs = 250;
+constexpr int kEvolveTickMs = 40; ///< how often the Evolve layer looks at the playhead
 /// Upper bound of the bytes one block can write: the engine's event capacity, with room for the event header.
 constexpr size_t kMidiBufferBytes = mm::engine::MidiEventList::kCapacity * 12;
 
@@ -53,7 +54,10 @@ void addReferences(GenerationJob& job, bool withExamples, bool providerIsLocal) 
 /// Retries a parked generation result on the message thread until the host renders in real time again.
 class ProcessorBase::ParkTimer : private juce::Timer {
 public:
-    explicit ParkTimer(std::function<void()> retry) : retry_(std::move(retry)) { startTimer(kReturnCollectIntervalMs); }
+    explicit ParkTimer(std::function<void()> retry, int intervalMs = kReturnCollectIntervalMs)
+        : retry_(std::move(retry)) {
+        startTimer(intervalMs);
+    }
     ~ParkTimer() override { stopTimer(); }
 
 private:
@@ -145,6 +149,7 @@ void ProcessorBase::applyStartKey() {
 }
 
 ProcessorBase::~ProcessorBase() {
+    evolveTimer_.reset();
     *libraryAlive_ = false;
     groupLink_->detach();                              // first: from here on no registry callback reaches this instance
     onGroupStatusChanged(mm::core::GroupStatus::Solo); // gives the channel slot back
@@ -203,6 +208,205 @@ void ProcessorBase::updateSlotMode() {
     slotMode_.store(static_cast<int>(mode), std::memory_order_release);
 }
 
+void ProcessorBase::setEvolve(bool on) {
+    if (on == evolveOn_) {
+        if (!on) {
+            evolveTimer_.reset(); // an idle timer from an offline render
+        }
+        return;
+    }
+    if (on) {
+        const juce::ScopedLock lock(slotsLock_);
+        if (settings_.role == mm::core::InstanceRole::Voice) {
+            generationStatus_ = GenerationStatus::UseHub; // the layer belongs to the hub (SPEC 6.7)
+            return;
+        }
+    }
+    evolveOn_ = on;
+    if (on) {
+        if (!evolveTimer_) {
+            evolveTimer_ = std::make_unique<ParkTimer>([this] { evolveTick(); }, kEvolveTickMs);
+        }
+    } else {
+        evolveTimer_.reset();
+        evolveEnd(true);
+    }
+}
+
+ProcessorBase::EvolveInfo ProcessorBase::evolveInfo() const {
+    const juce::ScopedLock lock(slotsLock_);
+    EvolveInfo info;
+    info.on = evolveOn_;
+    info.layerActive = evolveLayer_.active();
+    if (info.layerActive) {
+        info.stage = evolveLayer_.stage();
+        info.canBack = evolveLayer_.canBack();
+        info.changed = evolveLayer_.changed();
+    }
+    return info;
+}
+
+void ProcessorBase::setEvolveSettings(const mm::core::EvolveSettings& evolve) {
+    const juce::ScopedLock lock(slotsLock_);
+    settings_.evolve = mm::core::clampEvolveSettings(evolve);
+}
+
+uint64_t ProcessorBase::newEvolveSeed() const {
+    return evolveSeed_ ? *evolveSeed_ : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
+}
+
+void ProcessorBase::evolveEnd(bool restoreSlot) {
+    const juce::ScopedLock lock(slotsLock_);
+    if (evolveLayer_.active() && restoreSlot && evolveStagePublished_) {
+        publisher_.restoreSlot(slots_, evolveLayer_.slot());
+    }
+    evolveLayer_.stop();
+    evolveStagePublished_ = false;
+    evolveLastPass_.reset();
+    evolvePasses_ = 0;
+}
+
+void ProcessorBase::evolveCommitBefore(size_t slotIndex) {
+    if (!evolveOn_) {
+        return;
+    }
+    bool due;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        due = evolveLayer_.active() && evolveLayer_.slot() == slotIndex && evolveLayer_.changed();
+    }
+    if (due) {
+        evolveKeep(); // a manual action works on what sounds: nothing the musician heard gets lost (SPEC 6.8)
+    }
+}
+
+bool ProcessorBase::evolveKeep() {
+    std::optional<mm::core::Pattern> stage;
+    size_t slotIndex = 0;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (!evolveOn_ || !evolveLayer_.active() || !evolveLayer_.changed()) {
+            generationStatus_ = GenerationStatus::EvolveNothingToKeep;
+            return false;
+        }
+        stage = evolveLayer_.current();
+        slotIndex = evolveLayer_.slot();
+    }
+    bool done = false;
+    uint64_t revision = 0;
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto* slot = bank.slot(slotIndex);
+        if (slot == nullptr || !slot->pattern) {
+            return;
+        }
+        std::optional<mm::core::Pattern> before = slot->pattern;
+        const size_t cursor = slot->cursor;
+        if (bank.setResult(slotIndex, std::move(*stage))) {
+            undo_.recordResult(slotIndex, std::move(before), cursor, *bank.slot(slotIndex)->pattern);
+            revision = bank.slot(slotIndex)->revision;
+            done = true;
+        }
+    });
+    if (!done) {
+        generationStatus_ = GenerationStatus::EvolveNothingToKeep;
+        return false;
+    }
+    {
+        // The stage is the slot now: the layer goes on from there; the engine already plays this content.
+        const juce::ScopedLock lock(slotsLock_);
+        if (const auto* slot = slots_.slot(slotIndex); slot != nullptr && slot->pattern) {
+            evolveLayer_.start(slotIndex, *slot->pattern, newEvolveSeed());
+            evolveRevision_ = revision;
+            evolveStagePublished_ = false;
+        }
+    }
+    generationStatus_ = GenerationStatus::EvolveKept;
+    return true;
+}
+
+bool ProcessorBase::evolveBack() {
+    const juce::ScopedLock lock(slotsLock_);
+    if (!evolveOn_ || !evolveLayer_.back()) {
+        return false;
+    }
+    publisher_.publishPattern(evolveLayer_.slot(), evolveLayer_.current(), 4.0);
+    evolveStagePublished_ = true;
+    return true;
+}
+
+void ProcessorBase::evolveTick() {
+    if (!evolveOn_) {
+        return;
+    }
+    if (isNonRealtime()) { // an offline render plays the saved slots only (SPEC 6.6)
+        // Not `setEvolve`: it would destroy the timer whose callback is running. The idle timer goes with the next toggle.
+        evolveOn_ = false;
+        evolveEnd(true);
+        return;
+    }
+    const auto slotIndex =
+        static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    const std::optional<double> ppq = playheadPpq();
+    const juce::ScopedLock lock(slotsLock_);
+    if (settings_.role == mm::core::InstanceRole::Voice) {
+        return;
+    }
+    const auto* slot = slots_.slot(slotIndex);
+    if (slot == nullptr || !slot->pattern) {
+        if (evolveLayer_.active()) {
+            // the slot of the layer lost its content: nothing to restore
+            evolveLayer_.stop();
+            evolveStagePublished_ = false;
+        }
+        return;
+    }
+    if (evolveLayer_.active() && evolveLayer_.slot() != slotIndex) {
+        // A slot change ends the layer of the old slot without taking it over (SPEC 6.7).
+        if (evolveStagePublished_) {
+            publisher_.restoreSlot(slots_, evolveLayer_.slot());
+        }
+        evolveLayer_.stop();
+        evolveStagePublished_ = false;
+    }
+    if (!evolveLayer_.active() || slot->revision != evolveRevision_) {
+        // New layer, or the slot got a manual result: the layer starts again from what the slot holds now (SPEC 6.8).
+        evolveLayer_.start(slotIndex, *slot->pattern, newEvolveSeed());
+        evolveRevision_ = slot->revision;
+        evolveStagePublished_ = false;
+        evolveLastPass_.reset();
+        evolvePasses_ = 0;
+    }
+    if (!ppq) {
+        evolveLastPass_.reset(); // the transport stands: counting starts again at the next start
+        return;
+    }
+    const double lengthPpq = static_cast<double>(slot->pattern->lengthBars) * 4.0;
+    if (lengthPpq <= 0.0) {
+        return;
+    }
+    const auto pass = static_cast<int64_t>(std::floor(*ppq / lengthPpq));
+    if (evolveLastPass_ && *evolveLastPass_ == pass) {
+        return;
+    }
+    evolveLastPass_ = pass;
+    ++evolvePasses_;
+    if (evolvePasses_ % settings_.evolve.everyPasses != 0) {
+        return;
+    }
+    const auto* style = styles_.findOrFallback(slot->pattern->styleId);
+    if (style == nullptr) {
+        return;
+    }
+    mm::core::ArchetypeSettings archetype;
+    archetype.energyPct = settings_.generation.energyPct;
+    archetype.creativityPct = settings_.generation.creativityPct;
+    if (evolveLayer_.advance(*slot->pattern, *style, archetype, settings_.evolve)) {
+        // The stage plays from the next pass: the pass that has just begun is the last one of the stage before.
+        publisher_.publishPattern(slotIndex, evolveLayer_.current(), lengthPpq);
+        evolveStagePublished_ = true;
+    }
+}
+
 void ProcessorBase::switchPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq) {
     handover_.publishSwitch(std::move(pattern), gridPpq);
     handover_.collectReturned();
@@ -258,6 +462,7 @@ void ProcessorBase::editSlots(const std::function<void(mm::core::SlotBank&)>& ch
 
 bool ProcessorBase::editNotes(size_t slotIndex, const std::function<size_t(mm::core::Pattern&)>& change,
                               bool mergeWithPrevious) {
+    evolveCommitBefore(slotIndex);
     mm::core::SlotSnapshot forVoices;
     {
         const juce::ScopedLock lock(slotsLock_);
@@ -379,11 +584,15 @@ void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& 
     settings_ = settings;
     settings_.outputVoice = mm::core::clampOutputVoice(settings.outputVoice);
     settings_.octave = mm::core::clampOctave(settings.octave);
+    settings_.evolve = mm::core::clampEvolveSettings(settings.evolve);
     publisher_.setOctave(settings_.octave);
     settings_.generation = mm::core::sanitize(settings.generation);
     outputVoice_.store(settings_.outputVoice);
     publisher_.setOutputVoice(settings_.outputVoice);
     publisher_.sync(slots_);
+    if (evolveStagePublished_ && evolveLayer_.active()) { // a new voice or octave published the slots again
+        publisher_.publishPattern(evolveLayer_.slot(), evolveLayer_.current(), 4.0);
+    }
 }
 
 void ProcessorBase::generate() {
@@ -914,6 +1123,7 @@ bool ProcessorBase::vary(int strengthPct, std::optional<size_t> voice, std::opti
     slotIndex = slotChoice
                     ? *slotChoice
                     : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    evolveCommitBefore(slotIndex);
     const uint64_t useSeed = seed ? *seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     bool done = false;
     bool allLocked = false;
@@ -980,6 +1190,7 @@ bool ProcessorBase::renewVoice(size_t voice, std::optional<uint64_t> seed, std::
     const size_t slotIndex =
         slotChoice ? *slotChoice
                    : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    evolveCommitBefore(slotIndex);
     const uint64_t useSeed = seed ? *seed : static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
     bool done = false;
     bool locked = false;
@@ -1646,6 +1857,11 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         if (uiScalePct() != mm::core::kDefaultUiScale) { // only when it differs: states of the standard size stay as they were
             root.setAttribute("uiScale", uiScalePct());
         }
+        if (settings_.evolve != mm::core::EvolveSettings{}) { // only when not the default (SPEC 6.7)
+            root.setAttribute("evolveEvery", settings_.evolve.everyPasses);
+            root.setAttribute("evolveFromOriginal", settings_.evolve.fromOriginal ? 1 : 0);
+            root.setAttribute("evolveStrength", settings_.evolve.strengthPct);
+        }
         if (followPlayhead()) { // only when on: states of the standard stay as they were
             root.setAttribute("followPlayhead", 1);
         }
@@ -1685,6 +1901,10 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     settings.generation.lengthBars =
         static_cast<uint32_t>(std::max(0, root->getIntAttribute("genBars", static_cast<int>(defaults.lengthBars))));
     settings.octave = mm::core::clampOctave(root->getIntAttribute("octave", 0));
+    settings.evolve = mm::core::clampEvolveSettings(
+        {root->getIntAttribute("evolveEvery", mm::core::kDefaultEvolvePasses),
+         root->getIntAttribute("evolveFromOriginal", 0) != 0,
+         root->getIntAttribute("evolveStrength", mm::core::kDefaultEvolveStrength)});
     settings.generation.energyPct = root->getIntAttribute("genEnergy", defaults.energyPct);
     settings.generation.creativityPct = root->getIntAttribute("genCreativity", defaults.creativityPct);
     // A state without key and scale comes from before they were settings: it keeps drawing them (D-149).
