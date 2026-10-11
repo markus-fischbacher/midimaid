@@ -189,7 +189,7 @@ Grundton ca. 70 %, Quinte/Oktave ca. 25 %, ♭3/♭7 als Durchgang ca. 5 %. Tonu
 |---|---|---|---|
 | `rolling16` | 4 | alle 16tel außer Kick-Schritten | kurz (50–75 % eines Schritts), Akzent auf Offbeat |
 | `offbeat` | 3 | 2, 6, 10, 14 | 1–1,5 Schritte lang, gleichmäßige Velocity |
-| `gallop` | 3 | Paare 2–3, 6–7, 10–11, 14–15 (Triolen-Variante bei aktiver Triolen-Option) | zweite Note leiser, wirkt nach vorne |
+| `gallop` | 3 | Paare 2–3, 6–7, 10–11, 14–15 (immer 16tel, keine Triolen-Variante, D-212) | zweite Note leiser, wirkt nach vorne |
 
 ### Melodie – Archetypen
 | Archetyp | Gewicht | Beschreibung |
@@ -236,7 +236,7 @@ Melodischer als die anderen Stile. Tonumfang MIDI 28–52.
 | `pluck_seq` | 3 | wiederholte 8tel/16tel-Sequenz mit Akzentmuster, folgt der Harmonie |
 
 ### Akkordfarben (Stabs, falls genutzt)
-Moll7/Moll9 50 % · Moll-Triade 30 % · sus2/add9 20 %. Voicing mit Stimmführung (§1.10), kein Chord-Memory.
+Moll7/Moll9 50 % · Moll-Triade 30 % · sus (sus2 oder sus4) 20 %. Voicing mit Stimmführung (§1.10), kein Chord-Memory.
 
 ---
 
