@@ -30,24 +30,32 @@ public:
     /// `beforeCursor` its history cursor.
     void recordResult(size_t slot, std::optional<Pattern> before, size_t beforeCursor, Pattern result);
 
+    /// Two slots were exchanged (clear and swap are steps too, D-202: a dropped slot must never be lost for good).
+    void recordSwap(size_t first, size_t second);
+    /// `slot` was cleared; `before` is the whole slot with its history, name and colour.
+    void recordClear(size_t slot, Slot before);
+
     bool canUndo() const { return !undo_.empty(); }
     bool canRedo() const { return !redo_.empty(); }
     size_t undoSteps() const { return undo_.size(); }
     size_t redoSteps() const { return redo_.size(); }
 
     /// Takes the last step back on `bank`. False when there is none or the bank no longer fits (the step is dropped
-    /// then). `slot` receives the slot that changed.
-    bool undo(SlotBank& bank, size_t* slot = nullptr);
-    bool redo(SlotBank& bank, size_t* slot = nullptr);
+    /// then). `slot` receives the slot that changed; `second` the other slot of a swap (`kNoSlot` for any other step).
+    static constexpr size_t kNoSlot = static_cast<size_t>(-1);
+    bool undo(SlotBank& bank, size_t* slot = nullptr, size_t* second = nullptr);
+    bool redo(SlotBank& bank, size_t* slot = nullptr, size_t* second = nullptr);
 
-    /// Forgets every step of the slot (after browsing the history, clear, swap).
+    /// Forgets every step of the slot (after browsing the history).
     void discardSlot(size_t slot);
     void clear();
 
 private:
     struct Step {
-        enum class Kind { Edit, Result } kind = Kind::Edit;
+        enum class Kind { Edit, Result, Swap, Clear } kind = Kind::Edit;
         size_t slot = 0;
+        size_t other = kNoSlot;          ///< `Swap`: the second slot
+        std::optional<Slot> clearedSlot; ///< `Clear`: the slot as it was
         std::optional<Pattern> before;
         size_t beforeCursor = 0;
         Pattern after;

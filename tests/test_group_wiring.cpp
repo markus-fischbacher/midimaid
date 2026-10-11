@@ -3580,3 +3580,101 @@ TEST_CASE("the file handle shows a file icon, and its label when there is room",
     CHECK(iconPixels(60) > 100);  // the icon is there in both
     CHECK(iconPixels(200) > 100);
 }
+
+TEST_CASE("many drops in a running hub with voices never lose a pattern, and the undo button brings each one back",
+          "[group-wiring][slot-drop]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance bass("Bass");
+    Instance lead("Lead");
+    hub.setRole(InstanceRole::Hub);
+    bass.setRole(InstanceRole::Voice);
+    lead.setRole(InstanceRole::Voice);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) {
+        for (size_t slot = 0; slot < 5; ++slot) {
+            REQUIRE(bank.setResult(slot, marked(static_cast<uint8_t>(41 + slot))));
+            REQUIRE(bank.setResult(slot, marked(static_cast<uint8_t>(61 + slot)))); // a history of two
+        }
+    });
+    hub.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    double ppq = 4.0;
+    runTo({&hub, &bass, &lead}, ppq);
+    const auto pitches = [&] {
+        std::vector<int> found;
+        const auto bank = hub.processor.slotsSnapshot();
+        for (size_t slot = 0; slot < mm::core::kSlotCount; ++slot) {
+            if (bank.slot(slot)->pattern) {
+                found.push_back(bank.slot(slot)->pattern->voices[0].notes[0].pitch);
+            }
+        }
+        std::sort(found.begin(), found.end());
+        return found;
+    };
+    const auto before = pitches();
+    REQUIRE(before.size() == 5);
+    const auto layout = [&] { // the pitch of every slot, 0 for an empty one
+        std::vector<int> found;
+        const auto bank = hub.processor.slotsSnapshot();
+        for (size_t slot = 0; slot < mm::core::kSlotCount; ++slot) {
+            found.push_back(bank.slot(slot)->pattern ? bank.slot(slot)->pattern->voices[0].notes[0].pitch : 0);
+        }
+        return found;
+    };
+    const auto initial = layout();
+    const int moves[][2] = {{1, 2}, {2, 7}, {7, 1}, {3, 4}, {5, 5 + 1}, {1, 9}, {9, 2}, {4, 16}, {16, 3}};
+    for (const auto& move : moves) {
+        auto* from = child<mm::plugin::SlotButton>(*editor, "slot" + juce::String(move[0]));
+        auto* to = child<mm::plugin::SlotButton>(*editor, "slot" + juce::String(move[1]));
+        to->itemDropped(juce::DragAndDropTarget::SourceDetails(mm::plugin::SlotButton::describe(move[0]), from, {}));
+        ppq += 2.0;
+        runTo({&hub, &bass, &lead}, ppq);
+        pumpMessages(20);
+        INFO(move[0] << " -> " << move[1]);
+        CHECK(pitches() == before);
+    }
+
+    // every drop is a step: the undo button takes them back one by one, up to the first arrangement
+    auto* undo = child<juce::TextButton>(*editor, "undo");
+    REQUIRE(undo != nullptr);
+    int steps = 0;
+    while (hub.processor.canUndo() && steps < 20) {
+        REQUIRE(waitFor([&] { return undo->isEnabled(); }));
+        undo->onClick();
+        ++steps;
+        CHECK(pitches() == before); // never a lost pattern on the way
+    }
+    CHECK(steps == 9);
+    CHECK(layout() == initial);
+}
+
+TEST_CASE("after a drop the rows show the patterns that are in the slots now", "[group-wiring][slot-drop]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(0, marked(41)));                         // one bar
+        REQUIRE(bank.setResult(1, mm::core::makeEmptyPattern(2, "peak_time"))); // two bars, no notes
+    });
+    hub.setSlotParameter(2);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    hub.step();
+    pumpMessages(80);
+    auto* strip1 = child<mm::plugin::SlotButton>(*editor, "slot1");
+    auto* strip2 = child<mm::plugin::SlotButton>(*editor, "slot2");
+    auto rowTicks = [&] {
+        for (auto* component : editor->getChildren()) {
+            if (auto* row = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+                return row->roll().patternTicks();
+            }
+        }
+        return uint32_t{9999};
+    };
+    CHECK(rowTicks() == 2 * 3840);
+    strip2->itemDropped(juce::DragAndDropTarget::SourceDetails(mm::plugin::SlotButton::describe(1), strip1, {}));
+    hub.step();
+    pumpMessages(120);
+    CHECK(hub.processor.slotsSnapshot().slot(1)->pattern->lengthBars == 1);
+    CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->lengthBars == 2);
+    CHECK(rowTicks() == 3840);
+}

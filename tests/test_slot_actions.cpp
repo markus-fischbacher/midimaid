@@ -139,13 +139,14 @@ TEST_CASE("copying a slot to another is one action and leaves the clipboard of t
     CHECK_FALSE(processor.copySlot(99)); // out of range
 }
 
-TEST_CASE("clearing resets a slot completely and ends its undo steps", "[slot-actions]") {
+TEST_CASE("clearing resets a slot completely, and undo brings it back with everything", "[slot-actions]") {
     juce::ScopedJuceInitialiser_GUI gui;
     InstrumentProcessor processor("Test");
     fill(processor, 0, 1, "Intro", 2);
     REQUIRE(processor.copySlot(0));
     REQUIRE(processor.pasteSlot(1)); // an undo step of slot 2
     REQUIRE(processor.canUndo());
+    const auto full = processor.slotsSnapshot();
     REQUIRE(processor.clearSlot(1));
     CHECK(processor.generationStatus() == GenerationStatus::SlotCleared);
     const auto bank = processor.slotsSnapshot();
@@ -153,9 +154,24 @@ TEST_CASE("clearing resets a slot completely and ends its undo steps", "[slot-ac
     CHECK(bank.slot(1)->name.empty());
     CHECK(bank.slot(1)->color == 0);
     CHECK(bank.slot(1)->history.empty());
-    CHECK_FALSE(processor.canUndo()); // the step no longer fits
     CHECK(bank.slot(0)->pattern.has_value());
     CHECK_FALSE(processor.clearSlot(99));
+
+    // clearing is a step (D-202): undo brings the slot back with pattern, name, colour and history, redo clears again
+    REQUIRE(processor.canUndo());
+    REQUIRE(processor.undo());
+    auto back = processor.slotsSnapshot();
+    REQUIRE(back.slot(1)->pattern.has_value());
+    CHECK(sameMusic(*back.slot(1)->pattern, *full.slot(1)->pattern));
+    CHECK(back.slot(1)->name == full.slot(1)->name);
+    CHECK(back.slot(1)->color == full.slot(1)->color);
+    CHECK(back.slot(1)->history.size() == full.slot(1)->history.size());
+    CHECK(back.slot(1)->cursor == full.slot(1)->cursor);
+    REQUIRE(processor.redo());
+    CHECK(processor.slotsSnapshot().isEmpty(1));
+    REQUIRE(processor.undo());
+    REQUIRE(processor.undo()); // and the paste before it can be undone as well
+    CHECK(processor.slotsSnapshot().isEmpty(1));
 }
 
 TEST_CASE("swapping exchanges two slots with name, colour and history, also with an empty one", "[slot-actions]") {
@@ -175,13 +191,27 @@ TEST_CASE("swapping exchanges two slots with name, colour and history, also with
     CHECK(after.slot(0)->name == "B");
     CHECK(sameMusic(*after.slot(0)->pattern, *before.slot(3)->pattern));
 
-    // the undo steps of both slots end with a swap (they no longer fit)
+    // a swap is a step (D-202): undo exchanges the two again, redo once more, and the steps before it stay
+    REQUIRE(processor.undo());
+    auto undone = processor.slotsSnapshot();
+    CHECK(undone.slot(0)->name == "A");
+    CHECK(undone.slot(3)->name == "B");
+    CHECK(undone.slot(0)->history.size() == before.slot(0)->history.size());
+    CHECK(sameMusic(*undone.slot(0)->pattern, *before.slot(0)->pattern));
+    REQUIRE(processor.redo());
+    CHECK(processor.slotsSnapshot().slot(3)->name == "A");
+
     REQUIRE(processor.copySlot(0));
     REQUIRE(processor.pasteSlot(5));
     REQUIRE(processor.pasteSlot(6));
-    REQUIRE(processor.canUndo());
+    const auto beforeSecond = processor.slotsSnapshot();
     REQUIRE(processor.swapSlots(5, 6));
-    CHECK_FALSE(processor.canUndo());
+    REQUIRE(processor.undo());
+    CHECK(sameMusic(*processor.slotsSnapshot().slot(5)->pattern, *beforeSecond.slot(5)->pattern));
+    REQUIRE(processor.redo());
+    REQUIRE(processor.undo());
+    REQUIRE(processor.undo()); // the paste into slot 7 (index 6) before the swap
+    CHECK(processor.slotsSnapshot().isEmpty(6));
 
     REQUIRE(processor.swapSlots(0, 7)); // with an empty slot: a move
     after = processor.slotsSnapshot();
