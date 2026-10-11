@@ -190,6 +190,7 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H53 | Dialoge im neuen Look: Einstellungen, Referenzen und Bibliothek aus dem Hub öffnen (Live, Logic, Retina) | Dunkles Fenster im Stil des Plugins, Text scharf und nicht abgeschnitten, Auswahlfelder, Haken und Schaltflächen mit Umriss; alles bedienbar |ok| | |
 | H54 | Slot ziehen bei **gestopptem** Transport: Feld auf ein anderes ziehen (tauschen), mit Option ziehen (kopieren) (Live) | Die Noten erscheinen sofort, ohne dass der Transport läuft; beim Ziehen mit Option zeigt der Zeiger ein „+“ und das Zielfeld ein grünes „+“; ohne Option kein „+“ |ok| | |
 | H55 | Rolle wechseln: eine Voice auf Hub stellen, solange ein Hub offen ist, dann im Rollenfeld wieder auf Voice (Live) | Das Rollenfeld ist im Hub-Fenster sichtbar und bedienbar; der Wechsel zurück auf Voice klappt, die Voice spielt wieder mit dem Hub | | | |
+| H56 | Roll-Titel: im Hub und im Voice-Fenster Noten in den obersten Zeilen erzeugen bzw. ansehen (Live) | Der Name der Stimme steht über den Noten in eigenem Streifen und überdeckt keine Note; Noten lassen sich an allen Stellen der Roll anklicken, ziehen und löschen; Geschwindigkeitsleiste unten wie vorher | | | |
 
 **Messung für den Mindestvorlauf (H5, H6, H12):** Der Standard ist 150 ms (D-90). Kommen bei H5 oder H6 verspätete Wechsel
 vor oder ist H12 nicht sample-gleich, wiederholst du H5 mit Puffer 1024. Notiere Puffergröße, Samplerate und

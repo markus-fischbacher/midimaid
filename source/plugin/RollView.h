@@ -11,6 +11,8 @@ namespace mm::plugin {
 /// belongs to the hub and the piano roll of phase 2. The texts are fixed English until the translation table exists.
 class RollView : public juce::Component {
 public:
+    static constexpr int kTitleHeight = 20; ///< the strip with the title above the notes
+
     /// `title` is drawn in the corner ("Slot 3 - Bass"), `empty` shows that the slot holds no pattern yet.
     void setContent(mm::core::RollLayout layout, juce::String title, bool empty);
     /// A muted voice is drawn dim.
