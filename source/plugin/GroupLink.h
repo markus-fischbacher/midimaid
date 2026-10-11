@@ -39,7 +39,7 @@ public:
     // GroupMember (message thread)
     void onSnapshot(const mm::core::SlotSnapshot& snapshot, std::optional<double> stampPpq) override;
     void onStatus(mm::core::GroupStatus status, size_t voices) override;
-    void onAction(mm::core::GroupAction action) override;
+    bool onAction(mm::core::GroupAction action) override;
     mm::core::SlotSnapshot currentSlots() override;
 
 private:

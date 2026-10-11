@@ -64,8 +64,15 @@ void GroupLink::publish(mm::core::SlotSnapshot snapshot, std::optional<double> s
 
 void GroupLink::forward(mm::core::GroupAction action) {
     onMessageThread([self = shared_from_this(), action] {
-        if (self->id_ != 0) {
-            processGroup().forward(self->id_, action);
+        if (self->id_ == 0) {
+            return;
+        }
+        const bool done = processGroup().forward(self->id_, action);
+        if (!done && action == mm::core::GroupAction::ShowHub) { // the hub has no open window: say so on this side
+            const juce::ScopedLock lock(self->lock_);
+            if (self->owner_ != nullptr) {
+                self->owner_->noteHubWindowClosed();
+            }
         }
     });
 }
@@ -109,19 +116,19 @@ void GroupLink::onStatus(mm::core::GroupStatus status, size_t voices) {
     }
 }
 
-void GroupLink::onAction(mm::core::GroupAction action) {
+bool GroupLink::onAction(mm::core::GroupAction action) {
     const juce::ScopedLock lock(lock_);
     if (owner_ == nullptr) {
-        return;
+        return false;
     }
     switch (action) {
     case mm::core::GroupAction::Generate:
         owner_->generate();
-        break;
+        return true;
     case mm::core::GroupAction::ShowHub:
-        owner_->bringEditorToFront();
-        break;
+        return owner_->bringEditorToFront();
     }
+    return true;
 }
 
 mm::core::SlotSnapshot GroupLink::currentSlots() {

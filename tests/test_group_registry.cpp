@@ -39,7 +39,10 @@ public:
         statuses.push_back(s);
         voices = v;
     }
-    void onAction(GroupAction action) override { actions.push_back(action); }
+    bool onAction(GroupAction action) override {
+        actions.push_back(action);
+        return true;
+    }
     SlotSnapshot currentSlots() override { return std::make_shared<const SlotBank>(bank); }
 
     GroupStatus status() const { return statuses.empty() ? GroupStatus::Solo : statuses.back(); }

@@ -40,6 +40,7 @@ Eine neue Instanz ist **still**, bis du etwas erzeugt hast.
 | **Statuszeile** | Was gerade passiert, auch Fehler und Hinweise |
 
 Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehen der Stimme, Hilfe.
+**Hub öffnen** holt das Fenster des Hubs nach vorn. Ist es geschlossen, kann das Plugin es nicht öffnen (das kann kein Plugin): Die Statuszeile sagt dann, dass du in der DAW das Gerät MidiMaid auf der Hub-Spur öffnen musst.
 
 ## 4. Erzeugen, Variation, Neu
 

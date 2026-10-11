@@ -213,6 +213,7 @@ namespace mm::core::text {
     X(kButtonClose, "button.close")                                                                                    \
     X(kStatusNoResult, "status.noResult")                                                                              \
     X(kStatusUseHub, "status.useHub")                                                                                  \
+    X(kStatusHubClosed, "status.hubClosed")                                                                            \
     X(kStatusForwarded, "status.forwarded")                                                                            \
     X(kStatusLate, "status.late")                                                                                      \
     X(kSlotEmpty, "slot.empty")                                                                                        \
