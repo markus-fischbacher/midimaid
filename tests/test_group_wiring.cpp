@@ -3869,3 +3869,23 @@ TEST_CASE("Open hub says what to do when the window of the hub is closed", "[gro
     hub.processor.editorBeingDeleted(hubEditor.get()); // what the host wrapper does
     hubEditor.reset();
 }
+
+TEST_CASE("hub and voice offer the same automatable mute parameters to the host", "[group-wiring][params]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    pumpMessages(20);
+    for (Instance* instance : {&hub, &voice}) {
+        for (int n = 1; n <= 8; ++n) {
+            auto* parameter = instance->processor.parameters().getParameter("mute_" + juce::String(n));
+            INFO("mute " << n);
+            REQUIRE(parameter != nullptr);
+            CHECK(parameter->isAutomatable());
+            CHECK(parameter->getName(64) == "Mute " + juce::String(n));
+            CHECK(parameter->isDiscrete());
+        }
+    }
+    CHECK(hub.processor.getParameters().size() == voice.processor.getParameters().size());
+}
