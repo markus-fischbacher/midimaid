@@ -292,6 +292,8 @@ Euklidische Rhythmen als Feature
 
 ## Anhang: Manuelle Testmatrix
 
+> **Reihenfolge (D-198):** Die manuellen Tests laufen zuerst nur in **Live 12 macOS**. Die Spalten „Live 12 Win“ und „Logic“ folgen später; „Testmatrix v1.0 grün“ gilt bis dahin für die Live-macOS-Spalte, die Abnahme v1.0 wird um Logic ergänzt, sobald es nachgezogen ist.
+
 | Test | Release | Live 12 macOS | Live 12 Win | Logic | Abgedeckt durch |
 |---|---|---|---|---|---|
 | Laden und Entfernen, auch Entfernen während der Wiedergabe | v1.0 | | | | Teil B/C; automatisch: `[handover]` (Zerstören gibt Patterns frei) |

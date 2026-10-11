@@ -649,3 +649,9 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Griff** (`DragHandle`, Hub und Voice-Fenster): gezeichnet als Seite mit Eselsohr und Pfeil nach unten in der Akzentfarbe; ab 120 px Breite mit der Beschriftung „MIDI ziehen“ (`drag.label`), sonst nur das Symbol. Verhalten (Ziehen der .mid-Datei) unverändert.
 - **Prüfung:** `[layout]`: Spalten fluchten (x und Breite), Aktionen am rechten Rand, Griff über zwei Spalten und breit genug für die Beschriftung; `[paint]`: Beschriftung nur mit Platz, Symbol immer. 6 Mutationen (Beschriftung nie/immer, Symbol ohne Seite, Stumm schmaler, Griff eine Spalte, „Hub öffnen“ in Spalte 2) werden erkannt.
 - **Offen:** Das Aussehen im Host ist wie bisher **H50**; ob Live und Logic den Zug aus dem Griff annehmen, prüft der Drag-&-Drop-Punkt in Teil H (H46).
+
+### D-198 – Manuelle Tests zuerst nur in Live (Phase 6)
+
+- **Entscheidung des Entwicklers:** Die manuellen Host-Prüfungen konzentrieren sich auf **Ableton Live 12 (macOS)**. Logic folgt später.
+- **Folgen:** Die Host-Checks (`docs/HOST-VERIFIKATION.md`) und die Testmatrix (Anhang der Roadmap) behalten alle Logic-Zeilen und -Spalten, sie bleiben vorerst leer. „Testmatrix v1.0 grün“ bedeutet bis auf Weiteres: Live-macOS-Spalte voll; für die **Abnahme v1.0** gilt Logic als nachzuholen, nicht als gestrichen. Die Logic-Variante (AU MIDI-FX) bleibt im Umfang von v1.0. Live Windows wartet ohnehin auf einen Windows-Build (D-189).
+- **Code und Tests:** unverändert; die Logic-spezifischen Wege (Setup-Hilfe-Seite „Logic Pro“, MIDI-FX-Variante) bleiben und sind durch Unit- und Glue-Tests gedeckt.
