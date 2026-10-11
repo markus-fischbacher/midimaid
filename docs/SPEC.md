@@ -359,7 +359,7 @@ angelegten Parameter.
 nicht über die Übersetzungstabelle (§8.2). Ganzzahlige Parameter sind `AudioParameterInt`, Schalter und Trigger
 `AudioParameterBool`; nicht aktive Parameter sind mit `withAutomatable(false)` angelegt. Die JUCE-Wrapper machen
 daraus bei VST3 ein Parameter ohne `kCanAutomate` und bei AU das Flag `NonRealTime`; die Parameter bleiben sichtbar
-(Verhalten in Live und Logic: ROADMAP Phase 0, „Nicht aktive Parameter“). Der Audio-Thread liest `slot` und
+(Verhalten in Live und Logic: ROADMAP Phase 0, „Nicht aktive Parameter“)). **Live (VST3, H22):** Live blendet Parameter ohne `kCanAutomate` aus; in der Parameterliste stehen nur „Slot“ und „Mute 1“ bis „Mute 8“, die 15 nicht aktiven Parameter erscheinen nicht (Logic: offen). Der Audio-Thread liest `slot` und
 `mute_<Stimme>` am Blockanfang aus den Roh-Atomics und schreibt nie einen Parameter. Eine Instanz liest vorerst
 `mute_1` (die erste Stimme); die Zuordnung der Stimme kommt mit den Rollen (§6.5).
 
