@@ -705,6 +705,12 @@ void PlaceholderEditor::updateStatus() {
         failed && report.outcome == mm::ai::AiOutcome::ProviderError &&
         (report.status == mm::ai::AiStatus::AuthFailed || report.status == mm::ai::AiStatus::ModelNotFound));
     autoOfflineButton_.setToggleState(processor_.autoOffline(), juce::dontSendNotification);
+    const int statusButtons = (retryButton_.isVisible() ? 1 : 0) | (offlineButton_.isVisible() ? 2 : 0) |
+                              (autoOfflineButton_.isVisible() ? 4 : 0) | (errorSettingsButton_.isVisible() ? 8 : 0);
+    if (statusButtons != statusButtons_) { // the message gets the room the buttons leave
+        statusButtons_ = statusButtons;
+        resized();
+    }
     generateButton_.setButtonText(
         tr(processor_.generatingWithAi() ? keys::kButtonCancelGeneration : keys::kButtonGenerate));
     if (groupText_.isNotEmpty()) {
@@ -1232,12 +1238,17 @@ void PlaceholderEditor::resized() {
     }
 
     auto statusRow = area.removeFromBottom(40).reduced(16, 0);
-    autoOfflineButton_.setBounds(statusRow.removeFromRight(210));
-    offlineButton_.setBounds(statusRow.removeFromRight(140).reduced(0, 6));
-    statusRow.removeFromRight(8);
-    retryButton_.setBounds(statusRow.removeFromRight(140).reduced(0, 6));
-    statusRow.removeFromRight(8);
-    errorSettingsButton_.setBounds(statusRow.removeFromRight(120).reduced(0, 6));
+    // Only the buttons that are shown take room: without an error the message has the whole width.
+    const auto take = [&](juce::Component& component, int width, int inset) {
+        if (component.isVisible()) {
+            component.setBounds(statusRow.removeFromRight(width).reduced(0, inset));
+            statusRow.removeFromRight(8);
+        }
+    };
+    take(autoOfflineButton_, 210, 0);
+    take(offlineButton_, 140, 6);
+    take(retryButton_, 140, 6);
+    take(errorSettingsButton_, 120, 6);
     statusLabel_.setBounds(statusRow);
     infoLabel_.setBounds(area.removeFromBottom(28).reduced(16, 0));
     auto historyBar = area.removeFromBottom(32).reduced(16, 2);

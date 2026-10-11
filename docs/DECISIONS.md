@@ -672,6 +672,13 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Copilot (verworfen):** GitHub Models ist seit 30.07.2026 abgeschaltet; eine Anbindung von GitHub Copilot (nur über das Copilot SDK mit der CLI als Hintergrundprozess) wird nicht gebaut. Für KI bleiben die vorhandenen Anbieter.
 - **Prüfung:** `readableBody` (leer, Steuerzeichen, Schlüssel, Länge), beide Anbieter bei „OK“ mit Schlüssel im Text, Fehlerstatus mit Klartext und ohne Körper, Statuszeile mit gekürztem Detail.
 
+### D-201 – Statusmeldung im Hub über die volle Breite (Phase 6, ergänzt D-193)
+
+- **Rückmeldung:** Die Meldung unten im Hub („Nichts zu verfeinern …“) brach um, obwohl rechts nichts stand.
+- **Ursache:** Die Statuszeile reservierte Platz für „Einstellungen“, „Erneut versuchen“, „Offline“ und „Automatisch offline“ **immer**, auch wenn sie unsichtbar waren (rund 620 px).
+- **Jetzt:** Nur die **sichtbaren** Schaltflächen nehmen Platz; ohne Fehler hat die Meldung die ganze Breite (Fenster minus 32 px). Ändert sich, welche Schaltflächen zu sehen sind, wird neu angeordnet.
+- **Prüfung:** (`[ai-plugin]`) ohne Fehler ist die Meldung genau Fensterbreite − 32; nach einem Schlüsselfehler ist sie schmaler, endet vor „Erneut versuchen“ und „Einstellungen“, die sich nicht überlappen; nach der nächsten Anfrage hat sie wieder die volle Breite. Mutationen (Platz immer reservieren, keine neue Anordnung) werden erkannt.
+
 ### D-202 – Slot tauschen und leeren sind Undo-Schritte (Phase 6, ändert D-191)
 
 - **Meldung:** Beim Ziehen eines Slots auf einen anderen waren Quelle und Ziel danach leer, die Pattern verloren, „Rückgängig“ ging nicht.
