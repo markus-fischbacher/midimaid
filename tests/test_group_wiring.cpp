@@ -716,7 +716,7 @@ TEST_CASE("the octave is saved, limited, and missing in older states", "[group-w
     CHECK(target.processor.instanceSettings().octave == 2);
 }
 
-TEST_CASE("the size of the window is saved with the instance, snapped to a step, and missing in older states",
+TEST_CASE("the size of the window is saved with the instance, limited to 75 to 200, and missing in older states",
           "[group-wiring][scale]") {
     Quiet quiet;
     Instance source("Source");
@@ -744,7 +744,12 @@ TEST_CASE("the size of the window is saved with the instance, snapped to a step,
     juce::MemoryBlock between;
     juce::AudioProcessor::copyXmlToBinary(*root, between);
     target.processor.setStateInformation(between.getData(), static_cast<int>(between.getSize()));
-    CHECK(target.processor.uiScalePct() == 125);
+    CHECK(target.processor.uiScalePct() == 130); // between two steps: kept
+    root->setAttribute("uiScale", 10);
+    juce::MemoryBlock tiny;
+    juce::AudioProcessor::copyXmlToBinary(*root, tiny);
+    target.processor.setStateInformation(tiny.getData(), static_cast<int>(tiny.getSize()));
+    CHECK(target.processor.uiScalePct() == 75);
     root->removeAttribute("uiScale");
     juce::MemoryBlock old;
     juce::AudioProcessor::copyXmlToBinary(*root, old);
@@ -979,6 +984,137 @@ TEST_CASE("a window opened after the state was loaded starts at the saved size",
     CHECK(editor->getTransform().mat00 == Catch::Approx(2.0f));
 }
 
+TEST_CASE("dragging the corner sets the size continuously, in the hub and in a voice",
+          "[group-wiring][editor][scale]") {
+    Quiet quiet;
+    for (const bool voice : {false, true}) {
+        INFO((voice ? "voice" : "hub"));
+        Instance instance("Window");
+        if (voice) {
+            instance.setRole(InstanceRole::Voice);
+        }
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        auto* corner = child<mm::plugin::ScaleCorner>(*editor, "scaleCorner");
+        auto* box = child<juce::ComboBox>(*editor, "zoom");
+        REQUIRE((corner != nullptr && box != nullptr));
+        const int width = editor->getWidth();
+        const int height = editor->getHeight();
+
+        // the grip lies in the bottom right corner, in front of everything, on no other control
+        CHECK(corner->isVisible());
+        CHECK(corner->getRight() == width);
+        CHECK(corner->getBottom() == height);
+        CHECK(editor->getChildren().getLast() == corner);
+        for (auto* other : editor->getChildren()) {
+            if (other != corner && other->isVisible() && other->getWidth() > 0) {
+                INFO(other->getComponentID().toStdString());
+                CHECK_FALSE(corner->getBounds().intersects(other->getBounds()));
+            }
+        }
+
+        // 100 % of 1000 (hub) or 600 (voice) px: a quarter of the width to the right is 125 %
+        corner->onDragStart();
+        corner->onDrag(width / 4.0);
+        CHECK(instance.processor.uiScalePct() == 125);
+        CHECK(editor->getTransform().mat00 == Catch::Approx(1.25f));
+        CHECK(box->getSelectedId() == 125); // on a step: the entry
+        CHECK(editor->getWidth() == width); // the layout keeps its size
+        CHECK(editor->getHeight() == height);
+
+        // between two steps: the box shows the size as text, with no entry selected
+        corner->onDragStart();
+        corner->onDrag(width * 0.137);
+        CHECK(instance.processor.uiScalePct() == 139); // 125 % of the width on screen is 1.25 * width
+        CHECK(box->getSelectedId() == 0);
+        CHECK(box->getText() == "Größe 139 %");
+        CHECK(editor->getTransform().mat00 == Catch::Approx(1.39f));
+
+        // the drag is relative to the size at its start, and limited to 75 to 200 %
+        corner->onDragStart();
+        corner->onDrag(-100000.0);
+        CHECK(instance.processor.uiScalePct() == 75);
+        CHECK(box->getText() == "Größe 75 %");
+        corner->onDragStart();
+        corner->onDrag(100000.0);
+        CHECK(instance.processor.uiScalePct() == 200);
+        CHECK(editor->getTransform().mat00 == Catch::Approx(2.0f));
+
+        // a size set from the box afterwards works again
+        box->setSelectedId(100, juce::sendNotificationSync);
+        CHECK(instance.processor.uiScalePct() == 100);
+        CHECK(editor->getTransform().isIdentity());
+
+        // the size between two steps is saved and comes back
+        corner->onDragStart();
+        corner->onDrag(width * 0.31);
+        const int pct = instance.processor.uiScalePct();
+        CHECK(pct == 131);
+        juce::MemoryBlock saved;
+        instance.processor.getStateInformation(saved);
+        Instance target("Target");
+        target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        CHECK(target.processor.uiScalePct() == 131);
+        std::unique_ptr<juce::AudioProcessorEditor> reopened(target.processor.createEditor());
+        CHECK(child<juce::ComboBox>(*reopened, "zoom")->getText() == "Größe 131 %");
+        CHECK(reopened->getTransform().mat00 == Catch::Approx(1.31f));
+    }
+}
+
+TEST_CASE("a mouse drag on the corner is measured on screen", "[group-wiring][editor][scale]") {
+    Quiet quiet;
+    Instance instance("Window");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+    auto* corner = child<mm::plugin::ScaleCorner>(*editor, "scaleCorner");
+    REQUIRE(corner != nullptr);
+    // an event with the mouse at a point on screen (the window grows under the mouse, so the local position changes)
+    const auto at = [&](juce::Point<int> screen) {
+        const auto local = corner->getLocalPoint(nullptr, screen).toFloat();
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), local, juce::ModifierKeys(), 1.0f,
+                                juce::MouseInputSource::defaultOrientation, 0.0f, 0.0f, 0.0f, corner, corner,
+                                juce::Time::getCurrentTime(), local, juce::Time::getCurrentTime(), 1, true);
+    };
+    auto start = corner->localPointToGlobal(juce::Point<int>(8, 8));
+    corner->mouseDown(at(start));
+    corner->mouseDrag(at(start + juce::Point<int>(100, 30))); // only the width counts
+    CHECK(instance.processor.uiScalePct() == 110);
+    corner->mouseDrag(at(start + juce::Point<int>(-100, 500)));
+    CHECK(instance.processor.uiScalePct() == 90); // relative to the press, though the window changed under the mouse
+    corner->mouseDrag(at(start));
+    CHECK(instance.processor.uiScalePct() == 100);
+
+    // with the window at 150 % it is 1500 px wide on screen: 60 px more are 4 % more, 150 % becomes 156 %
+    instance.processor.setUiScalePct(150);
+    editor->setScaleFactor(1.5f);
+    start = corner->localPointToGlobal(juce::Point<int>(8, 8));
+    corner->mouseDown(at(start));
+    corner->mouseDrag(at(start + juce::Point<int>(60, 0)));
+    CHECK(instance.processor.uiScalePct() == 156);
+}
+
+TEST_CASE("the Help button is in the hub and in the voice window and opens nothing else", "[group-wiring][editor]") {
+    Quiet quiet;
+    for (const bool voice : {false, true}) {
+        INFO((voice ? "voice" : "hub"));
+        Instance instance("Window");
+        if (voice) {
+            instance.setRole(InstanceRole::Voice);
+        }
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        auto* help = child<juce::TextButton>(*editor, "help");
+        REQUIRE(help != nullptr);
+        CHECK(help->isVisible());
+        CHECK(help->getButtonText() == "Hilfe");
+        CHECK(help->getHeight() == child<juce::ComboBox>(*editor, "zoom")->getHeight());
+        CHECK(editor->getLocalBounds().contains(help->getBounds()));
+        for (auto* other : editor->getChildren()) {
+            if (other != help && other->isVisible() && other->getWidth() > 0) {
+                INFO(other->getComponentID().toStdString());
+                CHECK_FALSE(help->getBounds().intersects(other->getBounds()));
+            }
+        }
+    }
+}
+
 namespace {
 
 /// The playhead clock under the control of the test: the age of a reading no longer depends on how fast the machine
@@ -1135,7 +1271,9 @@ TEST_CASE("the voice window sits on one grid: margins, one control height, no ov
     REQUIRE(shown.size() >= 8);
     for (auto* component : shown) {
         INFO(component->getComponentID().toStdString());
-        CHECK(inner.contains(component->getBounds())); // 16 px at the sides
+        if (component->getComponentID() != "scaleCorner") { // the corner grip sits in the margin
+            CHECK(inner.contains(component->getBounds())); // 16 px at the sides
+        }
         // the controls share one height; the roll, the status line and the drag handle are not controls
         const bool control = dynamic_cast<juce::ComboBox*>(component) != nullptr ||
                              dynamic_cast<juce::TextButton*>(component) != nullptr ||
@@ -1158,6 +1296,10 @@ TEST_CASE("the voice window sits on one grid: margins, one control height, no ov
     CHECK(role->getX() == 16);
     CHECK(mute->getX() == 16);
     CHECK(zoom->getRight() == 600 - 16);
+    auto* help = child<juce::TextButton>(*editor, "help");
+    REQUIRE(help != nullptr);
+    CHECK(help->getY() == zoom->getY()); // help and size share the footer row
+    CHECK(help->getRight() <= zoom->getX());
     CHECK(child<juce::TextButton>(*editor, "generate")->getRight() == 600 - 16);
     CHECK(child<juce::TextButton>(*editor, "generate")->getY() == mute->getY());
     CHECK(child<juce::ComboBox>(*editor, "octave")->getY() == mute->getY());

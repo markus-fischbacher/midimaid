@@ -5,6 +5,8 @@
 #include "plugin/AiText.h"
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
+#include "plugin/HelpDialog.h"
+#include "plugin/HostDetection.h"
 #include "plugin/GroupText.h"
 #include "plugin/LibraryDialog.h"
 #include "plugin/ReferencesDialog.h"
@@ -426,12 +428,30 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     for (const int step : mm::core::kUiScaleSteps) {
         zoomBox_.addItem(tr(keys::kZoomItem, {{"value", std::to_string(step)}}), step);
     }
-    zoomBox_.setSelectedId(processor_.uiScalePct(), juce::dontSendNotification);
+    syncZoomBox();
     zoomBox_.onChange = [this] {
         processor_.setUiScalePct(zoomBox_.getSelectedId());
         applyScale();
     };
     addAndMakeVisible(zoomBox_);
+
+    scaleCorner_.onDragStart = [this] {
+        cornerStartPct_ = processor_.uiScalePct();
+        cornerStartWidth_ = static_cast<double>(getWidth()) * cornerStartPct_ / 100.0; // the width on screen
+    };
+    scaleCorner_.onDrag = [this](double dragX) {
+        const int pct = mm::core::uiScaleForDrag(cornerStartPct_, cornerStartWidth_, dragX);
+        if (pct != processor_.uiScalePct()) {
+            processor_.setUiScalePct(pct);
+            applyScale();
+        }
+    };
+    addAndMakeVisible(scaleCorner_);
+
+    helpButton_.setButtonText(tr(keys::kButtonHelp));
+    helpButton_.setComponentID("help");
+    helpButton_.onClick = [this] { HelpDialog::show(detectHostCapabilities(processor_).host); };
+    addAndMakeVisible(helpButton_);
 
     rollView_.setComponentID("roll");
     addChildComponent(rollView_);
@@ -730,6 +750,15 @@ void PlaceholderEditor::updatePlayhead() {
 void PlaceholderEditor::applyScale() {
     // The layout keeps its logical size; the window grows or shrinks with it, so the aspect ratio stays (SPEC 8.1).
     setScaleFactor(static_cast<float>(processor_.uiScalePct()) / 100.0f);
+    syncZoomBox();
+}
+
+void PlaceholderEditor::syncZoomBox() {
+    const int pct = processor_.uiScalePct();
+    zoomBox_.setSelectedId(pct, juce::dontSendNotification); // an id of no entry clears the selection
+    if (zoomBox_.getSelectedId() != pct) {
+        zoomBox_.setText(tr(keys::kZoomItem, {{"value", std::to_string(pct)}}), juce::dontSendNotification);
+    }
 }
 
 void PlaceholderEditor::applyLayout(bool voiceLayout) {
@@ -1089,6 +1118,8 @@ void PlaceholderEditor::layoutVoiceWindow() {
     auto footer = area.removeFromBottom(kRow).reduced(kPad, kInset);
     zoomBox_.setBounds(footer.removeFromRight(120));
     footer.removeFromRight(kGap);
+    helpButton_.setBounds(footer.removeFromRight(90));
+    footer.removeFromRight(kGap);
     dragHandle_->setBounds(footer);
 
     auto roles = area.removeFromTop(kRow).reduced(kPad, kInset);
@@ -1113,6 +1144,8 @@ void PlaceholderEditor::layoutVoiceWindow() {
 }
 
 void PlaceholderEditor::resized() {
+    scaleCorner_.setBounds(getWidth() - 16, getHeight() - 16, 16, 16);
+    scaleCorner_.toFront(false);
     if (voiceLayout_) {
         layoutVoiceWindow();
         return;
@@ -1120,6 +1153,8 @@ void PlaceholderEditor::resized() {
     auto area = getLocalBounds();
     auto roles = area.removeFromTop(48).reduced(16, 10);
     zoomBox_.setBounds(roles.removeFromRight(110));
+    roles.removeFromRight(8);
+    helpButton_.setBounds(roles.removeFromRight(80));
     roles.removeFromRight(8);
     settingsButton_.setBounds(roles.removeFromRight(120));
     roles.removeFromRight(8);

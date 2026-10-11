@@ -205,13 +205,13 @@ eigener Referenzen tauchen typische eigene Progressionen auf, ohne dass eine Ref
 Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set reproduzierbar.
 
 ## Phase 6 – Feinschliff, Vorlagen, v1.0-Abschluss
-- [x] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen (D-190, H47), Theme und Voice-Fenster (D-193, H50); offen bleiben stufenloses Ziehen und die alten Dialoge
+- [x] UI-Polish, Skalierung, HiDPI, Theme – Skalierung in Stufen und stufenlos am Eckgriff (D-190, D-195, H47), Theme und Voice-Fenster (D-193, H50), alle Dialoge im neuen Look (D-196)
 - [x] Performance-Messung gegen SPEC §11
 - [x] Slot-Aktionen: Kopieren, Einfügen, Leeren, Tauschen per Menü und Ziehen (SPEC §3.10, D-191)
 - [x] Playhead in der Piano-Roll, Hub und Voice-Fenster (D-192)
 - [ ] Instrument-Presets pro Rolle (Live und Logic, nur eigene Instrumente, SPEC §12)
 - [ ] DAW-Vorlagen: Live-Set mit Gruppenspuren, Logic-Patches (SPEC §8.6)
-- [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5) – Text steht (D-188), der Hilfe-Dialog im Plugin und die Bestätigung in der DAW (H46) fehlen
+- [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5) – Text (D-188) und Hilfe-Dialog im Plugin (D-194, H51) stehen; die Bestätigung in der DAW (H46) fehlt
 - [x] Nutzerhandbuch (kurz)
 - [x] Vollständige manuelle Testmatrix (Anhang, v1.0-Zeilen) – die Zeilen sind vollständig und mit Host-Checks und Tests verknüpft; **ausgefüllt wird sie vom Entwickler in der DAW**
 - [x] Determinismus-Gesamttest: Pattern speichern, Referenz-Set ändern, Projekt neu laden, Ausgabe
@@ -316,7 +316,7 @@ Euklidische Rhythmen als Feature
 | Referenz-Set: eigene Progressionen hörbar, keine Kopie | v1.0 | | | | H40, H41 |
 | Verfeinern per Prompt, danach Rückgängig | v1.0 | | | | H34, H28 |
 | Netzwerk weg während KI-Anfrage | v1.0 | | | | H33–H35; automatisch: `test_ai_plugin`, `test_ai_connection` |
-| Freeze/Aufnahme-Workflow laut Setup-Hilfe | v1.0 | | | | H20, H21, H46 |
+| Freeze/Aufnahme-Workflow laut Setup-Hilfe | v1.0 | | | | H20, H21, H46, H51 |
 | DAW-Vorlagen laden und sofort spielen | v1.0 | | | | offen: Vorlagen sind noch nicht gebaut (Phase 6) |
 | Bibliothek: Slot und Set speichern, laden, als .mid exportieren, .mid importieren, Plugin neu laden | v1.0 | | | | H43; automatisch: `test_library*` |
 | Referenzen: Ordner mit 20+ eigenen Dateien analysieren, Wiedergabe läuft ruhig weiter | v1.0 | | | | H40; automatisch: `test_reference_*`, Messung `[perf]` |

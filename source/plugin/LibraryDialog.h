@@ -1,6 +1,7 @@
 #pragma once
 
 #include "plugin/LibraryStore.h"
+#include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/ProcessorBase.h"
 
 #include <functional>
@@ -50,6 +51,7 @@ private:
     void importFile(const juce::File& file);
     juce::String infoText(const mm::core::LibraryEntryInfo& info) const;
 
+    MidiMaidLookAndFeel look_; // first: the children use it until the end
     ProcessorBase& processor_;
     std::shared_ptr<bool> processorAlive_;
     std::function<LibraryStore&()> store_;

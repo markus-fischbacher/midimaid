@@ -1,5 +1,6 @@
 #include "ai/MockProvider.h"
 #include "core/TextKeys.h"
+#include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/AiBackend.h"
 #include "plugin/AiConnection.h"
 #include "plugin/EmbeddedTranslation.h"
@@ -493,4 +494,42 @@ TEST_CASE("the drum mapping is typed into the dialog, cleaned and kept", "[setti
     }
     const auto again = env.dialog();
     CHECK(part<juce::TextEditor>(*again, "drumMap").getText() == "60=kick, 61=closed_hat");
+}
+
+TEST_CASE("the dialog has the look of the plug-in", "[settings-dialog][look]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    auto owned = env.dialog();
+    auto& dialog = *owned;
+    auto& close = *findById(dialog, "close");
+    CHECK(dynamic_cast<MidiMaidLookAndFeel*>(&dialog.getLookAndFeel()) != nullptr);
+    CHECK(dynamic_cast<MidiMaidLookAndFeel*>(&close.getLookAndFeel()) != nullptr); // the children inherit it
+    const auto image = dialog.createComponentSnapshot(dialog.getLocalBounds());
+    CHECK(image.getPixelAt(1, 1) == juce::Colour(MidiMaidLookAndFeel::kBackground));
+    CHECK(image.getPixelAt(dialog.getWidth() - 2, dialog.getHeight() - 2) == juce::Colour(MidiMaidLookAndFeel::kBackground));
+}
+
+namespace {
+
+void writeSnapshot(juce::Component& component, const juce::String& name) {
+    const auto folder = juce::SystemStats::getEnvironmentVariable("MM_SNAPSHOT_DIR", {});
+    REQUIRE(folder.isNotEmpty());
+    const auto image = component.createComponentSnapshot(component.getLocalBounds(), false, 2.0f);
+    juce::FileOutputStream stream(juce::File(folder).getChildFile(name));
+    REQUIRE(stream.openedOk());
+    stream.setPosition(0);
+    stream.truncate();
+    juce::PNGImageFormat png;
+    REQUIRE(png.writeImageToStream(image, stream));
+}
+
+} // namespace
+
+// Renders the dialog to a PNG file for a look at the design (not a check): MM_SNAPSHOT_DIR=<folder> run with "[.snapshot]".
+TEST_CASE("snapshot of the settings", "[.snapshot]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    auto owned = env.dialog();
+    choose(*owned, "Anthropic (Claude)");
+    writeSnapshot(*owned, "settings.png");
 }

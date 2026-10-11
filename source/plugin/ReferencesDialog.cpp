@@ -50,9 +50,9 @@ juce::String infoText(const mm::core::ReferenceItem& item) {
 class ReferencesDialog::RowComponent : public juce::Component {
 public:
     RowComponent(ReferencesDialog& owner) : owner_(owner) {
-        name_.setColour(juce::Label::textColourId, juce::Colours::white);
+        name_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kText));
         addAndMakeVisible(name_);
-        info_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+        info_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
         addAndMakeVisible(info_);
         role_.setComponentID("role");
         for (int i = 0; i < 4; ++i) {
@@ -131,6 +131,7 @@ private:
 ReferencesDialog::ReferencesDialog(std::function<ReferenceStore&()> store, std::string styleId, juce::String styleName)
     : store_(std::move(store)), styleId_(std::move(styleId)) {
     (void)styleName;
+    setLookAndFeel(&look_);
     summaryLabel_.setComponentID("summary");
     summaryLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.85f));
     addAndMakeVisible(summaryLabel_);
@@ -144,7 +145,7 @@ ReferencesDialog::ReferencesDialog(std::function<ReferenceStore&()> store, std::
     addChildComponent(emptyLabel_);
     list_.setComponentID("list");
     list_.setRowHeight(kRowHeight);
-    list_.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff222228));
+    list_.setColour(juce::ListBox::backgroundColourId, juce::Colour(MidiMaidLookAndFeel::kSurface));
     addAndMakeVisible(list_);
 
     addFilesButton_.setComponentID("addFiles");
@@ -205,6 +206,7 @@ ReferencesDialog::ReferencesDialog(std::function<ReferenceStore&()> store, std::
 }
 
 ReferencesDialog::~ReferencesDialog() {
+    setLookAndFeel(nullptr);
     *alive_ = false;
     store_().setOnChanged({});
 }
@@ -300,7 +302,7 @@ int ReferencesDialog::getNumRows() {
 }
 
 void ReferencesDialog::paintListBoxItem(int, juce::Graphics& g, int width, int height, bool) {
-    g.setColour(juce::Colours::white.withAlpha(0.06f));
+    g.setColour(juce::Colour(MidiMaidLookAndFeel::kOutline));
     g.drawHorizontalLine(height - 1, 0.0f, static_cast<float>(width));
 }
 
@@ -337,7 +339,7 @@ void ReferencesDialog::resized() {
 }
 
 void ReferencesDialog::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colour(0xff1b1b1f));
+    g.fillAll(juce::Colour(MidiMaidLookAndFeel::kBackground));
 }
 
 void ReferencesDialog::show(const std::string& styleId, const juce::String& styleName) {
@@ -350,7 +352,7 @@ void ReferencesDialog::show(const std::string& styleId, const juce::String& styl
     options.content.setOwned(
         new ReferencesDialog([] { return std::ref(referenceStore()); }, styleId, styleName));
     options.dialogTitle = tr(keys::kReferencesTitle, {{"name", styleName.toStdString()}});
-    options.dialogBackgroundColour = juce::Colour(0xff1b1b1f);
+    options.dialogBackgroundColour = juce::Colour(MidiMaidLookAndFeel::kBackground);
     options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true;
     options.resizable = false;

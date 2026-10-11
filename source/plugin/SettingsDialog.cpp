@@ -36,6 +36,7 @@ juce::Label& SettingsDialog::makeLabel(juce::Label& label, std::string_view key)
 
 SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSettingsStore&()> settings)
     : connection_(connection), settings_(std::move(settings)) {
+    setLookAndFeel(&look_);
     models_ = connection_.models();
     const auto ai = settings_().get().ai;
     selected_ = models_.find(ai.activeProvider) != nullptr ? ai.activeProvider : std::string();
@@ -338,6 +339,7 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
 }
 
 SettingsDialog::~SettingsDialog() {
+    setLookAndFeel(nullptr);
     *alive_ = false;
 }
 
@@ -534,7 +536,7 @@ void SettingsDialog::resized() {
 }
 
 void SettingsDialog::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colour(0xff1b1b1f));
+    g.fillAll(juce::Colour(MidiMaidLookAndFeel::kBackground));
 }
 
 void SettingsDialog::show() {
@@ -546,7 +548,7 @@ void SettingsDialog::show() {
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(new SettingsDialog(AiConnection::instance(), [] { return std::ref(globalSettings()); }));
     options.dialogTitle = tr(keys::kSettingsTitle);
-    options.dialogBackgroundColour = juce::Colour(0xff1b1b1f);
+    options.dialogBackgroundColour = juce::Colour(MidiMaidLookAndFeel::kBackground);
     options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true;
     options.resizable = false;

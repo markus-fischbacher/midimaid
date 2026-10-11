@@ -1,7 +1,7 @@
 # Setup-Hilfe Hub & Voices (Textvorlage)
 
-> Zweck: Anleitung für Anwender und Textvorlage für die spätere Hilfe im Plugin (SPEC §6.5, §8.1). Die Hilfe im Plugin
-> kommt mit der Übersetzungstabelle (Phase 2); bis dahin steht hier die Quelle. Stand: Hub & Voices (D-146). Der Ablauf
+> Zweck: Anleitung für Anwender. Die Hilfe im Plugin (Knopf „Hilfe“, D-194) zeigt eine Kurzfassung davon mit einer Seite
+> je Host; die Texte stehen in `resources/i18n/de.json` (`help.text.*`). Ändert sich hier etwas, bitte dort nachziehen. Stand: Hub & Voices (D-146). Der Ablauf
 > in Live und Logic ist erst mit Teil H der `docs/HOST-VERIFIKATION.md` bestätigt; Abweichungen tragen wir hier nach.
 
 ## Das Prinzip

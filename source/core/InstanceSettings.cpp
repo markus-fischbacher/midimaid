@@ -1,6 +1,7 @@
 #include "core/InstanceSettings.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace mm::core {
@@ -88,13 +89,15 @@ int clampOctave(int octave) {
 }
 
 int clampUiScale(int percent) {
-    int best = kUiScaleSteps[0];
-    for (const int step : kUiScaleSteps) {
-        if (std::abs(step - percent) < std::abs(best - percent)) {
-            best = step;
-        }
+    return std::clamp(percent, kMinUiScale, kMaxUiScale);
+}
+
+int uiScaleForDrag(int startPercent, double startWidth, double dragX) {
+    if (!(startWidth > 0.0)) {
+        return clampUiScale(startPercent);
     }
-    return best;
+    const double scaled = startPercent * (startWidth + dragX) / startWidth;
+    return clampUiScale(static_cast<int>(std::lround(std::clamp(scaled, -1.0e6, 1.0e6))));
 }
 
 int clampOutputVoice(int voice) {

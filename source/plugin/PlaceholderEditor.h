@@ -41,6 +41,8 @@ private:
     /// Switches between the voice UI and the placeholder layout (size and visible controls).
     void applyLayout(bool voiceLayout);
     void applyScale();
+    /// The size box shows the step that equals the size, or the size itself when it lies between two steps.
+    void syncZoomBox();
     void layoutVoiceWindow();
     /// The playhead of the piano rolls (30 times a second): the host position as a line in the roll of the slot that
     /// plays, in the hub rows and in the voice window.
@@ -127,6 +129,10 @@ private:
     juce::ToggleButton muteButton_;
     juce::ComboBox octaveBox_;
     juce::ComboBox zoomBox_; // the size of the window (SPEC 8.1), both layouts
+    ScaleCorner scaleCorner_; // continuous size by dragging the corner, both layouts
+    juce::TextButton helpButton_; // opens the help dialog (SPEC 6.5)
+    int cornerStartPct_ = 100;
+    double cornerStartWidth_ = 0.0;
     RollView rollView_;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment_;
     int muteVoice_ = 0; // the voice the mute button is bound to

@@ -45,6 +45,7 @@ std::string_view libraryStatusKey(GenerationStatus status) {
 LibraryDialog::LibraryDialog(ProcessorBase& processor, std::shared_ptr<bool> processorAlive,
                              std::function<LibraryStore&()> store)
     : processor_(processor), processorAlive_(std::move(processorAlive)), store_(std::move(store)) {
+    setLookAndFeel(&look_);
     summaryLabel_.setComponentID("summary");
     summaryLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.8f));
     addAndMakeVisible(summaryLabel_);
@@ -64,7 +65,7 @@ LibraryDialog::LibraryDialog(ProcessorBase& processor, std::shared_ptr<bool> pro
 
     list_.setComponentID("list");
     list_.setRowHeight(kRowHeight);
-    list_.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff222227));
+    list_.setColour(juce::ListBox::backgroundColourId, juce::Colour(MidiMaidLookAndFeel::kSurface));
     addAndMakeVisible(list_);
 
     const auto setup = [this](juce::TextButton& button, const char* id, std::string_view key) {
@@ -161,6 +162,7 @@ LibraryDialog::LibraryDialog(ProcessorBase& processor, std::shared_ptr<bool> pro
 }
 
 LibraryDialog::~LibraryDialog() {
+    setLookAndFeel(nullptr);
     *alive_ = false;
     stopTimer();
     store_().setOnChanged({});
@@ -271,15 +273,15 @@ void LibraryDialog::paintListBoxItem(int row, juce::Graphics& g, int width, int 
     }
     const auto& entry = entries_[static_cast<size_t>(row)];
     if (isSelected) {
-        g.fillAll(juce::Colours::white.withAlpha(0.12f));
+        g.fillAll(juce::Colour(MidiMaidLookAndFeel::kAccent).withAlpha(0.22f));
     }
-    g.setColour(juce::Colours::white);
+    g.setColour(juce::Colour(MidiMaidLookAndFeel::kText));
     g.setFont(15.0f);
     g.drawText(juce::String::fromUTF8(entry.name.c_str()), 10, 3, width - 20, 18, juce::Justification::centredLeft);
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
+    g.setColour(juce::Colour(MidiMaidLookAndFeel::kTextDim));
     g.setFont(12.5f);
     g.drawText(infoText(entry), 10, 21, width - 20, 16, juce::Justification::centredLeft);
-    g.setColour(juce::Colours::white.withAlpha(0.06f));
+    g.setColour(juce::Colour(MidiMaidLookAndFeel::kOutline));
     g.drawHorizontalLine(height - 1, 0.0f, static_cast<float>(width));
 }
 
@@ -315,7 +317,7 @@ void LibraryDialog::resized() {
 }
 
 void LibraryDialog::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colour(0xff1b1b1f));
+    g.fillAll(juce::Colour(MidiMaidLookAndFeel::kBackground));
 }
 
 void LibraryDialog::show(ProcessorBase& processor, std::shared_ptr<bool> processorAlive) {
@@ -328,7 +330,7 @@ void LibraryDialog::show(ProcessorBase& processor, std::shared_ptr<bool> process
     options.content.setOwned(
         new LibraryDialog(processor, std::move(processorAlive), [] { return std::ref(libraryStore()); }));
     options.dialogTitle = tr(keys::kLibraryTitle);
-    options.dialogBackgroundColour = juce::Colour(0xff1b1b1f);
+    options.dialogBackgroundColour = juce::Colour(MidiMaidLookAndFeel::kBackground);
     options.escapeKeyTriggersCloseButton = true;
     options.useNativeTitleBar = true;
     options.resizable = false;

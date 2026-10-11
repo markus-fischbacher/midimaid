@@ -68,10 +68,17 @@ int clampOutputVoice(int voice);
 std::optional<uint64_t> parseSeed(std::string_view text);
 /// Clamps to -2 to +2.
 int clampOctave(int octave);
-/// The sizes of the editor in percent of its standard size (SPEC 8.1: 75 to 200 %, the aspect ratio stays).
+/// The size of the editor in percent of its standard size (SPEC 8.1: 75 to 200 %, the aspect ratio stays). The size box
+/// offers the steps, the corner of the window sets any whole percent in between.
 inline constexpr int kUiScaleSteps[] = {75, 100, 125, 150, 175, 200};
+inline constexpr int kMinUiScale = 75;
+inline constexpr int kMaxUiScale = 200;
 inline constexpr int kDefaultUiScale = 100;
-/// The step nearest to `percent` (a value out of range gives the first or last step).
+/// `percent` limited to `kMinUiScale` .. `kMaxUiScale` (a size between two steps stays as it is).
 int clampUiScale(int percent);
+/// The size after dragging the corner of a window that was `startWidth` wide on screen at `startPercent`, by `dragX`
+/// on screen (to the right is larger): the width follows the drag, the height follows the width. Limited like
+/// `clampUiScale`; a width of 0 or less leaves the size unchanged.
+int uiScaleForDrag(int startPercent, double startWidth, double dragX);
 
 } // namespace mm::core

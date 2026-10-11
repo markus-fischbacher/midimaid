@@ -3,6 +3,7 @@
 #include "core/MidiImport.h"
 #include "core/PatternGenerator.h"
 #include "core/LibraryIndex.h"
+#include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/AtomicFile.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/LibraryDialog.h"
@@ -1054,4 +1055,47 @@ TEST_CASE("a store without a folder writes no file anywhere", "[library-plugin][
         store.waitForIdle();
     }
     CHECK_FALSE(stray.exists());
+}
+
+TEST_CASE("the window has the look of the plug-in", "[library-plugin][dialog][look]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    InstrumentProcessor processor("Test");
+    LibraryDialog dialog(processor, processor.libraryAliveFlag(), [&]() -> LibraryStore& { return scoped.store; });
+    auto& load = *find(dialog, "load");
+    CHECK(dynamic_cast<MidiMaidLookAndFeel*>(&dialog.getLookAndFeel()) != nullptr);
+    CHECK(dynamic_cast<MidiMaidLookAndFeel*>(&load.getLookAndFeel()) != nullptr); // the children inherit it
+    const auto image = dialog.createComponentSnapshot(dialog.getLocalBounds());
+    CHECK(image.getPixelAt(1, 1) == juce::Colour(MidiMaidLookAndFeel::kBackground));
+    CHECK(image.getPixelAt(dialog.getWidth() - 2, dialog.getHeight() - 2) == juce::Colour(MidiMaidLookAndFeel::kBackground));
+}
+
+namespace {
+
+void writeSnapshot(juce::Component& component, const juce::String& name) {
+    const auto folder = juce::SystemStats::getEnvironmentVariable("MM_SNAPSHOT_DIR", {});
+    REQUIRE(folder.isNotEmpty());
+    const auto image = component.createComponentSnapshot(component.getLocalBounds(), false, 2.0f);
+    juce::FileOutputStream stream(juce::File(folder).getChildFile(name));
+    REQUIRE(stream.openedOk());
+    stream.setPosition(0);
+    stream.truncate();
+    juce::PNGImageFormat png;
+    REQUIRE(png.writeImageToStream(image, stream));
+}
+
+} // namespace
+
+// Renders the dialog to a PNG file for a look at the design (not a check): MM_SNAPSHOT_DIR=<folder> run with "[.snapshot]".
+TEST_CASE("snapshot of the library", "[.snapshot]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, 4);
+    LibraryDialog dialog(processor, processor.libraryAliveFlag(), [&]() -> LibraryStore& { return scoped.store; });
+    dynamic_cast<juce::TextButton*>(find(dialog, "saveSlot"))->onClick();
+    dynamic_cast<juce::TextButton*>(find(dialog, "saveSet"))->onClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
+    dynamic_cast<juce::ListBox*>(find(dialog, "list"))->selectRow(0);
+    writeSnapshot(dialog, "library.png");
 }

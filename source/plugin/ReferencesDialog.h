@@ -1,5 +1,6 @@
 #pragma once
 
+#include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/ReferenceStore.h"
 
 #include <functional>
@@ -41,6 +42,7 @@ private:
     juce::String summaryText(const mm::core::ReferenceSet& set) const;
     juce::String statusText(const ReferenceStore::Progress& progress) const;
 
+    MidiMaidLookAndFeel look_; // first: the children use it until the end
     std::function<ReferenceStore&()> store_;
     std::string styleId_;
     mm::core::ReferenceSet set_;
