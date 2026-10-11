@@ -53,7 +53,7 @@ Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehe
 - **Verlauf** (◀ ▶, „Verlauf 2/5“): jeder Slot behält seine letzten Ergebnisse. Vorher gab es nichts, was du verlieren
   könntest.
 
-**Slots kopieren, tauschen, leeren:** Ein Rechtsklick auf ein Feld der Slot-Leiste öffnet das Menü *Slot kopieren*, *Slot einfügen*, *Slot leeren* und *Tauschen mit …*. Du kannst auch ein Feld auf ein anderes **ziehen**: Das tauscht die beiden Slots, mit gehaltener **Alt-Taste** kopiert es. Einfügen ist ein Ergebnis wie *Erzeugen* (◀ und *Rückgängig* gehen zurück). **Leeren und Tauschen** lassen sich mit *Rückgängig* zurücknehmen (der ganze Slot kommt mit Verlauf, Name und Farbe wieder); das Durchblättern des Verlaufs (◀ ▶) beendet die Schritte des Slots.
+**Slots kopieren, tauschen, leeren:** Ein Rechtsklick auf ein Feld der Slot-Leiste öffnet das Menü *Slot kopieren*, *Slot einfügen*, *Slot leeren* und *Tauschen mit …*. Du kannst auch ein Feld auf ein anderes **ziehen**: Das tauscht die beiden Slots, mit gehaltener **Alt-Taste** (Option) kopiert es; der Zeiger zeigt dann ein „+“. Einfügen ist ein Ergebnis wie *Erzeugen* (◀ und *Rückgängig* gehen zurück). **Leeren und Tauschen** lassen sich mit *Rückgängig* zurücknehmen (der ganze Slot kommt mit Verlauf, Name und Farbe wieder); das Durchblättern des Verlaufs (◀ ▶) beendet die Schritte des Slots.
 
 **Sperren:** Der Knopf *Sperren* an einer Stimme hält sie fest, bis du sie wieder freigibst. Erzeugen, Variation und
 Verfeinern lassen sie in Ruhe.
