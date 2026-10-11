@@ -132,6 +132,16 @@ private:
     ScaleCorner scaleCorner_; // continuous size by dragging the corner, both layouts
     juce::TextButton helpButton_; // opens the help dialog (SPEC 6.5)
     juce::TextButton followButton_; // the rolls follow the playhead page by page
+    // Evolve (SPEC 6.7): the toggle, back, the stage and keep in the history bar; the settings in the expert row.
+    juce::TextButton evolveButton_;
+    juce::TextButton evolveBackButton_;
+    juce::Label evolveStageLabel_;
+    juce::TextButton evolveKeepButton_;
+    juce::ComboBox evolveEveryBox_;
+    juce::ToggleButton evolveOriginalButton_;
+    juce::Label evolveStrengthLabel_;
+    juce::Slider evolveStrengthSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
+    void applyEvolveSettings();
     void syncTimeView(uint32_t startTick, uint32_t spanTicks);
     int statusButtons_ = 0; // which of the buttons beside the status message are shown
     int cornerStartPct_ = 100;

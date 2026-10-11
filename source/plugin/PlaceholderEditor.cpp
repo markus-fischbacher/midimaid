@@ -466,6 +466,50 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     followButton_.onClick = [this] { processor_.setFollowPlayhead(followButton_.getToggleState()); };
     addAndMakeVisible(followButton_);
 
+    evolveButton_.setButtonText(tr(keys::kButtonEvolve));
+    evolveButton_.setComponentID("evolve");
+    evolveButton_.setClickingTogglesState(true);
+    evolveButton_.onClick = [this] {
+        processor_.setEvolve(evolveButton_.getToggleState());
+        updateStatus();
+    };
+    addChildComponent(evolveButton_);
+    evolveBackButton_.setButtonText(tr(keys::kButtonHistoryBack));
+    evolveBackButton_.setComponentID("evolve_back");
+    evolveBackButton_.onClick = [this] { processor_.evolveBack(); };
+    addChildComponent(evolveBackButton_);
+    evolveStageLabel_.setComponentID("evolve_stage");
+    evolveStageLabel_.setJustificationType(juce::Justification::centred);
+    evolveStageLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    addChildComponent(evolveStageLabel_);
+    evolveKeepButton_.setButtonText(tr(keys::kButtonEvolveKeep));
+    evolveKeepButton_.setComponentID("evolve_keep");
+    evolveKeepButton_.onClick = [this] {
+        processor_.evolveKeep();
+        updateStatus();
+    };
+    addChildComponent(evolveKeepButton_);
+    evolveEveryBox_.setComponentID("evolve_every");
+    for (int n = mm::core::kEvolveMinPasses; n <= mm::core::kEvolveMaxPasses; ++n) {
+        evolveEveryBox_.addItem(tr(keys::kLabelEvolveEvery, {{"n", std::to_string(n)}}), n);
+    }
+    evolveEveryBox_.setSelectedId(processor_.instanceSettings().evolve.everyPasses, juce::dontSendNotification);
+    evolveEveryBox_.onChange = [this] { applyEvolveSettings(); };
+    addChildComponent(evolveEveryBox_);
+    evolveOriginalButton_.setButtonText(tr(keys::kButtonEvolveFromOriginal));
+    evolveOriginalButton_.setComponentID("evolve_original");
+    evolveOriginalButton_.setToggleState(processor_.instanceSettings().evolve.fromOriginal, juce::dontSendNotification);
+    evolveOriginalButton_.onClick = [this] { applyEvolveSettings(); };
+    addChildComponent(evolveOriginalButton_);
+    evolveStrengthLabel_.setText(tr(keys::kLabelEvolveStrength), juce::dontSendNotification);
+    evolveStrengthLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    addChildComponent(evolveStrengthLabel_);
+    evolveStrengthSlider_.setComponentID("evolve_strength");
+    evolveStrengthSlider_.setRange(1.0, 100.0, 1.0);
+    evolveStrengthSlider_.setValue(processor_.instanceSettings().evolve.strengthPct, juce::dontSendNotification);
+    evolveStrengthSlider_.onValueChange = [this] { applyEvolveSettings(); };
+    addChildComponent(evolveStrengthSlider_);
+
     rollView_.setComponentID("roll");
     addChildComponent(rollView_);
 
@@ -633,6 +677,12 @@ void PlaceholderEditor::updateStatus() {
         break;
     case GenerationStatus::SlotsSwapped:
         statusLabel_.setText(tr(keys::kStatusSlotsSwapped), juce::dontSendNotification);
+        break;
+    case GenerationStatus::EvolveKept:
+        statusLabel_.setText(tr(keys::kStatusEvolveKept), juce::dontSendNotification);
+        break;
+    case GenerationStatus::EvolveNothingToKeep:
+        statusLabel_.setText(tr(keys::kStatusEvolveNothingToKeep), juce::dontSendNotification);
         break;
     case GenerationStatus::ImportNotFourFour:
         statusLabel_.setText(tr(keys::kStatusImportNotFourFour), juce::dontSendNotification);
@@ -828,7 +878,8 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
              &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
-             &expertButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_}) {
+             &expertButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_, &evolveButton_, &evolveBackButton_,
+             &evolveStageLabel_, &evolveKeepButton_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -929,7 +980,9 @@ void PlaceholderEditor::applyLevel() {
     const bool show = expert_ && !voiceLayout_;
     for (auto* component :
          std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
-                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_}) {
+                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &evolveEveryBox_,
+                                                 &evolveOriginalButton_, &evolveStrengthLabel_,
+                                                 &evolveStrengthSlider_}) {
         component->setVisible(show);
     }
     expertButton_.setToggleState(expert_, juce::dontSendNotification);
@@ -964,6 +1017,11 @@ void PlaceholderEditor::varyVoice(std::optional<size_t> voice, std::optional<siz
     updateStatus();
 }
 
+void PlaceholderEditor::applyEvolveSettings() {
+    processor_.setEvolveSettings({evolveEveryBox_.getSelectedId(), evolveOriginalButton_.getToggleState(),
+                                  static_cast<int>(evolveStrengthSlider_.getValue())});
+}
+
 void PlaceholderEditor::updateActionButtons() {
     undoButton_.setEnabled(processor_.canUndo());
     redoButton_.setEnabled(processor_.canRedo());
@@ -971,6 +1029,16 @@ void PlaceholderEditor::updateActionButtons() {
     const auto& info = shownInfo_;
     historyBackButton_.setEnabled(info.historyIndex > 0 && info.historySize > 0);
     historyForwardButton_.setEnabled(info.historyIndex + 1 < info.historySize);
+    const auto evolve = processor_.evolveInfo();
+    if (evolveButton_.getToggleState() != evolve.on) { // e.g. an offline render switched it off
+        evolveButton_.setToggleState(evolve.on, juce::dontSendNotification);
+    }
+    evolveBackButton_.setEnabled(evolve.on && evolve.canBack);
+    evolveKeepButton_.setEnabled(evolve.on && evolve.changed);
+    evolveStageLabel_.setText(evolve.on && evolve.layerActive
+                                  ? tr(keys::kLabelEvolveStage, {{"n", std::to_string(evolve.stage)}})
+                                  : tr(keys::kLabelEvolveStageOff),
+                              juce::dontSendNotification);
     historyLabel_.setText(info.historySize == 0 ? tr(keys::kLabelHistoryNone)
                                                 : tr(keys::kLabelHistory, {{"n", std::to_string(info.historyIndex + 1)},
                                                                            {"m", std::to_string(info.historySize)}}),
@@ -1305,6 +1373,12 @@ void PlaceholderEditor::resized() {
     historyLabel_.setBounds(historyBar.removeFromLeft(120));
     historyForwardButton_.setBounds(historyBar.removeFromLeft(40));
     followButton_.setBounds(historyBar.removeFromRight(100));
+    historyBar.removeFromLeft(24);
+    evolveButton_.setBounds(historyBar.removeFromLeft(76));
+    historyBar.removeFromLeft(6);
+    evolveBackButton_.setBounds(historyBar.removeFromLeft(34));
+    evolveStageLabel_.setBounds(historyBar.removeFromLeft(70));
+    evolveKeepButton_.setBounds(historyBar.removeFromLeft(86));
     auto editBar = area.removeFromTop(32).reduced(16, 2);
     expertButton_.setBounds(editBar.removeFromLeft(120));
     editBar.removeFromLeft(8);
@@ -1317,6 +1391,15 @@ void PlaceholderEditor::resized() {
     tripletButton_.setBounds(editBar.removeFromLeft(90));
     editBar.removeFromLeft(8);
     snapBox_.setBounds(editBar.removeFromLeft(190));
+    if (expert_) { // the settings of Evolve (SPEC 6.7) in a row of their own
+        auto evolveRow = area.removeFromTop(32).reduced(16, 2);
+        evolveEveryBox_.setBounds(evolveRow.removeFromLeft(190));
+        evolveRow.removeFromLeft(8);
+        evolveOriginalButton_.setBounds(evolveRow.removeFromLeft(150));
+        evolveRow.removeFromLeft(16);
+        evolveStrengthLabel_.setBounds(evolveRow.removeFromLeft(110));
+        evolveStrengthSlider_.setBounds(evolveRow.removeFromLeft(240));
+    }
     if (!rows_.empty()) {
         constexpr int kStripHeight = 36; // a collapsed row (D-159)
         const int collapsedCount = static_cast<int>(

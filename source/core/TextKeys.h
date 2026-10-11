@@ -65,6 +65,15 @@ namespace mm::core::text {
     X(kZoomItem, "zoom.item")                                                                                          \
     X(kButtonHelp, "button.help")                                                                                      \
     X(kButtonFollow, "button.follow")                                                                                  \
+    X(kButtonEvolve, "button.evolve")                                                                                  \
+    X(kButtonEvolveKeep, "button.evolveKeep")                                                                          \
+    X(kButtonEvolveFromOriginal, "button.evolveFromOriginal")                                                          \
+    X(kLabelEvolveStage, "label.evolveStage")                                                                          \
+    X(kLabelEvolveStageOff, "label.evolveStageOff")                                                                    \
+    X(kLabelEvolveEvery, "label.evolveEvery")                                                                          \
+    X(kLabelEvolveStrength, "label.evolveStrength")                                                                    \
+    X(kStatusEvolveKept, "status.evolveKept")                                                                          \
+    X(kStatusEvolveNothingToKeep, "status.evolveNothingToKeep")                                                        \
     X(kDragLabel, "drag.label")                                                                                        \
     X(kHelpTitle, "help.title")                                                                                        \
     X(kHelpTabGeneral, "help.tab.general")                                                                             \

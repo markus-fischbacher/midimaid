@@ -54,6 +54,16 @@ Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehe
 - **Verlauf** (◀ ▶, „Verlauf 2/5“): jeder Slot behält seine letzten Ergebnisse. Vorher gab es nichts, was du verlieren
   könntest.
 
+**Evolve** (Hub, ab v1.1): Der Schalter *Evolve* in der Verlaufsleiste lässt das Pattern von selbst weiterwachsen, ohne den Slot
+anzutasten. Läuft der Transport, entsteht alle N Durchläufe (Standard 4) eine neue **Stufe**, die ab dem nächsten Durchlauf
+klingt; *Stufe n* zählt mit. Jede Stufe geht aus der vorigen hervor (Entwicklung); mit **Vom Original** variiert jede Stufe den
+Slot selbst (ein fester Kern mit wechselnden Varianten). Gesperrte Stimmen bleiben. **Behalten** übernimmt die Stufe, die gerade
+klingt, in den Slot (ein Verlaufseintrag, *Rückgängig* geht zurück), Evolve läuft von dort weiter. **◀** holt eine der letzten 8 Stufen
+zurück. Schaltest du *Evolve* aus oder wechselst den Slot, spielt wieder der unveränderte Slot. Änderst du von Hand etwas (Variation, Neu, Noten
+bearbeiten), wirkt es auf die Stufe, die du gerade hörst. Das Intervall, **Vom Original** und die **Evolve-Stärke** (Standard 20 %) stehen im
+Experten-Modus. Die Ebene wird nicht im Projekt gespeichert, ein Bounce spielt den Slot, und die Voices folgen der Stufe noch nicht (kommt
+mit der nächsten Etappe).
+
 **Slots kopieren, tauschen, leeren:** Ein Rechtsklick auf ein Feld der Slot-Leiste öffnet das Menü *Slot kopieren*, *Slot einfügen*, *Slot leeren* und *Tauschen mit …*. Du kannst auch ein Feld auf ein anderes **ziehen**: Das tauscht die beiden Slots, mit gehaltener **Alt-Taste** (Option) kopiert es; der Zeiger zeigt dann ein „+“. Einfügen ist ein Ergebnis wie *Erzeugen* (◀ und *Rückgängig* gehen zurück). **Leeren und Tauschen** lassen sich mit *Rückgängig* zurücknehmen (der ganze Slot kommt mit Verlauf, Name und Farbe wieder); das Durchblättern des Verlaufs (◀ ▶) beendet die Schritte des Slots.
 
 **Sperren:** Der Knopf *Sperren* an einer Stimme hält sie fest, bis du sie wieder freigibst. Erzeugen, Variation und
