@@ -209,6 +209,7 @@ Datenverlust. Ein gespeichertes Pattern bleibt nach Änderungen am Referenz-Set 
 - [x] Performance-Messung gegen SPEC §11
 - [x] Slot-Aktionen: Kopieren, Einfügen, Leeren, Tauschen per Menü und Ziehen, Tauschen und Leeren rückgängig (SPEC §3.10, D-191, D-202)
 - [x] Playhead in der Piano-Roll, Hub und Voice-Fenster (D-192)
+- [x] Playhead folgen (Schalter, seitenweise) und gemeinsames Zeitfenster der Rolls im Hub, Zoom und Scrollen in der Voice-Roll (D-208, H58)
 - [ ] Instrument-Presets pro Rolle (Live und Logic, nur eigene Instrumente, SPEC §12)
 - [ ] DAW-Vorlagen: Live-Set mit Gruppenspuren, Logic-Patches (SPEC §8.6)
 - [ ] Setup-Hilfe: Routing, Monitoring, Aufnahme, Freeze, Arrangement (SPEC §6.5) – Text (D-188) und Hilfe-Dialog im Plugin (D-194, H51) stehen; die Bestätigung in der DAW (H46) fehlt

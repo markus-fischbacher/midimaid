@@ -3869,3 +3869,219 @@ TEST_CASE("Open hub says what to do when the window of the hub is closed", "[gro
     hub.processor.editorBeingDeleted(hubEditor.get()); // what the host wrapper does
     hubEditor.reset();
 }
+
+TEST_CASE("the rolls of the hub share their time window, the pitch rows stay each its own", "[group-wiring][editor][follow]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots(
+        [](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, mm::core::makeEmptyPattern(8, "peak_time"))); });
+    hub.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    const auto rolls = [&] {
+        std::vector<mm::plugin::EditableRoll*> found;
+        for (auto* component : editor->getChildren()) {
+            if (auto* row = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+                found.push_back(&row->roll());
+            }
+        }
+        return found;
+    };
+    REQUIRE(waitFor([&] { return rolls().size() >= 2 && rolls()[0]->patternTicks() == 8 * 3840; }));
+    auto all = rolls();
+    REQUIRE(all[1]->patternTicks() == 8 * 3840);
+    CHECK(all[0]->viewport().spanTicks == all[1]->viewport().spanTicks);
+
+    // zooming one roll in time zooms the other the same way
+    all[0]->zoomAt(0.0, 0.25);
+    CHECK(all[0]->viewport().spanTicks < 4 * 3840);
+    CHECK(all[1]->viewport().spanTicks == all[0]->viewport().spanTicks);
+    CHECK(all[1]->viewport().startTick == all[0]->viewport().startTick);
+
+    // scrolling in time too, from either roll
+    all[1]->scrollBy(3840, 0);
+    CHECK(all[0]->viewport().startTick == all[1]->viewport().startTick);
+    CHECK(all[0]->viewport().startTick > 0);
+
+    // the pitch rows do not go along
+    const int lowFirst = all[0]->viewport().lowPitch;
+    const int lowSecond = all[1]->viewport().lowPitch;
+    all[1]->scrollBy(0, 5);
+    CHECK(all[1]->viewport().lowPitch == lowSecond + 5);
+    CHECK(all[0]->viewport().lowPitch == lowFirst);
+}
+
+TEST_CASE("the rolls follow the playhead page by page while Follow is on", "[group-wiring][editor][follow]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots(
+        [](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, mm::core::makeEmptyPattern(8, "peak_time"))); });
+    hub.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    const auto rolls = [&] {
+        std::vector<mm::plugin::EditableRoll*> found;
+        for (auto* component : editor->getChildren()) {
+            if (auto* row = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+                found.push_back(&row->roll());
+            }
+        }
+        return found;
+    };
+    const auto drive = [&](int steps) {
+        for (int i = 0; i < steps; ++i) {
+            hub.step();
+            pumpMessages(20);
+        }
+    };
+    hub.setPpq(0.5);
+    REQUIRE(waitFor([&] { hub.step(); return rolls().size() >= 2 && rolls()[0]->patternTicks() == 8 * 3840; }));
+    rolls()[0]->zoomAt(0.0, 0.0001); // as narrow as allowed (one quarter note) ...
+    rolls()[0]->zoomAt(0.0, 4.0);    // ... and four times as wide: one bar
+    CHECK(rolls()[1]->viewport().spanTicks == 3840);
+    auto* button = child<juce::TextButton>(*editor, "follow_playhead");
+    REQUIRE(button != nullptr);
+    CHECK_FALSE(hub.processor.followPlayhead());
+
+    // Follow off: the playhead leaves the window and the window stays
+    hub.setPpq(5.0); // tick 4800: the second bar
+    drive(10);
+    CHECK(rolls()[0]->viewport().startTick == 0);
+
+    // Follow on: both rolls turn to the page of the playhead
+    button->setToggleState(true, juce::sendNotificationSync);
+    CHECK(hub.processor.followPlayhead());
+    hub.setPpq(5.0);
+    drive(10);
+    CHECK(waitFor([&] { return rolls()[0]->viewport().startTick == 3840 && rolls()[1]->viewport().startTick == 3840; }));
+    hub.setPpq(13.0); // tick 12480: the fourth bar
+    drive(10);
+    CHECK(waitFor([&] { return rolls()[0]->viewport().startTick == 11520 && rolls()[1]->viewport().startTick == 11520; }));
+    CHECK(rolls()[0]->viewport().spanTicks == 3840); // the zoom stays
+
+    // and off again
+    button->setToggleState(false, juce::sendNotificationSync);
+    CHECK_FALSE(hub.processor.followPlayhead());
+    hub.setPpq(1.0);
+    drive(10);
+    CHECK(rolls()[0]->viewport().startTick == 11520);
+}
+
+TEST_CASE("the roll of the voice window zooms, scrolls and follows the playhead", "[group-wiring][editor][follow]") {
+    Quiet quiet;
+    FakePlayheadClock clock;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    voice.processor.editSlots(
+        [](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, mm::core::makeEmptyPattern(8, "peak_time"))); });
+    voice.setSlotParameter(1);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* roll = child<mm::plugin::RollView>(*editor, "roll");
+    REQUIRE(roll != nullptr);
+    REQUIRE(waitFor([&] { return roll->patternTicks() == 8 * 3840; }));
+    CHECK(roll->viewSpan() == 8 * 3840); // the whole pattern at first
+
+    roll->zoomAt(0.0, 0.125);
+    CHECK(roll->viewSpan() == 3840);
+    roll->scrollBy(1000);
+    CHECK(roll->viewStart() == 1000);
+
+    auto* button = child<juce::TextButton>(*editor, "follow_playhead");
+    REQUIRE(button != nullptr);
+    voice.setPpq(9.0); // tick 8640: the third bar
+    for (int i = 0; i < 10; ++i) {
+        voice.step();
+        pumpMessages(20);
+    }
+    CHECK(roll->viewStart() == 1000); // off: nothing moves
+    button->setToggleState(true, juce::sendNotificationSync);
+    voice.setPpq(9.0);
+    for (int i = 0; i < 10; ++i) {
+        voice.step();
+        pumpMessages(20);
+    }
+    CHECK(waitFor([&] { return roll->viewStart() == 7680; })); // the page of tick 8640 with a width of one bar: bar 3
+    CHECK(roll->viewSpan() == 3840);
+}
+
+TEST_CASE("the follow switch is saved with the instance and only when it is on", "[group-wiring][follow]") {
+    Quiet quiet;
+    Instance source("Source");
+    CHECK_FALSE(source.processor.followPlayhead());
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("followPlayhead")); // older states stay as they were
+
+    source.processor.setFollowPlayhead(true);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.processor.followPlayhead());
+    target.processor.setStateInformation(standard.getData(), static_cast<int>(standard.getSize()));
+    CHECK_FALSE(target.processor.followPlayhead());
+}
+
+TEST_CASE("the follow button is in the hub and in the voice window and overlaps nothing", "[group-wiring][editor][layout][follow]") {
+    Quiet quiet;
+    for (const auto role : {InstanceRole::Hub, InstanceRole::Voice}) {
+        Instance instance("Test");
+        instance.setRole(role);
+        std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        pumpMessages(40);
+        auto* button = child<juce::TextButton>(*editor, "follow_playhead");
+        REQUIRE(button != nullptr);
+        INFO("role " << static_cast<int>(role));
+        CHECK(button->isVisible());
+        CHECK(button->getButtonText() == "Folgen");
+        CHECK(button->getWidth() >= 80);
+        CHECK(editor->getLocalBounds().contains(button->getBounds()));
+        for (auto* other : editor->getChildren()) {
+            if (other != button && other->isVisible() && other->getWidth() > 0) {
+                INFO(other->getComponentID().toStdString());
+                CHECK_FALSE(button->getBounds().intersects(other->getBounds()));
+            }
+        }
+    }
+}
+
+TEST_CASE("the read-only roll draws only the visible part of the pattern, notes where the window puts them",
+          "[group-wiring][paint][follow]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::RollView view;
+    view.setBounds(0, 0, 400, 160);
+    mm::core::RollLayout layout;
+    layout.bars = 2;
+    layout.notes.push_back({0.5f, 0.5f, 0.1f, 0.1f, 127}); // tick 3840, the start of the second bar
+    view.setContent(layout, "Slot 1 - Bass", false);
+    const auto accentColumns = [&] {
+        const auto image = view.createComponentSnapshot(view.getLocalBounds(), false, 1.0f);
+        std::vector<int> columns;
+        for (int x = 0; x < image.getWidth(); ++x) {
+            for (int y = mm::plugin::RollView::kTitleHeight; y < image.getHeight(); ++y) {
+                const auto pixel = image.getPixelAt(x, y);
+                if (pixel.getGreen() > 150 && pixel.getRed() < 120) {
+                    columns.push_back(x);
+                    break;
+                }
+            }
+        }
+        return columns;
+    };
+    auto columns = accentColumns(); // the whole pattern: the note sits in the middle
+    REQUIRE_FALSE(columns.empty());
+    CHECK(columns.front() >= 195);
+    CHECK(columns.front() <= 205);
+
+    view.setTimeView(3840, 3840); // the second bar: the note is at the left edge and twice as wide as before
+    columns = accentColumns();
+    REQUIRE_FALSE(columns.empty());
+    CHECK(columns.front() <= 5);
+    CHECK(columns.back() - columns.front() >= 70);
+
+    view.setTimeView(0, 3840); // the first bar: no note in view
+    CHECK(accentColumns().empty());
+}

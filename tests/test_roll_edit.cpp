@@ -105,6 +105,36 @@ TEST_CASE("scrolling moves the window and stops at the ends", "[roll-edit]") {
     CHECK(s.lowPitch == 128 - 24);
 }
 
+TEST_CASE("the window follows the playhead page by page", "[roll-edit][follow]") {
+    const uint32_t total = 8 * kTicksPerBar;
+    const RollViewport first{0, 2 * kTicksPerBar, 48, 24};
+    // inside the window nothing moves
+    CHECK(followViewport(first, 0.0, total) == first);
+    CHECK(followViewport(first, 2 * kTicksPerBar - 1.0, total) == first);
+    // the first tick of the next page turns the page, the width and the pitch rows stay
+    auto next = followViewport(first, 2.0 * kTicksPerBar, total);
+    CHECK(next.startTick == 2 * kTicksPerBar);
+    CHECK(next.spanTicks == first.spanTicks);
+    CHECK(next.lowPitch == first.lowPitch);
+    CHECK(next.rows == first.rows);
+    // a jump over several pages lands on the page of the playhead, on a multiple of the width
+    CHECK(followViewport(first, 5.0 * kTicksPerBar + 100.0, total).startTick == 4 * kTicksPerBar);
+    CHECK(followViewport(first, total - 1.0, total).startTick == 6 * kTicksPerBar);
+    // a window that was moved by hand is brought back to the playhead
+    const RollViewport moved{kTicksPerBar / 2, 2 * kTicksPerBar, 48, 24};
+    CHECK(followViewport(moved, 6.0 * kTicksPerBar + 10.0, total).startTick == 6 * kTicksPerBar);
+    // the loop wraps: back to the first page
+    const RollViewport last{6 * kTicksPerBar, 2 * kTicksPerBar, 48, 24};
+    CHECK(followViewport(last, 10.0, total).startTick == 0);
+    // a pattern that fits never moves, nor does a playhead that is not there
+    const RollViewport all{0, total, 48, 24};
+    CHECK(followViewport(all, 3.0 * kTicksPerBar, total) == all);
+    CHECK(followViewport(first, -5.0, total) == first);
+    // an odd width: the pages still tile the pattern, the last one is pulled back inside
+    const RollViewport odd{0, 3 * kTicksPerBar, 48, 24};
+    CHECK(followViewport(odd, 7.5 * kTicksPerBar, total).startTick + 3 * kTicksPerBar == total);
+}
+
 TEST_CASE("pixels and ticks convert both ways", "[roll-edit]") {
     const auto g = geometryOf(4 * kTicksPerBar, 3840, 7680, 48, 24); // 960 px for 7680 ticks: 8 ticks per pixel
     CHECK(g.ticksPerPixel() == 8.0);

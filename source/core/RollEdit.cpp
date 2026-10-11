@@ -61,6 +61,20 @@ RollViewport zoomViewport(RollViewport viewport, double factor, uint32_t anchorT
     return clampViewport(viewport, patternTicks);
 }
 
+RollViewport followViewport(RollViewport viewport, double playheadTick, uint32_t patternTicks) {
+    viewport = clampViewport(viewport, patternTicks);
+    if (viewport.spanTicks >= patternTicks || playheadTick < 0.0) {
+        return viewport;
+    }
+    const auto tick = static_cast<int64_t>(playheadTick);
+    if (tick >= viewport.startTick && tick < static_cast<int64_t>(viewport.startTick) + viewport.spanTicks) {
+        return viewport;
+    }
+    const int64_t page = std::min<int64_t>(tick, static_cast<int64_t>(patternTicks) - 1) / viewport.spanTicks;
+    viewport.startTick = static_cast<uint32_t>(page * viewport.spanTicks);
+    return clampViewport(viewport, patternTicks);
+}
+
 RollViewport scrollViewport(RollViewport viewport, int64_t deltaTicks, int deltaRows, uint32_t patternTicks) {
     viewport = clampViewport(viewport, patternTicks);
     const int64_t start = static_cast<int64_t>(viewport.startTick) + deltaTicks;

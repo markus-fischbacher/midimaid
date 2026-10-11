@@ -1646,6 +1646,9 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         if (uiScalePct() != mm::core::kDefaultUiScale) { // only when it differs: states of the standard size stay as they were
             root.setAttribute("uiScale", uiScalePct());
         }
+        if (followPlayhead()) { // only when on: states of the standard stay as they were
+            root.setAttribute("followPlayhead", 1);
+        }
         root.createNewChildElement("Slots")->addTextElement(juce::String(mm::core::slotBankToString(slots_)));
     }
     copyXmlToBinary(root, destData);
@@ -1700,6 +1703,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     settings.generation.seed = mm::core::parseSeed(root->getStringAttribute("genSeed").toStdString());
     settings.generation.prompt = root->getStringAttribute("genPrompt").toStdString();
     setUiScalePct(root->getIntAttribute("uiScale", mm::core::kDefaultUiScale));
+    setFollowPlayhead(root->getIntAttribute("followPlayhead", 0) != 0);
 
     mm::core::SlotBank bank;
     std::vector<std::string> problems;

@@ -561,16 +561,40 @@ void EditableRoll::zoomAt(double x, double factor) {
         return;
     }
     const auto anchor = geometry().xToTick(x);
+    const auto before = viewport_;
     viewport_ = mm::core::zoomViewport(viewport_, factor, anchor, patternTicks_);
     repaint();
+    notifyTimeView(before);
 }
 
 void EditableRoll::scrollBy(int64_t deltaTicks, int deltaRows) {
     if (!haveView_) {
         return;
     }
+    const auto before = viewport_;
     viewport_ = mm::core::scrollViewport(viewport_, deltaTicks, deltaRows, patternTicks_);
     repaint();
+    notifyTimeView(before);
+}
+
+void EditableRoll::notifyTimeView(const mm::core::RollViewport& before) {
+    if (onTimeViewChanged && (before.startTick != viewport_.startTick || before.spanTicks != viewport_.spanTicks)) {
+        onTimeViewChanged(viewport_.startTick, viewport_.spanTicks);
+    }
+}
+
+void EditableRoll::setTimeView(uint32_t startTick, uint32_t spanTicks) {
+    if (!haveView_) {
+        return;
+    }
+    auto next = viewport_;
+    next.startTick = startTick;
+    next.spanTicks = spanTicks;
+    next = mm::core::clampViewport(next, patternTicks_);
+    if (next != viewport_) {
+        viewport_ = next;
+        repaint();
+    }
 }
 
 void EditableRoll::resized() {

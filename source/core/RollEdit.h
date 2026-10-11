@@ -59,6 +59,11 @@ RollViewport zoomViewport(RollViewport viewport, double factor, uint32_t anchorT
 /// Moves the window by ticks and rows (positive: later, higher). The result is clamped.
 RollViewport scrollViewport(RollViewport viewport, int64_t deltaTicks, int deltaRows, uint32_t patternTicks);
 
+/// The window that follows a playhead page by page: unchanged while `playheadTick` is inside it, otherwise the window
+/// of the same width that holds the playhead, on a multiple of the width (so the page after the last one is the first
+/// again when the pattern loops). A pattern that fits into the window never moves. The pitch rows stay as they are.
+RollViewport followViewport(RollViewport viewport, double playheadTick, uint32_t patternTicks);
+
 /// A viewport and the pixel area of the note field: converts between pixels and ticks or pitches.
 struct RollGeometry {
     RollViewport viewport;

@@ -459,6 +459,12 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     helpButton_.setComponentID("help");
     helpButton_.onClick = [this] { HelpDialog::show(detectHostCapabilities(processor_).host); };
     addAndMakeVisible(helpButton_);
+    followButton_.setButtonText(tr(keys::kButtonFollow));
+    followButton_.setComponentID("follow_playhead");
+    followButton_.setClickingTogglesState(true);
+    followButton_.setToggleState(processor_.followPlayhead(), juce::dontSendNotification);
+    followButton_.onClick = [this] { processor_.setFollowPlayhead(followButton_.getToggleState()); };
+    addAndMakeVisible(followButton_);
 
     rollView_.setComponentID("roll");
     addChildComponent(rollView_);
@@ -528,6 +534,9 @@ void PlaceholderEditor::updateStatus() {
     }
     const bool isVoice = role == mm::core::InstanceRole::Voice;
     applyStoredSettings(); // until the file is read
+    if (followButton_.getToggleState() != processor_.followPlayhead()) { // e.g. a state that was loaded later
+        followButton_.setToggleState(processor_.followPlayhead(), juce::dontSendNotification);
+    }
     if (isVoice != voiceLayout_ || getWidth() == 0) {
         applyLayout(isVoice);
     }
@@ -758,14 +767,39 @@ void PlaceholderEditor::updatePlayhead() {
     const auto ppq = processor_.playheadPpq();
     if (voiceLayout_) {
         const auto ticks = static_cast<uint32_t>(rollView_.layout().bars) * mm::core::kTicksPerBar;
-        rollView_.setPlayheadTick(ppq ? mm::core::playheadTick(*ppq, ticks) : std::nullopt);
+        const auto tick = ppq ? mm::core::playheadTick(*ppq, ticks) : std::nullopt;
+        rollView_.setPlayheadTick(tick);
+        if (tick && processor_.followPlayhead()) {
+            mm::core::RollViewport view;
+            view.startTick = rollView_.viewStart();
+            view.spanTicks = rollView_.viewSpan();
+            const auto next = mm::core::followViewport(view, *tick, rollView_.patternTicks());
+            rollView_.setTimeView(next.startTick, next.spanTicks);
+        }
         return;
     }
     const int playing = ppq ? processor_.playingSlotInfo().slot : 0;
+    std::optional<double> followTick;
     for (auto& row : rows_) {
         auto& roll = row->roll();
         const bool here = ppq && row->slotIndex() + 1 == playing;
-        roll.setPlayheadTick(here ? mm::core::playheadTick(*ppq, roll.patternTicks()) : std::nullopt);
+        const auto tick = here ? mm::core::playheadTick(*ppq, roll.patternTicks()) : std::nullopt;
+        roll.setPlayheadTick(tick);
+        if (tick && !followTick) {
+            followTick = tick;
+        }
+    }
+    if (followTick && processor_.followPlayhead() && !rows_.empty()) {
+        // One window for all rolls: the first roll decides, the others take it over.
+        const auto& first = rows_.front()->roll();
+        const auto next = mm::core::followViewport(first.viewport(), *followTick, first.patternTicks());
+        syncTimeView(next.startTick, next.spanTicks);
+    }
+}
+
+void PlaceholderEditor::syncTimeView(uint32_t startTick, uint32_t spanTicks) {
+    for (auto& row : rows_) {
+        row->roll().setTimeView(startTick, spanTicks);
     }
 }
 
@@ -969,6 +1003,7 @@ void PlaceholderEditor::rebuildRows(size_t count) {
             }
         };
         row->onAction = [this] { updateStatus(); };
+        row->roll().onTimeViewChanged = [this](uint32_t start, uint32_t span) { syncTimeView(start, span); };
         row->onMidiDropped = [this](int voice, const juce::File& file) {
             processor_.importVoice(file, static_cast<size_t>(voice - 1));
             updateStatus();
@@ -1065,6 +1100,10 @@ void PlaceholderEditor::updateFullView() {
             rows_[i]->setView(i < views.size() ? &views[i] : nullptr,
                               i == 0 ? tr(keys::kVoiceBass) : tr(keys::kVoiceMelody), i != 0);
         }
+        if (!rows_.empty() && rows_.front()->roll().patternTicks() > 0) { // the first roll holds the shared window
+            const auto& window = rows_.front()->roll().viewport();
+            syncTimeView(window.startTick, window.spanTicks);
+        }
     }
     for (auto& row : rows_) {
         row->updateMuted();
@@ -1147,6 +1186,8 @@ void PlaceholderEditor::layoutVoiceWindow() {
     zoomBox_.setBounds(footer.removeFromRight(120));
     footer.removeFromRight(kGap);
     helpButton_.setBounds(footer.removeFromRight(90));
+    footer.removeFromRight(kGap);
+    followButton_.setBounds(footer.removeFromRight(90));
     dragHandle_->setBounds(footer.removeFromLeft(kCol1 + kGap + kCol2));
 
     auto roles = area.removeFromTop(kRow).reduced(kPad, kInset);
@@ -1263,6 +1304,7 @@ void PlaceholderEditor::resized() {
     historyBackButton_.setBounds(historyBar.removeFromLeft(40));
     historyLabel_.setBounds(historyBar.removeFromLeft(120));
     historyForwardButton_.setBounds(historyBar.removeFromLeft(40));
+    followButton_.setBounds(historyBar.removeFromRight(100));
     auto editBar = area.removeFromTop(32).reduced(16, 2);
     expertButton_.setBounds(editBar.removeFromLeft(120));
     editBar.removeFromLeft(8);
