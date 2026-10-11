@@ -59,14 +59,16 @@ bool swapCallAndResponse(std::vector<Note>& notes, const VariationVoice& voice, 
 bool applyStructural(StructuralOperator op, std::vector<Note>& notes, Pattern& pattern, const LockFlags& lock,
                      const VariationVoice& voice, Pcg32& rng);
 
-/// Upper bound of the share of notes one variation edits, reached at strength 100 (subtle operators only, D-155).
-constexpr int kSubtleMaxSharePct = 30;
+/// Share of the notes the subtle operators edit: 0.3 % per strength point up to `kSubtleKneePct` (18 % there, D-155),
+/// above it 0.8 % per point up to `kSubtleMaxSharePct` at strength 100 (D-211).
+constexpr int kSubtleKneePct = 60;
+constexpr int kSubtleMaxSharePct = 50;
 
 /// From this strength on structural operators join the subtle ones (D-156).
 constexpr int kStructuralFromPct = 25;
 
 /// How many structural operators run per voice at `strengthPct`: none below `kStructuralFromPct`, then 1 (below 60),
-/// 2 (below 90) and 3.
+/// 2 (below 75), 3 (below 90) and 4.
 size_t structuralEditCount(int strengthPct);
 
 /// How many notes of a voice of `noteCount` notes a variation changes at `strengthPct` (before the constraint layer):
