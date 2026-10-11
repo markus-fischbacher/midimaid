@@ -35,10 +35,11 @@ Eine neue Instanz ist **still**, bis du etwas erzeugt hast.
 | **Energie, Kreativität** | Dichte und Abwechslung (Seed und Zufälliger Seed im Experten-Modus) |
 | **Slots 1–16** | 16 Pattern-Plätze je Instanz bzw. Hub; ein Klick wählt den Slot (Wechsel zum nächsten Takt); Rechtsklick: kopieren, einfügen, leeren, tauschen; ein Feld auf ein anderes ziehen tauscht die Slots, mit Alt kopiert es |
 | **Piano-Roll** je Stimme | Noten ansehen und bearbeiten (Abschnitt 6) |
-| **Größe** | Fenstergröße von 75 bis 200 % (Hub oben rechts, Stimme unten rechts); wird je Instanz im Projekt gespeichert |
+| **Größe** | Fenstergröße von 75 bis 200 %: Auswahl „Größe“ (Hub oben rechts, Stimme unten rechts) oder **stufenlos** am Griff in der unteren rechten Ecke ziehen; wird je Instanz im Projekt gespeichert |
+| **Hilfe** | Öffnet die Anleitung für Hub und Voices, Schritt für Schritt, auf der Seite für deine DAW (Live, Logic oder andere Hosts) |
 | **Statuszeile** | Was gerade passiert, auch Fehler und Hinweise |
 
-Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehen der Stimme, Hilfe zum Aufnehmen.
+Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehen der Stimme, Hilfe.
 
 ## 4. Erzeugen, Variation, Neu
 

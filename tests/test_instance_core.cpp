@@ -5,6 +5,7 @@
 #include "core/RollLayout.h"
 #include "core/StyleLibrary.h"
 
+#include <cmath>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
@@ -284,23 +285,48 @@ TEST_CASE("an unknown key or scale in the settings becomes auto", "[instance-cor
     CHECK(sanitize(settings).seed == 7);
 }
 
-TEST_CASE("the size of the window snaps to the nearest step of 75 to 200 percent", "[instance-core][scale]") {
+TEST_CASE("the size of the window is any whole percent from 75 to 200", "[instance-core][scale]") {
     for (const int step : mm::core::kUiScaleSteps) {
         CHECK(mm::core::clampUiScale(step) == step);
     }
     CHECK(mm::core::clampUiScale(0) == 75);
     CHECK(mm::core::clampUiScale(-40) == 75);
-    CHECK(mm::core::clampUiScale(87) == 75);
-    CHECK(mm::core::clampUiScale(88) == 100);
-    CHECK(mm::core::clampUiScale(130) == 125);
-    CHECK(mm::core::clampUiScale(140) == 150);
+    CHECK(mm::core::clampUiScale(74) == 75);
+    CHECK(mm::core::clampUiScale(87) == 87); // between two steps: stays
+    CHECK(mm::core::clampUiScale(130) == 130);
+    CHECK(mm::core::clampUiScale(199) == 199);
+    CHECK(mm::core::clampUiScale(201) == 200);
     CHECK(mm::core::clampUiScale(9999) == 200);
     CHECK(mm::core::kDefaultUiScale == 100);
+    CHECK(mm::core::kMinUiScale == 75);
+    CHECK(mm::core::kMaxUiScale == 200);
     CHECK(std::size(mm::core::kUiScaleSteps) == 6);
-    CHECK(mm::core::kUiScaleSteps[0] == 75);
-    CHECK(mm::core::kUiScaleSteps[std::size(mm::core::kUiScaleSteps) - 1] == 200);
+    CHECK(mm::core::kUiScaleSteps[0] == mm::core::kMinUiScale);
+    CHECK(mm::core::kUiScaleSteps[std::size(mm::core::kUiScaleSteps) - 1] == mm::core::kMaxUiScale);
 }
 
+TEST_CASE("dragging the corner changes the width by the drag and keeps the aspect ratio", "[instance-core][scale]") {
+    using mm::core::uiScaleForDrag;
+    // 1000 px wide at 100 %: 250 px to the right is 125 %, 250 px to the left 75 %
+    CHECK(uiScaleForDrag(100, 1000.0, 0.0) == 100);
+    CHECK(uiScaleForDrag(100, 1000.0, 250.0) == 125);
+    CHECK(uiScaleForDrag(100, 1000.0, -250.0) == 75);
+    CHECK(uiScaleForDrag(100, 1000.0, 137.0) == 114); // 113.7 rounds
+    CHECK(uiScaleForDrag(100, 1000.0, 136.0) == 114); // 113.6
+    CHECK(uiScaleForDrag(100, 1000.0, 134.0) == 113); // 113.4
+    // the width on screen is the base: at 150 % (1500 px) 150 px more is +10 %
+    CHECK(uiScaleForDrag(150, 1500.0, 150.0) == 165);
+    // limits
+    CHECK(uiScaleForDrag(100, 1000.0, 5000.0) == 200);
+    CHECK(uiScaleForDrag(100, 1000.0, -5000.0) == 75);
+    CHECK(uiScaleForDrag(100, 1000.0, -1.0e12) == 75);
+    CHECK(uiScaleForDrag(100, 1000.0, 1.0e12) == 200);
+    // no usable width: the size stays
+    CHECK(uiScaleForDrag(130, 0.0, 400.0) == 130);
+    CHECK(uiScaleForDrag(130, -5.0, 400.0) == 130);
+    CHECK(uiScaleForDrag(130, std::nan(""), 400.0) == 130);
+    CHECK(uiScaleForDrag(500, 0.0, 0.0) == 200);
+}
 
 TEST_CASE("the playhead tick is the song position modulo the pattern length", "[instance-core][playhead]") {
     using mm::core::playheadTick;

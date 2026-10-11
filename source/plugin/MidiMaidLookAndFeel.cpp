@@ -108,4 +108,21 @@ void MidiMaidLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton
                      juce::Justification::centredLeft, 1);
 }
 
+void MidiMaidLookAndFeel::fillTextEditorBackground(juce::Graphics& g, int width, int height,
+                                                   juce::TextEditor& editor) {
+    g.setColour(editor.findColour(juce::TextEditor::backgroundColourId));
+    g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), kRadius);
+}
+
+void MidiMaidLookAndFeel::drawTextEditorOutline(juce::Graphics& g, int width, int height, juce::TextEditor& editor) {
+    if (!editor.isEnabled()) {
+        return;
+    }
+    const bool focused = editor.hasKeyboardFocus(true) && !editor.isReadOnly();
+    g.setColour(editor.findColour(focused ? juce::TextEditor::focusedOutlineColourId
+                                          : juce::TextEditor::outlineColourId));
+    g.drawRoundedRectangle(0.5f, 0.5f, static_cast<float>(width) - 1.0f, static_cast<float>(height) - 1.0f, kRadius,
+                           1.0f);
+}
+
 } // namespace mm::plugin

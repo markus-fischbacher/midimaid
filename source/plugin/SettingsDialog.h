@@ -2,6 +2,7 @@
 
 #include "plugin/AiConnection.h"
 #include "plugin/GlobalSettingsStore.h"
+#include "plugin/MidiMaidLookAndFeel.h"
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -47,6 +48,7 @@ private:
     void layoutRows();
     juce::Label& makeLabel(juce::Label& label, std::string_view key);
 
+    MidiMaidLookAndFeel look_; // first: the children use it until the end
     AiConnection& connection_;
     std::function<GlobalSettingsStore&()> settings_;
     std::string selected_; ///< id of the provider shown; empty: off

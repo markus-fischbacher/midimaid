@@ -26,6 +26,8 @@ public:
                       int buttonH, juce::ComboBox& box) override;
     void positionComboBoxText(juce::ComboBox& box, juce::Label& label) override;
     void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool highlighted, bool down) override;
+    void fillTextEditorBackground(juce::Graphics& g, int width, int height, juce::TextEditor& editor) override;
+    void drawTextEditorOutline(juce::Graphics& g, int width, int height, juce::TextEditor& editor) override;
     juce::Font getTextButtonFont(juce::TextButton& button, int height) override;
     juce::Font getComboBoxFont(juce::ComboBox& box) override;
 };

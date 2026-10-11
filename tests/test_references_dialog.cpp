@@ -1,4 +1,5 @@
 #include "core/MidiFile.h"
+#include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/ProcessorBase.h"
 #include "plugin/ReferencesDialog.h"
@@ -204,4 +205,41 @@ TEST_CASE("the editor of the hub has the button of the view", "[references-dialo
     CHECK(button->isVisible());
     CHECK(button->isEnabled());
     CHECK_FALSE(button->getBounds().intersects(dynamic_cast<juce::Component*>(findById(*editor, "settings"))->getBounds()));
+}
+
+TEST_CASE("the dialog has the look of the plug-in", "[references-dialog][look]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    auto& dialog = *env.dialog;
+    auto& close = *findById(dialog, "close");
+    CHECK(dynamic_cast<MidiMaidLookAndFeel*>(&dialog.getLookAndFeel()) != nullptr);
+    CHECK(dynamic_cast<MidiMaidLookAndFeel*>(&close.getLookAndFeel()) != nullptr); // the children inherit it
+    const auto image = dialog.createComponentSnapshot(dialog.getLocalBounds());
+    CHECK(image.getPixelAt(1, 1) == juce::Colour(MidiMaidLookAndFeel::kBackground));
+    CHECK(image.getPixelAt(dialog.getWidth() - 2, dialog.getHeight() - 2) == juce::Colour(MidiMaidLookAndFeel::kBackground));
+}
+
+namespace {
+
+void writeSnapshot(juce::Component& component, const juce::String& name) {
+    const auto folder = juce::SystemStats::getEnvironmentVariable("MM_SNAPSHOT_DIR", {});
+    REQUIRE(folder.isNotEmpty());
+    const auto image = component.createComponentSnapshot(component.getLocalBounds(), false, 2.0f);
+    juce::FileOutputStream stream(juce::File(folder).getChildFile(name));
+    REQUIRE(stream.openedOk());
+    stream.setPosition(0);
+    stream.truncate();
+    juce::PNGImageFormat png;
+    REQUIRE(png.writeImageToStream(image, stream));
+}
+
+} // namespace
+
+// Renders the dialog to a PNG file for a look at the design (not a check): MM_SNAPSHOT_DIR=<folder> run with "[.snapshot]".
+TEST_CASE("snapshot of the references", "[.snapshot]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    TempFolder files;
+    env.importAndWait({files.write("a.mid", bassFile()), files.write("b.mid", bassFile(2))});
+    writeSnapshot(*env.dialog, "references.png");
 }
