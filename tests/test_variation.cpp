@@ -72,10 +72,13 @@ TEST_CASE("the number of edits grows with the strength", "[variation]") {
     CHECK(variationEditCount(16, 0) == 0);
     CHECK(variationEditCount(16, -5) == 0);
     CHECK(variationEditCount(16, 1) == 1); // at least one edit above 0
-    CHECK(variationEditCount(100, 100) == 30);
-    CHECK(variationEditCount(100, 200) == 30); // the strength is capped at 100
+    CHECK(variationEditCount(100, 100) == 50);
+    CHECK(variationEditCount(100, 200) == 50); // the strength is capped at 100
     CHECK(variationEditCount(100, 50) == 15);
-    CHECK(variationEditCount(10, 100) == 3);
+    CHECK(variationEditCount(100, 60) == 18); // the knee: unchanged below it
+    CHECK(variationEditCount(100, 80) == 34);
+    CHECK(variationEditCount(100, 99) == 49);
+    CHECK(variationEditCount(10, 100) == 5);
     CHECK(variationEditCount(16, 25) < variationEditCount(16, 100));
 }
 
@@ -539,4 +542,36 @@ TEST_CASE("structural operators join from the threshold on and never below it", 
     }
     CHECK(structuralBelow == 0);
     CHECK(structuralAbove > 30); // of 80 voices, with up to three operators each
+}
+
+TEST_CASE("at full strength the bass changes about a quarter and the melody most notes in pitch or timing",
+          "[variation][series]") {
+    // Measured shares (3 styles x 20 seeds x 4 bars, D-211): bass 26 %, melody 69 %; before the change 13 % and 33 %.
+    size_t bassChanged = 0;
+    size_t bassTotal = 0;
+    size_t melodyChanged = 0;
+    size_t melodyTotal = 0;
+    for (const char* name : kStyles) {
+        const StyleProfile style = loadShipped(name);
+        for (uint64_t seed = 1; seed <= 20; ++seed) {
+            const Pattern base = source(style, 4, 300 + seed);
+            Pattern strong = base;
+            applyVariation(strong, style, {}, requestOf(seed, 100));
+            for (size_t v = 0; v < base.voices.size(); ++v) {
+                size_t& changed = v == 0 ? bassChanged : melodyChanged;
+                size_t& total = v == 0 ? bassTotal : melodyTotal;
+                for (const Note& note : base.voices[v].notes) {
+                    ++total;
+                    const auto& after = strong.voices[v].notes;
+                    const auto it = std::find_if(after.begin(), after.end(), [&](const Note& n) { return n.id == note.id; });
+                    changed += (it == after.end() || it->pitch != note.pitch || it->startTick != note.startTick ||
+                                it->lengthTicks != note.lengthTicks)
+                                   ? 1
+                                   : 0;
+                }
+            }
+        }
+    }
+    CHECK(bassChanged * 100 >= bassTotal * 20);
+    CHECK(melodyChanged * 100 >= melodyTotal * 50);
 }

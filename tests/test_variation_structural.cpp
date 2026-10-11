@@ -62,9 +62,11 @@ TEST_CASE("structural edits per strength", "[variation]") {
     CHECK(structuralEditCount(kStructuralFromPct) == 1);
     CHECK(structuralEditCount(59) == 1);
     CHECK(structuralEditCount(60) == 2);
-    CHECK(structuralEditCount(89) == 2);
-    CHECK(structuralEditCount(90) == 3);
-    CHECK(structuralEditCount(100) == 3);
+    CHECK(structuralEditCount(74) == 2);
+    CHECK(structuralEditCount(75) == 3);
+    CHECK(structuralEditCount(89) == 3);
+    CHECK(structuralEditCount(90) == 4);
+    CHECK(structuralEditCount(100) == 4);
 }
 
 TEST_CASE("shifting the rhythm moves notes by one sixteenth and keeps them apart", "[variation][structural]") {

@@ -565,6 +565,11 @@ constexpr std::array<StructuralOperator, 6> kStructuralOperators = {
     StructuralOperator::ShiftRhythm, StructuralOperator::SwapTones,      StructuralOperator::OctaveJump,
     StructuralOperator::Density,     StructuralOperator::InvertOrMirror, StructuralOperator::CallResponse};
 
+/// The bass cannot invert or answer, and its rhythm hangs on the kick: the pitch operators count double (D-211).
+constexpr std::array<StructuralOperator, 6> kBassStructuralOperators = {
+    StructuralOperator::ShiftRhythm, StructuralOperator::SwapTones, StructuralOperator::OctaveJump,
+    StructuralOperator::Density,     StructuralOperator::SwapTones, StructuralOperator::OctaveJump};
+
 size_t countChanged(const std::vector<Note>& before, const std::vector<Note>& after) {
     std::map<uint32_t, const Note*> byId;
     for (const Note& note : before) {
@@ -589,7 +594,10 @@ size_t structuralEditCount(int strengthPct) {
     if (strengthPct < kStructuralFromPct) {
         return 0;
     }
-    return strengthPct < 60 ? 1 : (strengthPct < 90 ? 2 : 3);
+    if (strengthPct < 60) {
+        return 1;
+    }
+    return strengthPct < 75 ? 2 : (strengthPct < 90 ? 3 : 4);
 }
 
 size_t variationEditCount(size_t noteCount, int strengthPct) {
@@ -597,7 +605,12 @@ size_t variationEditCount(size_t noteCount, int strengthPct) {
         return 0;
     }
     const auto strength = static_cast<size_t>(std::min(strengthPct, 100));
-    const size_t scaled = (noteCount * kSubtleMaxSharePct * strength + 5000) / 10000;
+    constexpr size_t kKnee = kSubtleKneePct;
+    constexpr size_t kKneeBp = 30 * kKnee; // share in 1/10000 at the knee
+    constexpr size_t kTopBp = kSubtleMaxSharePct * 100;
+    const size_t shareBp =
+        strength <= kKnee ? 30 * strength : kKneeBp + (kTopBp - kKneeBp) * (strength - kKnee) / (100 - kKnee);
+    const size_t scaled = (noteCount * shareBp + 5000) / 10000;
     return std::max<size_t>(1, scaled);
 }
 
@@ -645,7 +658,8 @@ size_t applyVariation(Pattern& pattern, const StyleProfile& style, const Archety
         const size_t structural = structuralEditCount(request.strengthPct);
         size_t applied = 0;
         for (size_t attempt = 0; applied < structural && attempt < 12; ++attempt) {
-            const auto op = kStructuralOperators[rng.bounded(static_cast<uint32_t>(kStructuralOperators.size()))];
+            const auto& ops = track.role == VoiceRole::Melody ? kStructuralOperators : kBassStructuralOperators;
+            const auto op = ops[rng.bounded(static_cast<uint32_t>(ops.size()))];
             if (applyStructural(op, track.notes, next, track.lock, context, rng)) {
                 ++applied;
             }
