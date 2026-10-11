@@ -63,6 +63,16 @@ namespace mm::core::text {
     X(kLabelHistoryNone, "label.historyNone")                                                                          \
     X(kOctaveItem, "octave.item")                                                                                      \
     X(kZoomItem, "zoom.item")                                                                                          \
+    X(kButtonHelp, "button.help")                                                                                      \
+    X(kHelpTitle, "help.title")                                                                                        \
+    X(kHelpTabGeneral, "help.tab.general")                                                                             \
+    X(kHelpTabLive, "help.tab.live")                                                                                   \
+    X(kHelpTabLogic, "help.tab.logic")                                                                                 \
+    X(kHelpTabOther, "help.tab.other")                                                                                 \
+    X(kHelpTextGeneral, "help.text.general")                                                                           \
+    X(kHelpTextLive, "help.text.live")                                                                                 \
+    X(kHelpTextLogic, "help.text.logic")                                                                               \
+    X(kHelpTextOther, "help.text.other")                                                                               \
     X(kStatusGenerating, "status.generating")                                                                          \
     X(kStatusDone, "status.done")                                                                                      \
     X(kButtonCancelGeneration, "button.cancelGeneration")                                                              \
