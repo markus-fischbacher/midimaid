@@ -135,15 +135,15 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 
 | Nr. | Prüfung | Erwartung | Live | Logic | Bemerkung |
 |---|---|---|---|---|---|
-| H1 | Zwei Instanzen mit Rolle Hub und Voice | Hub zeigt „1 voice“, Voice „Mit dem Hub verbunden“ (Registry im Prozess geteilt) | | | |
-| H2 | Zweite Hub-Instanz anlegen | Zeigt „There is already a hub“, bleibt solo | | | |
-| H3 | Hub und zwei Voices spielen, Loop ein, Stop, Start | Alle im Takt, keine hängenden Noten, Voices folgen dem Hub-Slot | | | |
-| H4 | Slot-Parameter im Hub wechselt **weit vor** der Taktgrenze (z. B. auf Zählzeit 2) | Hub und Voices wechseln gemeinsam zum nächsten Takt | | | |
-| H5 | Slot-Parameter im Hub wechselt **etwa 50 ms vor** der Taktgrenze (Klick, nicht Automation) | Hub und Voices wechseln in demselben Takt (ein Takt später als bei H4 ist richtig); „(n late)“ bleibt 0. Fällt „n late“ größer 0 aus: Versatz notieren, Ergebnis in H12 | | | |
+| H1 | Zwei Instanzen mit Rolle Hub und Voice | Hub zeigt „1 voice“, Voice „Mit dem Hub verbunden“ (Registry im Prozess geteilt) |ok | | |
+| H2 | Zweite Hub-Instanz anlegen | Zeigt „There is already a hub“, bleibt solo |ok | | |
+| H3 | Hub und zwei Voices spielen, Loop ein, Stop, Start | Alle im Takt, keine hängenden Noten, Voices folgen dem Hub-Slot |ok | | |
+| H4 | Slot-Parameter im Hub wechselt **weit vor** der Taktgrenze (z. B. auf Zählzeit 2) | Hub und Voices wechseln gemeinsam zum nächsten Takt |ok | | |
+| H5 | Slot-Parameter im Hub wechselt **etwa 50 ms vor** der Taktgrenze (Klick, nicht Automation) | Hub und Voices wechseln in demselben Takt (ein Takt später als bei H4 ist richtig); „(n late)“ bleibt 0. Fällt „n late“ größer 0 aus: Versatz notieren, Ergebnis in H12 |ok | | |
 | H6 | Im Hub **Erzeugen** drücken, etwa 50 ms vor der Taktgrenze | Neues Pattern erscheint in Hub und Voices im selben Takt (D-144) |ok| | |
 | H7 | Slot-Automation im Hub, Start mitten im Arrangement (z. B. ab Takt 37) | Hub und Voices spielen sofort den dort automatisierten Slot; bei „Slot: folgt dem Hub“ keine Abweichung |ok| | |
-| H8 | Voice auf „Slot: eigener“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt | | | |
-| H9 | Hub: `Mute 2` an | Voice 2 schweigt mit Note-Off, Voice 1 und der Hub spielen weiter; wieder aus: Voice 2 spielt ab der nächsten Note | | | |
+| H8 | Voice auf „Slot: eigener“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt |ok | | |
+| H9 | Hub: `Mute 2` an | Voice 2 schweigt mit Note-Off, Voice 1 und der Hub spielen weiter; wieder aus: Voice 2 spielt ab der nächsten Note |ok| | |
 | H10 | Voice 1: eigenes `Mute 1` an | Nur Voice 1 schweigt | | | |
 | H11 | In einer Voice **Erzeugen** drücken | Statuszeile „Hub zum Erzeugen aufgefordert“, der Hub erzeugt in seinen Slot, alle bekommen das Pattern zum selben Takt | | | |
 | H12 | Hub und Voice getrennt bouncen (Offline) und die Wellenformen vergleichen | Anschläge sample-gleich. Sonst: Versatz in Samples und Millisekunden notieren (Grundlage für den Mindestvorlauf, D-90) | | | |
