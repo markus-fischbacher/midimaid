@@ -140,8 +140,8 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H3 | Hub und zwei Voices spielen, Loop ein, Stop, Start | Alle im Takt, keine hängenden Noten, Voices folgen dem Hub-Slot | | | |
 | H4 | Slot-Parameter im Hub wechselt **weit vor** der Taktgrenze (z. B. auf Zählzeit 2) | Hub und Voices wechseln gemeinsam zum nächsten Takt | | | |
 | H5 | Slot-Parameter im Hub wechselt **etwa 50 ms vor** der Taktgrenze (Klick, nicht Automation) | Hub und Voices wechseln in demselben Takt (ein Takt später als bei H4 ist richtig); „(n late)“ bleibt 0. Fällt „n late“ größer 0 aus: Versatz notieren, Ergebnis in H12 | | | |
-| H6 | Im Hub **Erzeugen** drücken, etwa 50 ms vor der Taktgrenze | Neues Pattern erscheint in Hub und Voices im selben Takt (D-144) | | | |
-| H7 | Slot-Automation im Hub, Start mitten im Arrangement (z. B. ab Takt 37) | Hub und Voices spielen sofort den dort automatisierten Slot; bei „Slot: folgt dem Hub“ keine Abweichung | | | |
+| H6 | Im Hub **Erzeugen** drücken, etwa 50 ms vor der Taktgrenze | Neues Pattern erscheint in Hub und Voices im selben Takt (D-144) |ok| | |
+| H7 | Slot-Automation im Hub, Start mitten im Arrangement (z. B. ab Takt 37) | Hub und Voices spielen sofort den dort automatisierten Slot; bei „Slot: folgt dem Hub“ keine Abweichung |ok| | |
 | H8 | Voice auf „Slot: eigener“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt | | | |
 | H9 | Hub: `Mute 2` an | Voice 2 schweigt mit Note-Off, Voice 1 und der Hub spielen weiter; wieder aus: Voice 2 spielt ab der nächsten Note | | | |
 | H10 | Voice 1: eigenes `Mute 1` an | Nur Voice 1 schweigt | | | |
