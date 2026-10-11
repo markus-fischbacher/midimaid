@@ -64,6 +64,7 @@ namespace mm::core::text {
     X(kOctaveItem, "octave.item")                                                                                      \
     X(kZoomItem, "zoom.item")                                                                                          \
     X(kButtonHelp, "button.help")                                                                                      \
+    X(kDragLabel, "drag.label")                                                                                        \
     X(kHelpTitle, "help.title")                                                                                        \
     X(kHelpTabGeneral, "help.tab.general")                                                                             \
     X(kHelpTabLive, "help.tab.live")                                                                                   \
