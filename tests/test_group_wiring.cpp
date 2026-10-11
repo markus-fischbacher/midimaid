@@ -3757,3 +3757,47 @@ TEST_CASE("the role box of the hub window is wide enough and covered by nothing"
         }
     }
 }
+
+TEST_CASE("a click on the Open hub button reaches it, also when the window is scaled", "[group-wiring][editor][layout]") {
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* button = child<juce::TextButton>(*editor, "openHub");
+    REQUIRE(button != nullptr);
+    editor->setVisible(true); // a component that is not shown is not hit
+    REQUIRE(waitFor([&] { return button->isEnabled() && button->isVisible(); }));
+    for (const int pct : {100, 150, 75}) {
+        voice.processor.setUiScalePct(pct);
+        pumpMessages(40);
+        INFO("scale " << pct);
+        const auto centre = button->getBounds().getCentre();
+        auto* hit = editor->getComponentAt(centre);
+        INFO("hit " << (hit != nullptr ? hit->getComponentID().toStdString() : std::string("none")) << " w "
+                    << button->getWidth() << " h " << button->getHeight());
+        CHECK(hit == button);
+    }
+}
+
+TEST_CASE("Open hub works again after the voice was set to Hub and back", "[group-wiring][editor][role]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    pumpMessages(40);
+    auto* role = child<juce::ComboBox>(*editor, "role");
+    role->setSelectedId(2, juce::sendNotificationSync); // refused: there is a hub
+    pumpMessages(40);
+    role = child<juce::ComboBox>(*editor, "role");
+    role->setSelectedId(3, juce::sendNotificationSync);
+    pumpMessages(40);
+    auto* button = child<juce::TextButton>(*editor, "openHub");
+    REQUIRE(button != nullptr);
+    REQUIRE(waitFor([&] { return button->isEnabled(); }));
+    button->triggerClick();
+    CHECK(waitFor([&] { return hub.processor.frontRequests() == 1; }));
+}

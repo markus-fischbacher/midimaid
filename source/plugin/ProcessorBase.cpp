@@ -1506,14 +1506,19 @@ bool ProcessorBase::mutedByHub() const {
 
 void ProcessorBase::showHub() {
     groupLink_->forward(mm::core::GroupAction::ShowHub);
+    AppLog::instance().write(LogLevel::Info, "group", "open hub asked");
 }
 
 void ProcessorBase::bringEditorToFront() {
     frontRequests_.fetch_add(1);
-    if (auto* editor = getActiveEditor()) {
-        if (auto* top = editor->getTopLevelComponent()) {
-            top->toFront(true);
-        }
+    auto* editor = getActiveEditor();
+    auto* top = editor != nullptr ? editor->getTopLevelComponent() : nullptr;
+    // A host window that is closed cannot be opened from here: the log tells which case a report is about.
+    AppLog::instance().write(LogLevel::Info, "group",
+                             juce::String("hub asked to come to the front: ") +
+                                 (editor == nullptr ? "its window is not open" : top == nullptr ? "no window" : "raised"));
+    if (top != nullptr) {
+        top->toFront(true);
     }
 }
 
