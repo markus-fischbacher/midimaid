@@ -568,6 +568,48 @@ TEST_CASE("a refinement for a pattern that was replaced meanwhile is dropped", "
     CHECK(processor.slotsSnapshot().slot(0)->pattern->lengthBars == 4);
 }
 
+TEST_CASE("a refinement does not land in another pattern after the slots were swapped", "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor, 2);
+    // a second slot with a pattern of the same shape: the old length check would let the answer through
+    processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(1, first)); });
+    auto provider = mock();
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 44), 300ms);
+    ScopedAiBackend backend(backendWith(provider));
+    REQUIRE(processor.refine("quieter"));
+    pumpFor(30);
+    processor.editSlots([](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(1, mm::core::makeEmptyPattern(2, "peak_time"))); // slot 2 gets something else
+        REQUIRE(bank.swap(0, 1));                                                // and takes the place of slot 1
+    });
+    const auto beforeAnswer = processor.slotsSnapshot();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::NoResult);
+    const auto after = processor.slotsSnapshot();
+    CHECK(*after.slot(0)->pattern == *beforeAnswer.slot(0)->pattern);
+    CHECK(*after.slot(1)->pattern == *beforeAnswer.slot(1)->pattern);
+    CHECK(after.slot(0)->history.size() == beforeAnswer.slot(0)->history.size());
+}
+
+TEST_CASE("a refinement does not overwrite a note that was edited meanwhile", "[ai-plugin][refine]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    const auto first = fillSlot(processor, 2);
+    auto provider = mock();
+    provider->enqueueText(answerWithVelocity(processor, first, 1, 44), 300ms);
+    ScopedAiBackend backend(backendWith(provider));
+    REQUIRE(processor.refine("quieter"));
+    pumpFor(30);
+    REQUIRE(processor.editNotes(0, [](mm::core::Pattern& pattern) {
+        pattern.voices[0].notes.front().velocity = 5;
+        return size_t{1};
+    }));
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.generationStatus() == GenerationStatus::NoResult);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes.front().velocity == 5);
+}
+
 TEST_CASE("the editor refines with its field, keeps the wish after a failure and clears it after success",
           "[ai-plugin][refine][editor]") {
     juce::ScopedJuceInitialiser_GUI gui;
