@@ -505,7 +505,13 @@ juce::String aiFailureReason(const GenerationReport& report) {
     if (report.outcome == mm::ai::AiOutcome::Invalid) {
         return tr(keys::kAiReasonInvalid);
     }
-    return aiStatusText(report.status, report.httpStatus);
+    auto reason = aiStatusText(report.status, report.httpStatus);
+    if (report.outcome == mm::ai::AiOutcome::ProviderError && report.error.size() > 0) {
+        // what the provider said (never the key); the log has the full line
+        auto detail = juce::String::fromUTF8(report.error.c_str());
+        reason += ": " + (detail.length() > 140 ? detail.substring(0, 140) + "..." : detail);
+    }
+    return reason;
 }
 
 } // namespace

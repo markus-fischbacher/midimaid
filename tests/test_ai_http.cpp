@@ -344,9 +344,14 @@ TEST_CASE("error messages are readable, short, clean and never hold the key", "[
         b.pushStatus(400, R"({"message":"bad thing"})");
         CHECK(sendWithRetry(b, request, token, kFast, "").message == "bad thing");
     }
-    SECTION("no usable body: the status") {
+    SECTION("a body that is not JSON: the status and how the body starts (changed on purpose, D-200)") {
         ScriptedClient client;
         client.pushStatus(400, "<html>nope</html>");
+        CHECK(sendWithRetry(client, request, token, kFast, "").message == "HTTP 400: <html>nope</html>");
+    }
+    SECTION("no body at all: the status alone") {
+        ScriptedClient client;
+        client.pushStatus(400);
         CHECK(sendWithRetry(client, request, token, kFast, "").message == "HTTP 400");
     }
     SECTION("long text is cut and control characters become spaces") {
@@ -835,4 +840,53 @@ TEST_CASE("openai: an answer through the pipeline gives a valid pattern", "[ai-o
     const auto result = generateWithAi(provider, input, CancellationToken());
     CHECK(result.outcome == AiOutcome::Success);
     CHECK(result.pattern.info.providerId == "openai");
+}
+
+TEST_CASE("readableBody: short, one line, no secret, nothing for an empty body", "[ai-http]") {
+    CHECK(readableBody("", "k").empty());
+    CHECK(readableBody("  \n\t ", "k").empty());
+    CHECK(readableBody("Service\nretired\tsince July", "k") == "Service retired since July");
+    CHECK(readableBody("token sk-SECRET here", "sk-SECRET") == "token *** here");
+    const auto longText = readableBody(std::string(1000, 'a'), "k");
+    CHECK(longText.size() <= 303);
+    CHECK(longText.substr(longText.size() - 3) == "...");
+}
+
+TEST_CASE("an answer that is not JSON says its status and how it starts, in both providers", "[ai-http]") {
+    for (const bool anthropic : {false, true}) {
+        INFO((anthropic ? "anthropic" : "openai"));
+        auto client = std::make_shared<ScriptedClient>();
+        client->pushOk("OK sk-SECRET");
+        AiResult result;
+        if (anthropic) {
+            auto config = anthropicConfig();
+            config.apiKey = "sk-SECRET";
+            result = AnthropicProvider(client, config).generate(sampleRequest(), CancellationToken());
+        } else {
+            auto config = openAiConfig(SchemaSupport::Enforced);
+            config.apiKey = "sk-SECRET";
+            result = OpenAiProvider(client, config).generate(sampleRequest(), CancellationToken());
+        }
+        CHECK(result.status == AiStatus::BadRequest);
+        CHECK(result.httpStatus == 200);
+        CHECK(result.message.find("not JSON") != std::string::npos);
+        CHECK(result.message.find("HTTP 200") != std::string::npos);
+        CHECK(result.message.find("OK ***") != std::string::npos);
+        CHECK(result.message.find("sk-SECRET") == std::string::npos);
+    }
+}
+
+TEST_CASE("an error answer that is not JSON shows how it starts", "[ai-http]") {
+    auto client = std::make_shared<ScriptedClient>();
+    client->pushStatus(404, "This service has been retired");
+    OpenAiProvider provider(client, openAiConfig(SchemaSupport::Enforced));
+    const auto result = provider.generate(sampleRequest(), CancellationToken());
+    CHECK(result.status == AiStatus::ModelNotFound);
+    CHECK(result.httpStatus == 404);
+    CHECK(result.message == "HTTP 404: This service has been retired");
+
+    auto empty = std::make_shared<ScriptedClient>();
+    empty->pushStatus(404);
+    OpenAiProvider plain(empty, openAiConfig(SchemaSupport::Enforced));
+    CHECK(plain.generate(sampleRequest(), CancellationToken()).message == "HTTP 404"); // no body, no colon
 }

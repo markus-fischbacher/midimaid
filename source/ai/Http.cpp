@@ -114,6 +114,12 @@ AiResult failure(AiStatus status, int httpStatus, std::string message) {
 
 } // namespace
 
+std::string readableBody(std::string body, const std::string& secret) {
+    auto text = cleaned(std::move(body), secret);
+    const auto first = text.find_first_not_of(' ');
+    return first == std::string::npos ? std::string() : text.substr(first);
+}
+
 std::string redact(std::string text, const std::string& secret) {
     if (secret.empty()) {
         return text;
@@ -196,6 +202,9 @@ AiResult sendWithRetry(IHttpClient& client, const HttpRequest& request, const Ca
         auto text = errorText(response.body);
         if (text.empty()) {
             text = "HTTP " + std::to_string(response.status);
+            if (const auto body = readableBody(response.body, secret); !body.empty()) {
+                text += ": " + body; // an answer that is not JSON (a proxy, a retired service): show how it starts
+            }
         }
         return failure(statusForHttp(response.status), response.status, cleaned(std::move(text), secret));
     }

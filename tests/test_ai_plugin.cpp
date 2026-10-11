@@ -769,3 +769,23 @@ TEST_CASE("the creativity slider reaches the temperature and the prompt, for gen
         }
     }
 }
+
+TEST_CASE("a failed AI request shows what the provider said, shortened", "[ai-plugin][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    auto* label = statusLabelOf(*editor);
+    REQUIRE(label != nullptr);
+
+    auto provider = mock();
+    provider->enqueueError(mm::ai::AiStatus::BadRequest,
+                           "the answer of the provider is not JSON (HTTP 200): " + std::string(300, 'x'), 200);
+    ScopedAiBackend backend(backendWith(provider));
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(processor.generationStatus() == GenerationStatus::AiFailed);
+    REQUIRE(pumpUntil([&] { return label->getText().contains("not JSON"); }));
+    CHECK(label->getText().contains("HTTP 200"));
+    CHECK(label->getText().contains("...")); // the detail is cut
+    CHECK(label->getText().length() < 400);
+}

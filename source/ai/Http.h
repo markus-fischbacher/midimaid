@@ -73,4 +73,8 @@ AiStatus statusForHttp(int httpStatus);
 /// Replaces every occurrence of `secret` (if not empty) in `text`.
 std::string redact(std::string text, const std::string& secret);
 
+/// The start of an answer body for a message or a log line: the secret replaced, control characters turned into
+/// spaces, at most 300 bytes (cut at a character boundary). Empty when the body is empty or only white space.
+std::string readableBody(std::string body, const std::string& secret);
+
 } // namespace mm::ai

@@ -157,7 +157,13 @@ AiResult OpenAiProvider::chat(const std::string& model, const std::string& syste
     }
     const auto parsed = json::parse(answer.text, nullptr, false);
     if (parsed.is_discarded() || !parsed.is_object()) {
-        return failure(AiStatus::BadRequest, "the answer of the provider is not JSON");
+        auto notJson = failure(AiStatus::BadRequest, "the answer of the provider is not JSON (HTTP " +
+                                                         std::to_string(answer.httpStatus) + ")");
+        if (const auto body = readableBody(answer.text, config_.apiKey); !body.empty()) {
+            notJson.message += ": " + body;
+        }
+        notJson.httpStatus = answer.httpStatus;
+        return notJson;
     }
     AiResult result;
     result.status = AiStatus::Ok;
