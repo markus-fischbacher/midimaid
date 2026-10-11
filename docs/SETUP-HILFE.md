@@ -71,7 +71,7 @@ Fasse beide Spuren einer Stimme zu einer **Gruppenspur** zusammen („Bass“, �
 | Monitoring Synth-Spur | **In**. Sonst schweigt sie, solange sie nicht scharf geschaltet ist |
 | Monitoring Hub-Spur | **In** (für spätere Eingabe vom Keyboard; v1.1) |
 | Aufnahme | Synth-Spur scharf schalten und aufnehmen: Live schreibt das MIDI hinter MidiMaid in einen Clip |
-| **Freeze** | Live friert eine Spur aus ihren eigenen Clips ein, nicht aus geroutetem MIDI. Eine Synth-Spur, die nur über „MIDI From“ gespielt wird, deshalb **erst aufnehmen, dann einfrieren** |
+| **Freeze** | Live friert eine Spur aus ihren eigenen Clips ein, nicht aus geroutetem MIDI. Eine Synth-Spur, die nur über „MIDI From“ gespielt wird, deshalb **erst aufnehmen, dann einfrieren**. Steht das Monitoring der Spur auf **In**, verweigert Live den Freeze mit der Meldung „Track … cannot be frozen because its monitoring state is set to In“: vorher das Monitoring auf **Auto** oder **Off** stellen (H20) |
 | Bounce einer Spur | Voice auf **Slot: eigener** stellen und ihren Slot-Parameter automatisieren (siehe oben) |
 | Arrangement | Slot-Wechsel im Hub automatisieren; ein Start mitten im Arrangement übernimmt den Slot der Automation an dieser Stelle |
 | Gleiche Variante | Alle Instanzen als VST3 |

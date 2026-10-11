@@ -145,16 +145,16 @@ Wechsel erscheint in beiden an derselben Taktlinie.
 | H8 | Voice auf „Slot: eigener“ stellen, Slot-Parameter der Voice automatisieren | Die Voice folgt ihrem eigenen Parameter, der Hub bleibt unberührt |ok | | |
 | H9 | Hub: `Mute 2` an | Voice 2 schweigt mit Note-Off, Voice 1 und der Hub spielen weiter; wieder aus: Voice 2 spielt ab der nächsten Note |ok| | |
 | H10 | Voice 1: eigenes `Mute 1` an | Nur Voice 1 schweigt |ok| | |
-| H11 | In einer Voice **Erzeugen** drücken | Statuszeile „Hub zum Erzeugen aufgefordert“, der Hub erzeugt in seinen Slot, alle bekommen das Pattern zum selben Takt | | | |
+| H11 | In einer Voice **Erzeugen** drücken | Statuszeile „Hub zum Erzeugen aufgefordert“, der Hub erzeugt in seinen Slot, alle bekommen das Pattern zum selben Takt |ok | | |
 | H12 | Hub und Voice getrennt bouncen (Offline) und die Wellenformen vergleichen | Anschläge sample-gleich. Sonst: Versatz in Samples und Millisekunden notieren (Grundlage für den Mindestvorlauf, D-90) | | | |
-| H13 | Hub löschen | Voices spielen weiter, die älteste zeigt „Hub not found: you can take over“ und den Knopf „Hub werden“; die zweite Voice „Hub not found“ | | | |
-| H14 | „Hub werden“ drücken | Die Voice wird Hub („Hub: 1 Stimme“), die andere Voice verbindet sich, Slot-Wechsel laufen wieder gruppenweit | | | |
-| H15 | Hub auf „Ausgabe: keine“ | Der Hub schweigt, Voices spielen und folgen weiter | | | |
-| H16 | Projekt **mit** Hub speichern, schließen, öffnen | Rolle, Stimme, Slot-Satz stimmen, Gruppe verbindet sich, Slot-Satz der Voices entspricht dem Hub | | | |
-| H17 | Projekt speichern, **Hub vorher entfernen**, öffnen | Voice spielt ihre Stimme unverändert weiter und zeigt „Hub not found“ (SPEC §6.5) | | | |
-| H18 | Projekt von **vor** Hub & Voices öffnen (Instanz ohne Rolle im State) | Instanz ist Solo und spielt wie bisher | | | |
+| H13 | Hub löschen | Voices spielen weiter, die älteste zeigt „Hub not found: you can take over“ und den Knopf „Hub werden“; die zweite Voice „Hub not found“ |ok | | |
+| H14 | „Hub werden“ drücken | Die Voice wird Hub („Hub: 1 Stimme“), die andere Voice verbindet sich, Slot-Wechsel laufen wieder gruppenweit |ok| | |
+| H15 | Hub auf „Ausgabe: keine“ | Der Hub schweigt, Voices spielen und folgen weiter |ok| | |
+| H16 | Projekt **mit** Hub speichern, schließen, öffnen | Rolle, Stimme, Slot-Satz stimmen, Gruppe verbindet sich, Slot-Satz der Voices entspricht dem Hub |ok| | |
+| H17 | Projekt speichern, **Hub vorher entfernen**, öffnen | Voice spielt ihre Stimme unverändert weiter und zeigt „Hub not found“ (SPEC §6.5) |ok | | |
+| H18 | Projekt von **vor** Hub & Voices öffnen (Instanz ohne Rolle im State) | Instanz ist Solo und spielt wie bisher |ok| | |
 | H19 | Einzelspur-Bounce und Freeze einer Voice mit Slot-Automation im Hub (O-22) | Notieren, ob der Slot stimmt; sonst „Slot: eigener“ mit eigener Automation (Ersatzweg D-131) | | | |
-| H20 | Freeze einer Synth-Spur, die nur über „MIDI From“ gespielt wird (Live) | Erwartung: still. Abweichung notieren | – | | |
+| H20 | Freeze einer Synth-Spur, die nur über „MIDI From“ gespielt wird (Live) | Erwartung: still. Abweichung notieren | Abweichung | | Live verweigert den Freeze bei Monitoring „In“ („cannot be frozen because its monitoring state is set to In“); erst aufnehmen, Monitoring auf Auto oder Off, dann einfrieren |
 | H21 | Logic: „Record MIDI to Track Here“ auf der Voice-Spur; Live: Spur mit „MIDI From“ der Voice-Spur und Monitoring „In“ | Aufnahme enthält die Voice-Stimme | | | |
 | H22 | Nicht aktive Parameter (SPEC §3.13): Zeigen Live (VST3) und Logic (AU) die 15 nicht aktiven Parameter (u. a. „Transpose“, „Erzeugen“, „Variation 1“ bis „Variation All“, „Evolve“, „Evolve Keep“, „Creativity“, „Energy“) in der Automationsliste, und lässt sich einer automatisieren? Lässt sich „Slot“ automatisieren, wechselt das Pattern zum Taktstart, und schaltet „Mute 1“ den Bass stumm? | Notieren je Host | | | |
 | H23 | **Nur Hosts mit Plugin-Sandbox** (z. B. Bitwig „Individually“): Hub und Voice laden | Voice zeigt „Hub not found (if the hub is in this project: the host may run plug-ins in separate processes)“. Mit „By plug-in“ verbinden sich die Instanzen. Live und Logic sind nicht betroffen | – | – | |
