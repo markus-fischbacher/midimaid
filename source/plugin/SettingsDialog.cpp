@@ -12,9 +12,14 @@ namespace keys = mm::core::text;
 
 namespace {
 
-constexpr int kWidth = 660;
-constexpr int kLabelWidth = 170;
-constexpr int kGap = 8;
+constexpr int kWidth = 760;
+constexpr int kLabelWidth = 150;
+constexpr int kGap = 10;
+constexpr int kPad = 20;
+constexpr int kRowGap = 8;
+constexpr int kSectionGap = 22; // the space above a group, with the line in the middle
+constexpr int kControl = 34;
+constexpr int kHint = 22;
 
 juce::String toJuce(const std::string& text) {
     return juce::String::fromUTF8(text.c_str());
@@ -29,7 +34,7 @@ mm::core::AiProviderSettings settingsOf(const mm::core::AiSettings& ai, const st
 
 juce::Label& SettingsDialog::makeLabel(juce::Label& label, std::string_view key) {
     label.setText(tr(key), juce::dontSendNotification);
-    label.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.8f));
+    label.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kText));
     addAndMakeVisible(label);
     return label;
 }
@@ -50,9 +55,13 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     makeLabel(levelLabel_, keys::kLabelSchemaLevel);
     makeLabel(consentLabel_, keys::kLabelConsent);
     makeLabel(drumMapLabel_, keys::kLabelDrumMap);
+    makeLabel(logLabel_, keys::kLabelLog);
     drumMapHint_.setText(tr(keys::kDrumMapHint), juce::dontSendNotification);
-    drumMapHint_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
+    drumMapHint_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
+    drumMapHint_.setMinimumHorizontalScale(1.0f); // wraps to a second line instead of squeezing the text
+    drumMapHint_.setJustificationType(juce::Justification::topLeft);
     addAndMakeVisible(drumMapHint_);
+    drumMapEditor_.setJustification(juce::Justification::centredLeft);
     drumMapEditor_.setComponentID("drumMap");
     drumMapEditor_.setInputRestrictions(400);
     drumMapEditor_.setText(toJuce(settings_().get().drumMap), false);
@@ -77,9 +86,10 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     };
     addAndMakeVisible(providerBox_);
 
+    keyEditor_.setJustification(juce::Justification::centredLeft);
     keyEditor_.setComponentID("key");
     keyEditor_.setPasswordCharacter(0x2022);
-    keyEditor_.setTextToShowWhenEmpty(tr(keys::kKeyHint), juce::Colours::white.withAlpha(0.45f));
+    keyEditor_.setTextToShowWhenEmpty(tr(keys::kKeyHint), juce::Colour(MidiMaidLookAndFeel::kTextDim));
     keyEditor_.setInputRestrictions(512);
     keyEditor_.onReturnKey = [this] { keySaveButton_.onClick(); };
     addAndMakeVisible(keyEditor_);
@@ -135,9 +145,10 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     addAndMakeVisible(keyRemoveButton_);
 
     keyStatus_.setComponentID("keyStatus");
-    keyStatus_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+    keyStatus_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
     addAndMakeVisible(keyStatus_);
 
+    urlEditor_.setJustification(juce::Justification::centredLeft);
     urlEditor_.setComponentID("url");
     urlEditor_.setInputRestrictions(500);
     const auto applyUrl = [this] {
@@ -195,14 +206,16 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     addAndMakeVisible(loadModelsButton_);
 
     modelStatus_.setComponentID("modelStatus");
-    modelStatus_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+    modelStatus_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
     addAndMakeVisible(modelStatus_);
 
     for (auto* editor : {&timeoutEditor_, &tokensEditor_}) {
         editor->setInputRestrictions(6, "0123456789");
         addAndMakeVisible(*editor);
     }
+    timeoutEditor_.setJustification(juce::Justification::centredLeft);
     timeoutEditor_.setComponentID("timeout");
+    tokensEditor_.setJustification(juce::Justification::centredLeft);
     tokensEditor_.setComponentID("maxTokens");
     const auto applyNumbers = [this] {
         if (updating_) {
@@ -265,7 +278,7 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     addAndMakeVisible(testButton_);
 
     testStatus_.setComponentID("testStatus");
-    testStatus_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.8f));
+    testStatus_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kText));
     addAndMakeVisible(testStatus_);
 
     consentToggle_.setComponentID("consent");
@@ -287,7 +300,7 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     addAndMakeVisible(consentToggle_);
 
     consentList_.setComponentID("consentList");
-    consentList_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
+    consentList_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
     addAndMakeVisible(consentList_);
 
     logPromptsToggle_.setComponentID("logPrompts");
@@ -302,7 +315,7 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     addAndMakeVisible(logPromptsToggle_);
 
     logHint_.setText(tr(keys::kLogHint), juce::dontSendNotification);
-    logHint_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
+    logHint_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
     addAndMakeVisible(logHint_);
 
     closeButton_.setComponentID("close");
@@ -314,23 +327,24 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     };
     addAndMakeVisible(closeButton_);
 
-    rows_ = {{&providerLabel_, {&providerBox_}, {}, 28},
-             {&keyLabel_, {&keyEditor_, &keySaveButton_, &keyRemoveButton_}, {100, 100}, 28},
-             {nullptr, {&keyStatus_}, {}, 22},
-             {&urlLabel_, {&urlEditor_}, {}, 28},
-             {&modelLabel_, {&modelBox_, &loadModelsButton_}, {240}, 28},
-             {nullptr, {&modelStatus_}, {}, 22},
-             {&timeoutLabel_, {&timeoutEditor_}, {}, 28},
-             {&tokensLabel_, {&tokensEditor_}, {}, 28},
-             {&levelLabel_, {&levelBox_}, {}, 28},
-             {nullptr, {&testButton_, &testStatus_}, {170}, 28},
-             {&consentLabel_, {&consentToggle_}, {}, 28},
-             {nullptr, {&consentList_}, {}, 22},
-             {nullptr, {&logPromptsToggle_}, {}, 28},
-             {nullptr, {&logHint_}, {}, 22},
-             {&drumMapLabel_, {&drumMapEditor_}, {}, 28},
-             {nullptr, {&drumMapHint_}, {}, 22},
-             {nullptr, {&closeButton_}, {}, 30}};
+    // Label, controls, widths of all controls but the stretching one, height, then indent, section, stretch, fixed width.
+    rows_ = {{&providerLabel_, {&providerBox_}, {}, kControl},
+             {&keyLabel_, {&keyEditor_, &keySaveButton_, &keyRemoveButton_}, {100, 100}, kControl, false, false, 0},
+             {nullptr, {&keyStatus_}, {}, kHint, true},
+             {&urlLabel_, {&urlEditor_}, {}, kControl},
+             {&modelLabel_, {&modelBox_, &loadModelsButton_}, {150}, kControl, false, false, 0},
+             {nullptr, {&modelStatus_}, {}, kHint, true},
+             {&timeoutLabel_, {&timeoutEditor_}, {}, kControl, false, false, -1, 120},
+             {&tokensLabel_, {&tokensEditor_}, {}, kControl, false, false, -1, 120},
+             {&levelLabel_, {&levelBox_}, {}, kControl, false, false, -1, 260},
+             {nullptr, {&testButton_, &testStatus_}, {180}, kControl, true},
+             {&consentLabel_, {&consentToggle_}, {}, kControl, false, true},
+             {nullptr, {&consentList_}, {}, kHint, true},
+             {&logLabel_, {&logPromptsToggle_}, {}, kControl},
+             {nullptr, {&logHint_}, {}, kHint, true},
+             {&drumMapLabel_, {&drumMapEditor_}, {}, kControl, false, true},
+             {nullptr, {&drumMapHint_}, {}, 40, true},
+             {nullptr, {&closeButton_}, {}, kControl, false, true}};
 
     fillProviders();
     selectProvider(selected_);
@@ -405,10 +419,10 @@ void SettingsDialog::updateFields() {
                           juce::dontSendNotification);
         timeoutEditor_.setText(chosen.timeoutSeconds > 0 ? juce::String(chosen.timeoutSeconds) : juce::String(), false);
         timeoutEditor_.setTextToShowWhenEmpty(juce::String(current->timeoutSeconds),
-                                              juce::Colours::white.withAlpha(0.45f));
+                                              juce::Colour(MidiMaidLookAndFeel::kTextDim));
         tokensEditor_.setText(chosen.maxTokens > 0 ? juce::String(chosen.maxTokens) : juce::String(), false);
         tokensEditor_.setTextToShowWhenEmpty(juce::String(mm::core::kDefaultMaxTokens),
-                                             juce::Colours::white.withAlpha(0.45f));
+                                             juce::Colour(MidiMaidLookAndFeel::kTextDim));
         int level = 1;
         if (chosen.schemaLevel == "enforced") {
             level = 2;
@@ -490,53 +504,76 @@ void SettingsDialog::changeAi(const std::function<void(mm::core::AiSettings&)>& 
 }
 
 void SettingsDialog::layoutRows() {
-    int height = 16;
-    for (auto& row : rows_) {
-        const bool visible = row.controls.front()->isVisible();
-        if (visible) {
-            height += row.height + 6;
-        }
-    }
-    setSize(kWidth, height + 10);
-    resized();
-}
-
-void SettingsDialog::resized() {
-    int y = 16;
+    int height = kPad;
+    bool first = true;
     for (auto& row : rows_) {
         if (!row.controls.front()->isVisible()) {
             continue;
         }
-        juce::Rectangle<int> area(16, y, getWidth() - 32, row.height);
+        height += (row.section && !first ? kSectionGap : 0) + row.height + kRowGap;
+        first = false;
+    }
+    setSize(kWidth, height - kRowGap + kPad);
+    resized();
+}
+
+void SettingsDialog::resized() {
+    // One column of labels and one of controls; every control is 34 px high, hints 22 px, groups are set apart by a line.
+    dividers_.clear();
+    int y = kPad;
+    bool first = true;
+    for (auto& row : rows_) {
+        if (!row.controls.front()->isVisible()) {
+            continue;
+        }
+        if (row.section && !first) {
+            dividers_.push_back(y + kSectionGap / 2 - kRowGap / 2);
+            y += kSectionGap;
+        }
+        first = false;
+        juce::Rectangle<int> area(kPad, y, getWidth() - 2 * kPad, row.height);
+        if (row.controls.front() == &closeButton_) {
+            closeButton_.setBounds(area.removeFromRight(120));
+            y += row.height + kRowGap;
+            continue;
+        }
         if (row.label != nullptr) {
             row.label->setBounds(area.removeFromLeft(kLabelWidth));
-        } else {
+        } else if (row.indent) {
             area.removeFromLeft(kLabelWidth);
         }
-        if (row.controls.size() == 1 && row.label == nullptr) {
-            area = {16, y, getWidth() - 32, row.height}; // a single control without label uses the whole row
-            if (row.controls.front() == &keyStatus_ || row.controls.front() == &modelStatus_ ||
-                row.controls.front() == &consentList_ || row.controls.front() == &logHint_) {
-                area.removeFromLeft(kLabelWidth); // status lines line up with the controls
-            }
-        }
-        if (row.controls.front() == &closeButton_) {
-            area = {getWidth() - 16 - 120, y, 120, row.height};
-        }
+        const int stretch = row.stretch >= 0 ? row.stretch : static_cast<int>(row.controls.size()) - 1;
+        // the widths of the fixed controls, in order, skipping the stretching one
+        size_t next = 0;
+        std::vector<int> fixed(row.controls.size(), 0);
         for (size_t i = 0; i < row.controls.size(); ++i) {
-            if (i + 1 < row.controls.size()) {
-                row.controls[i]->setBounds(area.removeFromLeft(row.widths[i]));
-                area.removeFromLeft(kGap);
-            } else {
-                row.controls[i]->setBounds(area);
+            if (static_cast<int>(i) != stretch && next < row.widths.size()) {
+                fixed[i] = row.widths[next++];
             }
         }
-        y += row.height + 6;
+        int used = 0;
+        for (size_t i = 0; i < row.controls.size(); ++i) {
+            if (static_cast<int>(i) != stretch) {
+                used += fixed[i] + kGap;
+            }
+        }
+        const int rest = std::max(0, area.getWidth() - used);
+        for (size_t i = 0; i < row.controls.size(); ++i) {
+            const bool stretching = static_cast<int>(i) == stretch;
+            const int width = stretching ? (row.fixedWidth > 0 ? std::min(rest, row.fixedWidth) : rest) : fixed[i];
+            row.controls[i]->setBounds(area.removeFromLeft(width));
+            area.removeFromLeft(kGap);
+        }
+        y += row.height + kRowGap;
     }
 }
 
 void SettingsDialog::paint(juce::Graphics& g) {
     g.fillAll(juce::Colour(MidiMaidLookAndFeel::kBackground));
+    g.setColour(juce::Colour(MidiMaidLookAndFeel::kOutline));
+    for (const int y : dividers_) {
+        g.drawHorizontalLine(y, static_cast<float>(kPad), static_cast<float>(getWidth() - kPad));
+    }
 }
 
 void SettingsDialog::show() {

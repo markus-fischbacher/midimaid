@@ -533,3 +533,51 @@ TEST_CASE("snapshot of the settings", "[.snapshot]") {
     choose(*owned, "Anthropic (Claude)");
     writeSnapshot(*owned, "settings.png");
 }
+
+TEST_CASE("the dialog sits on one grid: wide key field, small buttons, one control height", "[settings-dialog][layout]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    auto owned = env.dialog();
+    auto& dialog = *owned;
+    choose(dialog, "Anthropic (Claude)");
+    auto& key = part<juce::TextEditor>(dialog, "key");
+    auto& save = part<juce::TextButton>(dialog, "keySave");
+    auto& remove = part<juce::TextButton>(dialog, "keyRemove");
+    auto& url = part<juce::TextEditor>(dialog, "url");
+    auto& model = part<juce::ComboBox>(dialog, "model");
+    auto& provider = part<juce::ComboBox>(dialog, "provider");
+    // the key needs room (a key is long); the buttons next to it do not take it
+    CHECK(key.getWidth() >= 330);
+    CHECK(save.getWidth() <= 110);
+    CHECK(remove.getWidth() <= 110);
+    CHECK(save.getWidth() == remove.getWidth());
+    CHECK(key.getRight() < save.getX());
+    CHECK(remove.getRight() == url.getRight()); // the right edge is shared
+    CHECK(key.getX() == url.getX());            // and the left edge of the controls
+    CHECK(provider.getX() == url.getX());
+    CHECK(model.getX() == url.getX());
+    // one control height
+    for (auto* component : {static_cast<juce::Component*>(&key), static_cast<juce::Component*>(&save),
+                            static_cast<juce::Component*>(&remove), static_cast<juce::Component*>(&url),
+                            static_cast<juce::Component*>(&model), static_cast<juce::Component*>(&provider),
+                            findById(dialog, "loadModels"), findById(dialog, "test"), findById(dialog, "close")}) {
+        REQUIRE(component != nullptr);
+        INFO(component->getComponentID().toStdString());
+        CHECK(component->getHeight() == 34);
+    }
+    // everything visible lies inside the margins and nothing overlaps
+    std::vector<juce::Component*> shown;
+    for (auto* child : dialog.getChildren()) {
+        if (child->isVisible() && child->getWidth() > 0) {
+            shown.push_back(child);
+            INFO(child->getComponentID().toStdString());
+            CHECK(dialog.getLocalBounds().reduced(20, 0).contains(child->getBounds()));
+        }
+    }
+    for (size_t i = 0; i < shown.size(); ++i) {
+        for (size_t j = i + 1; j < shown.size(); ++j) {
+            INFO(shown[i]->getComponentID().toStdString() << " / " << shown[j]->getComponentID().toStdString());
+            CHECK_FALSE(shown[i]->getBounds().intersects(shown[j]->getBounds()));
+        }
+    }
+}

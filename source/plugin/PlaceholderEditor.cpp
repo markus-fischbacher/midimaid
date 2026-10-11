@@ -266,6 +266,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(barsBox_);
 
+    promptEditor_.setJustification(juce::Justification::centredLeft);
     promptEditor_.setComponentID("prompt");
     promptEditor_.setMultiLine(false);
     promptEditor_.setInputRestrictions(static_cast<int>(mm::core::kMaxPromptBytes));
@@ -281,6 +282,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     };
     addChildComponent(promptEditor_);
 
+    refineEditor_.setJustification(juce::Justification::centredLeft);
     refineEditor_.setComponentID("refine_text");
     refineEditor_.setMultiLine(false);
     refineEditor_.setInputRestrictions(static_cast<int>(mm::core::kMaxPromptBytes));
@@ -337,6 +339,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     autoOfflineButton_.onClick = [this] { processor_.setAutoOffline(autoOfflineButton_.getToggleState()); };
     addChildComponent(autoOfflineButton_);
 
+    seedEditor_.setJustification(juce::Justification::centredLeft);
     seedEditor_.setComponentID("seed");
     seedEditor_.setInputRestrictions(20, "0123456789");
     seedEditor_.setTextToShowWhenEmpty(tr(keys::kSeedRandom), juce::Colours::white.withAlpha(0.45f));
