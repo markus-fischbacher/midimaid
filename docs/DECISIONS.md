@@ -730,3 +730,11 @@ Der erste Lauf gegen ein laufendes LM Studio (Gemma 4 e4b, Qwen 3.8 27b) hat zwe
 - **Scrollrichtung:** Seitwärts wischen bewegt den Inhalt **mit den Fingern** (wie in Viewports von JUCE und im macOS-Standard „natürliches Scrollen“): ein positives `deltaX` verschiebt den Inhalt nach rechts, das Fenster also zu früheren Ticks. Zuerst war die Richtung beim seitwärts Wischen vertauscht (Test „a sideways swipe moves the content with the fingers…“, Mutation → rot); Umschalt + Mausrad und das senkrechte Scrollen der Tonhöhe waren richtig.
 - **Tests:** `followViewport` (Seiten, Sprung, Loop, passendes Pattern), Hub-Synchronisierung (Zeit ja, Tonhöhe nein), Folgen an und aus im Hub und im Voice-Fenster, Zustand, Schalter in beiden Fenstern ohne Überlappung, Darstellung der Voice-Roll im Fenster. Mutationen (keine Seitenwende, Synchronisierung abgeklemmt, Folgen immer an im Hub und in der Voice, Darstellung ohne Beginn, Zustand nicht gespeichert) werden alle erkannt.
 
+### D-209 – Stufenloses Scrollen in der Tonhöhe und Pinch-Zoom in den Rolls (Phase 6, ergänzt D-208)
+
+- **Meldung:** Das seitliche Scrollen ist glatt, das senkrechte ruckelt; Pinch-to-Zoom fehlt.
+- **Ursache:** Der Ausschnitt der Tonhöhe bestand aus ganzen Zeilen (7 px); ein Trackpad schiebt in kleinen Schritten, die erst nach einer vollen Zeile sichtbar wurden.
+- **Änderung:** `RollViewport::pitchOffset` (0 bis unter 1 Zeile, 0 am oberen Rand der Tastatur) verschiebt den Ausschnitt um Bruchteile einer Zeile (`core::scrollPitch`). Zeichnen und Treffer (`pitchToY`, `yToPitch`) rechnen den Versatz mit, die Roll zeichnet eine Zeile mehr (oben schaut die nächste Zeile herein), die Tastenbeschriftung wird auf das Feld beschnitten. Die Sammelvariable für Teilschritte (`wheelRows_`) entfällt.
+- **Pinch:** `mouseMagnify` zoomt in der Zeit um die Position der Finger (Auseinanderziehen = näher heran) in der Hub-Roll und in der Roll der Voice; im Hub gilt der Zoom wie das Scrollen für alle Rolls (D-208).
+- **Tests:** Core (`scrollPitch`, Pixel und Treffer mit Versatz), Roll (Teilzeile sofort, Klick trifft die Note dort, wo sie gezeichnet ist), Pinch (Roll, Voice, Hub gemeinsam). Mutationen (nur ganze Zeilen, Pinch umgedreht in Hub und Voice, Treffer oder Zeichnen ohne Versatz) werden erkannt.
+

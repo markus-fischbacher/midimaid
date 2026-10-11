@@ -681,16 +681,14 @@ void EditableRoll::mouseWheelMove(const juce::MouseEvent& event, const juce::Mou
         scrollBy(static_cast<int64_t>(std::llround(-amount * 300.0 * ticksPerPixel)), 0);
         return;
     }
-    // A trackpad sends many small steps, each below one row: collect them (a change of direction starts again).
-    const double rows = static_cast<double>(wheel.deltaY) * 8.0;
-    if ((rows > 0.0) != (wheelRows_ > 0.0) && wheelRows_ != 0.0) {
-        wheelRows_ = 0.0;
-    }
-    wheelRows_ += rows;
-    const double whole = std::trunc(wheelRows_);
-    wheelRows_ -= whole;
-    if (whole != 0.0) {
-        scrollBy(0, static_cast<int>(whole));
+    // In the pitch the window moves by parts of a row, so a trackpad scrolls as smoothly as in time.
+    viewport_ = mm::core::scrollPitch(viewport_, static_cast<double>(wheel.deltaY) * 8.0, patternTicks_);
+    repaint();
+}
+
+void EditableRoll::mouseMagnify(const juce::MouseEvent& event, float scaleFactor) {
+    if (haveView_ && scaleFactor > 0.0f) { // pinch: spreading the fingers (a factor above 1) zooms in
+        zoomAt(static_cast<double>(event.position.x) - kGutter, 1.0 / static_cast<double>(scaleFactor));
     }
 }
 
@@ -709,7 +707,8 @@ void EditableRoll::paint(juce::Graphics& g) {
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(area);
         // Pitch rows: the black keys a little darker, the C rows with a line.
-        for (int pitch = viewport_.lowPitch; pitch < viewport_.lowPitch + viewport_.rows; ++pitch) {
+        // (one row more than the window is high: a row peeks in at the top while the window is shifted by a part of a row)
+        for (int pitch = viewport_.lowPitch; pitch <= std::min(viewport_.lowPitch + viewport_.rows, 127); ++pitch) {
             const auto y = static_cast<float>(geo.pitchToY(pitch)) + static_cast<float>(origin.y);
             const auto row =
                 juce::Rectangle<float>(static_cast<float>(origin.x), y, static_cast<float>(area.getWidth()),
@@ -830,7 +829,9 @@ void EditableRoll::paint(juce::Graphics& g) {
 
     // Key labels: the C of every octave, in the naming of Ableton and Logic (C3 = 60).
     g.setFont(juce::FontOptions(10.0f));
-    for (int pitch = viewport_.lowPitch; pitch < viewport_.lowPitch + viewport_.rows; ++pitch) {
+    juce::Graphics::ScopedSaveState labelState(g);
+    g.reduceClipRegion(juce::Rectangle<int>(0, area.getY(), kGutter, area.getHeight()));
+    for (int pitch = viewport_.lowPitch; pitch <= std::min(viewport_.lowPitch + viewport_.rows, 127); ++pitch) {
         const auto y = static_cast<float>(geo.pitchToY(pitch)) + static_cast<float>(origin.y);
         if (isBlackKey(pitch)) {
             g.setColour(juce::Colours::black.withAlpha(0.25f));
