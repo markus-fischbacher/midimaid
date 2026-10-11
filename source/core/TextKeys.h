@@ -148,6 +148,7 @@ namespace mm::core::text {
     X(kToggleLogPrompts, "settings.logPrompts")                                                                        \
     X(kLogHint, "settings.logHint")                                                                                    \
     X(kLabelDrumMap, "settings.drumMap")                                                                               \
+    X(kLabelLog, "settings.log")                                                                                       \
     X(kDrumMapHint, "settings.drumMapHint")                                                                            \
     X(kButtonReferences, "button.references")                                                                      \
     X(kReferencesTitle, "references.title")                                                                        \

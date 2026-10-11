@@ -29,9 +29,13 @@ public:
 private:
     struct Row {
         juce::Component* label = nullptr;
-        std::vector<juce::Component*> controls; ///< the last one gets the rest of the width
+        std::vector<juce::Component*> controls; ///< the last one gets the rest of the width (or `fixedWidth`)
         std::vector<int> widths;                ///< widths of all but the last control
-        int height = 28;
+        int height = 34;
+        bool indent = false;  ///< no label: starts in the column of the controls
+        bool section = false; ///< starts a new group: more space and a thin line above
+        int stretch = -1;     ///< the control that takes the rest of the width; -1: the last one
+        int fixedWidth = 0;   ///< > 0: the last control has this width instead of the rest
     };
 
     const mm::ai::ProviderEntry* entry() const;
@@ -58,7 +62,7 @@ private:
     juce::Label drumMapLabel_, drumMapHint_;
     juce::TextEditor drumMapEditor_;
     juce::Label providerLabel_, keyLabel_, urlLabel_, modelLabel_, timeoutLabel_, tokensLabel_, levelLabel_,
-        consentLabel_;
+        consentLabel_, logLabel_;
     juce::ComboBox providerBox_, modelBox_, levelBox_;
     juce::TextEditor keyEditor_, urlEditor_, timeoutEditor_, tokensEditor_;
     juce::TextButton keySaveButton_, keyRemoveButton_, loadModelsButton_, testButton_, closeButton_;
@@ -67,6 +71,7 @@ private:
     bool keyKnown_ = false; ///< the keychain said there is a key for the selected provider
     bool updating_ = false; ///< the fields are being filled: no changes to save
     std::vector<Row> rows_;
+    std::vector<int> dividers_; ///< y of the lines between the groups, set by `resized`
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsDialog)
 };

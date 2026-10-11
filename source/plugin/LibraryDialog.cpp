@@ -58,6 +58,7 @@ LibraryDialog::LibraryDialog(ProcessorBase& processor, std::shared_ptr<bool> pro
     emptyLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.5f));
     addChildComponent(emptyLabel_);
 
+    nameEditor_.setJustification(juce::Justification::centredLeft);
     nameEditor_.setComponentID("name");
     nameEditor_.setTextToShowWhenEmpty(tr(keys::kLibraryNameHint), juce::Colours::white.withAlpha(0.45f));
     nameEditor_.setInputRestrictions(static_cast<int>(mm::core::kMaxLibraryNameBytes));
