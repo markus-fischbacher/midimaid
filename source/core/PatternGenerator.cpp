@@ -203,6 +203,7 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     }
     Pcg32 rng = Pcg32::fromSeed(seed);
     Pattern pattern = makeEmptyPattern(request.lengthBars, style.id);
+    pattern.voicing.chordMemory = style.melody.chordMemory; // the style decides (STYLES.md 1.10, D-229)
     pattern.kickGridId = request.kickGridId.value_or(style.kickDefault);
     if (!request.voices.empty()) {
         pattern.voices.clear();

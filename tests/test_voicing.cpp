@@ -4,6 +4,7 @@
 #include "core/Voicing.h"
 
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <span>
@@ -377,4 +378,88 @@ TEST_CASE("voiceChord: movement counts in both directions (hand computed)", "[vo
 TEST_CASE("maxVoiceMovement: both directions count", "[voicing]") {
     CHECK(maxVoiceMovement({60}, {60, 72}) == 12);
     CHECK(maxVoiceMovement({60, 72}, {60}) == 12);
+}
+
+// -- chord memory (STYLES.md 1.10, v1.1) ---------------------------------------------------------------------
+
+TEST_CASE("chord memory moves the shape of the first chord in parallel", "[voicing][chord-memory]") {
+    const Scale& scale = scaleOf("natural_minor");
+    const std::vector<Chord> chords{kI, kFlatVI, kFlatVII, kI};
+    const auto result = memoryProgression(scale, kA, chords, ChordColor::Min, kStabs);
+    REQUIRE(result.has_value());
+    REQUIRE(result->size() == 4);
+    const auto& shape = (*result)[0];
+    REQUIRE(shape.size() >= 3);
+    for (size_t e = 0; e < result->size(); ++e) {
+        const auto& voicing = (*result)[e];
+        REQUIRE(voicing.size() == shape.size());
+        for (size_t i = 0; i < shape.size(); ++i) {
+            CHECK(voicing[i] - voicing[0] == shape[i] - shape[0]); // the same intervals
+            CHECK(kStabs.contains(voicing[i]));
+        }
+    }
+    // the lowest tone sits on the root of each chord: A, F (8 up), G (10 up), A
+    const std::vector<int> lowClasses{0, 8, 10, 0};
+    for (size_t e = 0; e < result->size(); ++e) {
+        CHECK(((*result)[e][0] - shape[0] - lowClasses[e] + 120) % 12 == 0);
+    }
+    // each chord takes the octave nearest to the one before
+    for (size_t e = 1; e < result->size(); ++e) {
+        CHECK(std::abs((*result)[e][0] - (*result)[e - 1][0]) <= 6);
+    }
+}
+
+TEST_CASE("chord memory keeps tones outside the scale", "[voicing][chord-memory]") {
+    // a minor shape over a major chord: A minor first, then the major chord on F: the third of the shape is not in F
+    const Scale& scale = scaleOf("natural_minor");
+    const std::vector<Chord> chords{kI, kFlatVI};
+    const auto result = memoryProgression(scale, kA, chords, ChordColor::Min, kStabs);
+    REQUIRE(result.has_value());
+    const std::array<ChordColor, 2> colors{ChordColor::Min, ChordColor::Min};
+    const std::array<bool, 2> noDoubling{false, false};
+    const auto led = voiceProgression(scale, kA, chords, colors, noDoubling, kStabs);
+    REQUIRE(led.has_value());
+    CHECK((*result)[1] != (*led)[1]);
+}
+
+TEST_CASE("chord memory takes the octave nearest to the chord before when there is room", "[voicing][chord-memory]") {
+    const Scale& scale = scaleOf("natural_minor");
+    const std::vector<Chord> chords{kI, kFlatVI, kFlatVII, kI, kFlatVI};
+    const Range wide{36, 96};
+    const auto result = memoryProgression(scale, kA, chords, ChordColor::Min, wide);
+    REQUIRE(result.has_value());
+    for (size_t e = 1; e < result->size(); ++e) {
+        CHECK(std::abs((*result)[e][0] - (*result)[e - 1][0]) <= 6);
+    }
+}
+
+TEST_CASE("chord memory keeps every tone of every chord inside a tight range", "[voicing][chord-memory]") {
+    const Scale& scale = scaleOf("natural_minor");
+    const std::vector<Chord> chords{kI, kFlatVI, kFlatVII, kI, Chord{3, ChordQuality::Major}};
+    for (int high = 62; high <= 72; ++high) {
+        const Range range{55, high};
+        const auto result = memoryProgression(scale, kA, chords, ChordColor::Min, range);
+        INFO("high " << high);
+        if (!result.has_value()) {
+            continue; // a chord that does not fit gives nothing, never a tone outside the range
+        }
+        for (const auto& voicing : *result) {
+            for (const int pitch : voicing) {
+                CHECK(range.contains(pitch));
+            }
+        }
+    }
+}
+
+TEST_CASE("chord memory gives nothing for no chords or a range that is too narrow", "[voicing][chord-memory]") {
+    const Scale& scale = scaleOf("natural_minor");
+    CHECK_FALSE(memoryProgression(scale, kA, {}, ChordColor::Min, kStabs).has_value());
+    CHECK_FALSE(memoryProgression(scale, kA, std::vector<Chord>{kI}, ChordColor::Min, Range{60, 62}).has_value());
+    // one chord: its voicing is the shape itself
+    const auto single = memoryProgression(scale, kA, std::vector<Chord>{kI}, ChordColor::Min7, kStabs);
+    REQUIRE(single.has_value());
+    CHECK(single->size() == 1);
+    const auto shape = voiceChord(tonesOf("natural_minor", kI, ChordColor::Min7), kStabs, false, nullptr);
+    REQUIRE(shape.has_value());
+    CHECK((*single)[0] == *shape);
 }

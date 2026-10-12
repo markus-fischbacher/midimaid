@@ -992,7 +992,7 @@
             }
           ],
           &quot;voicing&quot;: {
-            &quot;chordMemory&quot;: false,
+            &quot;chordMemory&quot;: true,
             &quot;highNote&quot;: 79,
             &quot;lowNote&quot;: 55
           }
@@ -1934,7 +1934,7 @@
             }
           ],
           &quot;voicing&quot;: {
-            &quot;chordMemory&quot;: false,
+            &quot;chordMemory&quot;: true,
             &quot;highNote&quot;: 79,
             &quot;lowNote&quot;: 55
           }
@@ -2878,7 +2878,7 @@
           }
         ],
         &quot;voicing&quot;: {
-          &quot;chordMemory&quot;: false,
+          &quot;chordMemory&quot;: true,
           &quot;highNote&quot;: 79,
           &quot;lowNote&quot;: 55
         }
@@ -3447,7 +3447,7 @@
             }
           ],
           &quot;voicing&quot;: {
-            &quot;chordMemory&quot;: false,
+            &quot;chordMemory&quot;: true,
             &quot;highNote&quot;: 79,
             &quot;lowNote&quot;: 55
           }
@@ -4013,7 +4013,7 @@
           }
         ],
         &quot;voicing&quot;: {
-          &quot;chordMemory&quot;: false,
+          &quot;chordMemory&quot;: true,
           &quot;highNote&quot;: 79,
           &quot;lowNote&quot;: 55
         }
@@ -5050,7 +5050,7 @@
             }
           ],
           &quot;voicing&quot;: {
-            &quot;chordMemory&quot;: false,
+            &quot;chordMemory&quot;: true,
             &quot;highNote&quot;: 79,
             &quot;lowNote&quot;: 55
           }
@@ -6084,7 +6084,7 @@
           }
         ],
         &quot;voicing&quot;: {
-          &quot;chordMemory&quot;: false,
+          &quot;chordMemory&quot;: true,
           &quot;highNote&quot;: 79,
           &quot;lowNote&quot;: 55
         }

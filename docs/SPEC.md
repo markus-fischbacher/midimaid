@@ -642,7 +642,7 @@ Prompt / Referenzen / importierte Stimme / Parameter
 - Tonhöhen auf die Skala quantisieren, gesteuert über den Chromatik-Anteil (§3.8). **Die Töne des
   aktuell klingenden Akkords sind immer erlaubt** (Akkord-Skalen-Prinzip), z. B. der Leitton im V-Akkord
   einer harmonisch-moll-Progression oder die kleine Sexte eines ♭VI-Akkords bei Moll-Pentatonik.
-  Ausnahme [v1.1]: Chord-Memory-Stabs (STYLES.md §1.10)
+  Ausnahme [v1.1, umgesetzt, D-229]: Chord-Memory-Stabs (STYLES.md §1.10)
 - Tonumfang pro Stimme als **MIDI-Nummern** (Standard: Bass 28–52, Melodie 55–88, Stabs 55–79),
   zuzüglich Oktav-Offset pro Stimme (STYLES.md §1.6)
 - Notenanfänge aufs Raster, Länge mindestens ein Rasterschritt, nichts über das Pattern-Ende hinaus

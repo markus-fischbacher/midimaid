@@ -4,67 +4,67 @@ pattern hard_industrial bars=1 seed=1 winner=13757245211066428519 score=95
   phrases 0+1:main
   voice bass archetype=roll16_aggressive notes=9 velocitySum=990
   voice melody archetype=aggro_stabs notes=12 velocitySum=1344
-  hash d812cb3962cdfd50
+  hash 2d79928e0e2cb5f7
 pattern hard_industrial bars=1 seed=2 winner=14119491246550939236 score=95
   key root=11 scale=locrian kick=4otf
   chords i@0+2
   phrases 0+1:main
   voice bass archetype=roll16_aggressive notes=9 velocitySum=990
   voice melody archetype=atonal_motif notes=3 velocitySum=300
-  hash 85f45ac0ea5c1f85
+  hash 4fb296c13b6f0ef4
 pattern hard_industrial bars=2 seed=1 winner=13757245211066428519 score=95
   key root=7 scale=phrygian kick=4otf
   chords i@0+4
   phrases 0+2:main
   voice bass archetype=roll16_aggressive notes=18 velocitySum=1980
   voice melody archetype=aggro_stabs notes=24 velocitySum=2688
-  hash f71d3eccf4e95d07
+  hash 3ccfa42b0b09a6b6
 pattern hard_industrial bars=2 seed=2 winner=14119491246550939236 score=95
   key root=11 scale=locrian kick=4otf
   chords i@0+4
   phrases 0+2:main
   voice bass archetype=roll16_aggressive notes=18 velocitySum=1980
   voice melody archetype=atonal_motif notes=6 velocitySum=600
-  hash 711d3cb553f91564
+  hash ee776d6cbc7930c3
 pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=92
   key root=7 scale=phrygian kick=4otf
   chords i@0+8
   phrases 0+4:main
   voice bass archetype=roll16_aggressive notes=36 velocitySum=3960
   voice melody archetype=sparse_hits notes=4 velocitySum=400
-  hash 154a276e39773912
+  hash c2f63fdf375ba859
 pattern hard_industrial bars=4 seed=2 winner=13633754720362554755 score=95
   key root=7 scale=phrygian kick=4otf
   chords i@0+8
   phrases 0+4:main
   voice bass archetype=roll16_aggressive notes=36 velocitySum=3960
   voice melody archetype=atonal_motif notes=12 velocitySum=1200
-  hash ccaac1f94dd9ffa7
+  hash bb4cebc863313cd6
 pattern hard_industrial bars=8 seed=1 winner=9648886400068060533 score=92
   key root=0 scale=phrygian kick=4otf
   chords i@0+16
   phrases 0+4:main 4+4:variation
   voice bass archetype=roll16_aggressive notes=72 velocitySum=7920
   voice melody archetype=sparse_hits notes=8 velocitySum=800
-  hash 667da18025a039ba
+  hash f82e840096fead41
 pattern hard_industrial bars=8 seed=2 winner=10987583248141275951 score=95
   key root=5 scale=natural_minor kick=4otf
   chords i@0+16
   phrases 0+4:main 4+4:variation
   voice bass archetype=roll16_aggressive notes=72 velocitySum=7920
   voice melody archetype=atonal_motif notes=24 velocitySum=2400
-  hash c60641cf61b8ae74
+  hash 159f76fe9f62b173
 pattern hard_industrial bars=16 seed=1 winner=9648886400068060533 score=93
   key root=0 scale=phrygian kick=4otf
   chords i@0+32
   phrases 0+4:main 4+4:variation 8+4:main 12+4:build
   voice bass archetype=roll16_aggressive notes=148 velocitySum=16480
   voice melody archetype=sparse_hits notes=18 velocitySum=1830
-  hash 5de377c8c4a1e034
+  hash bb3044c26ead6e33
 pattern hard_industrial bars=16 seed=2 winner=10987583248141275951 score=95
   key root=5 scale=natural_minor kick=4otf
   chords i@0+32
   phrases 0+4:main 4+4:variation 8+4:main 12+4:build
   voice bass archetype=roll16_aggressive notes=148 velocitySum=16480
   voice melody archetype=atonal_motif notes=48 velocitySum=4860
-  hash a61e1e8fd6153f4e
+  hash 3bcda853e51d0e1d

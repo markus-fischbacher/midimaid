@@ -80,7 +80,9 @@ inline std::vector<std::string> violations(const Pattern& p, const StyleProfile&
             if (n.pitch < range->low || n.pitch > range->high) {
                 add(v, "pitch " + std::to_string(n.pitch) + " outside the range");
             }
-            if (!inKeyScale(p, n.pitch) && !isChordTone(p, n.startTick, n.pitch)) {
+            // chord memory stabs are exempt from the scale (STYLES.md 1.10, D-229)
+            const bool memoryStab = p.voicing.chordMemory && (track.archetypeId == "stabs" || track.archetypeId == "aggro_stabs");
+            if (!memoryStab && !inKeyScale(p, n.pitch) && !isChordTone(p, n.startTick, n.pitch)) {
                 ++outsideScale;
             }
             if (track.role == VoiceRole::Bass && !ignoresKick &&
