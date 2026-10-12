@@ -103,6 +103,46 @@ void octaveJump(Track& track, uint32_t barStart) {
     }
 }
 
+/// The last note that starts in the second half of the bar (else the last note of the bar) gets 2 to 4 repeats; its
+/// length grows to a 16th when the bar has room for it. Other ratchets of the bar go (one per bar), and so does a slide
+/// into the note. With chords every note of the start repeats.
+void ratchet(Track& track, uint32_t barStart, Pcg32& rng) {
+    const uint32_t barEnd = barStart + kTicksPerBar;
+    auto& notes = track.notes;
+    int64_t target = -1;
+    uint32_t targetStart = 0;
+    for (size_t i = 0; i < notes.size(); ++i) {
+        if (notes[i].startTick >= barStart && notes[i].startTick < barEnd) {
+            const bool late = notes[i].startTick >= barStart + 2 * kBeat;
+            const bool targetLate = target >= 0 && targetStart >= barStart + 2 * kBeat;
+            if (target < 0 || late || !targetLate) {
+                target = static_cast<int64_t>(i);
+                targetStart = notes[i].startTick;
+            }
+            notes[i].ratchet = 1;
+        }
+    }
+    if (target < 0) {
+        return;
+    }
+    const uint32_t repeatsWanted = 2 + rng.bounded(3);
+    for (size_t i = 0; i < notes.size(); ++i) {
+        if (notes[i].startTick != targetStart) {
+            continue;
+        }
+        Note& note = notes[i];
+        if (note.startTick + kSixteenth <= barEnd && note.lengthTicks < kSixteenth) {
+            note.lengthTicks = kSixteenth;
+        }
+        note.slide = false;
+        const uint32_t most = static_cast<uint32_t>(std::clamp<uint32_t>(note.lengthTicks / 60, 1, 4));
+        note.ratchet = static_cast<uint8_t>(std::min(repeatsWanted, most));
+        if (i > 0) {
+            notes[i - 1].slide = notes[i - 1].slide && notes[i - 1].startTick == note.startTick;
+        }
+    }
+}
+
 } // namespace
 
 int turnaroundChancePct(int energyPct) {
@@ -122,13 +162,17 @@ void assignTurnarounds(std::vector<Phrase>& phrases, int energyPct, uint64_t see
 
 TurnaroundKind chooseTurnaroundKind(bool chordal, int energyPct, Pcg32& rng) {
     const int energy = std::clamp(energyPct, 0, 100);
-    const std::array<uint32_t, 3> weights{
+    const std::array<uint32_t, 4> weights{
         static_cast<uint32_t>(60 - energy / 2),         // pause
         chordal ? 0u : static_cast<uint32_t>(20 + energy / 2), // fill
         static_cast<uint32_t>(20 + energy / 5),         // octave jump
+        static_cast<uint32_t>(10 + energy / 4),         // ratchet
     };
     const size_t index = rng.weightedIndex(weights);
-    return index == 1 ? TurnaroundKind::Fill : index == 2 ? TurnaroundKind::OctaveJump : TurnaroundKind::Pause;
+    return index == 1   ? TurnaroundKind::Fill
+           : index == 2 ? TurnaroundKind::OctaveJump
+           : index == 3 ? TurnaroundKind::Ratchet
+                        : TurnaroundKind::Pause;
 }
 
 void applyTurnaround(Pattern& pattern, const Phrase& phrase, int energyPct, uint64_t seed,
@@ -156,6 +200,9 @@ void applyTurnaround(Pattern& pattern, const Phrase& phrase, int energyPct, uint
             break;
         case TurnaroundKind::OctaveJump:
             octaveJump(pattern.voices[i], barStart);
+            break;
+        case TurnaroundKind::Ratchet:
+            ratchet(pattern.voices[i], barStart, rng);
             break;
         }
     }

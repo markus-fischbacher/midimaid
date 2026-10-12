@@ -64,9 +64,8 @@ int32_t swingOffsetTicks(float swing, float amount);
 ///   2. groove and swing (timing offset, velocity profile)
 ///   3. slide overlaps, relative to the shifted next note
 ///   4. kick clearance re-checked, note ends shortened (the kick stays straight)
-///   5. accent velocity
-/// The stages 0 (probability), the semitone transposition of stage 1 and the ratchets of stage 5 belong to v1.1 and
-/// slot in at the same places. Pure and deterministic; the pattern is not changed.
+///   5. accent velocity, ratchets resolved (a ratchet of 2-4 splits the note into equal repeats, D-227)
+/// The stages 0 (probability) and the semitone transposition of stage 1 belong to v1.1 and slot in at the same places. Pure and deterministic; the pattern is not changed.
 OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& settings);
 
 } // namespace mm::core

@@ -619,7 +619,13 @@ TEST_CASE("output invariants over random patterns", "[core][output][property]") 
     for (uint64_t seed = 5000; seed < 5600; ++seed) {
         auto rng = Pcg32::fromSeed(seed);
         ConstraintSettings constraints;
-        const Pattern pattern = randomConstrainedPattern(rng, constraints);
+        Pattern pattern = randomConstrainedPattern(rng, constraints);
+        // these invariants count notes one to one; the ratchets that split a note have their own tests (test_ratchet)
+        for (Track& track : pattern.voices) {
+            for (Note& note : track.notes) {
+                note.ratchet = 1;
+            }
+        }
         OutputSettings settings;
         static const uint32_t overlaps[] = {0, 60, 120};
         static const uint32_t clearances[] = {0, 60, 120, 240};
@@ -726,6 +732,7 @@ TEST_CASE("a straight pattern without slides or accents passes through unchanged
             for (Note& note : track.notes) {
                 note.slide = false;
                 note.accent = false;
+                note.ratchet = 1; // a ratchet splits the note (test_ratchet)
             }
         }
         OutputSettings settings = noKick();

@@ -349,6 +349,17 @@ void EditableRoll::toggleSlide() {
     flipFlag(false);
 }
 
+void EditableRoll::setRatchet(int repeats) {
+    if (selection_.empty() || !haveView_) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        return voice < pattern.voices.size() ? mm::core::setRatchet(pattern, voice, ids, repeats) : 0;
+    });
+}
+
 void EditableRoll::changeVelocity(int delta) {
     if (selection_.empty() || !haveView_) {
         return;
@@ -378,9 +389,23 @@ juce::PopupMenu EditableRoll::contextMenu() const {
             allSlide = allSlide && note->slide;
         }
     }
+    int sharedRatchet = selection_.empty() ? 0 : -1;
+    for (const uint32_t id : selection_) {
+        if (const auto* note = find(id)) {
+            sharedRatchet = sharedRatchet == -1 || sharedRatchet == note->ratchet ? note->ratchet : 0;
+        }
+    }
     juce::PopupMenu menu;
     menu.addItem(kMenuAccent, tr(mm::core::text::kRollAccent), !selection_.empty(), allAccent);
     menu.addItem(kMenuSlide, tr(mm::core::text::kRollSlide), !selection_.empty(), allSlide);
+    const std::array<std::string_view, 4> ratchetTexts{mm::core::text::kRollRatchetOff, mm::core::text::kRollRatchet2,
+                                                  mm::core::text::kRollRatchet3, mm::core::text::kRollRatchet4};
+    juce::PopupMenu ratchets;
+    for (int repeats = 1; repeats <= 4; ++repeats) {
+        ratchets.addItem(kMenuRatchetBase + repeats, tr(ratchetTexts[static_cast<size_t>(repeats - 1)]),
+                         !selection_.empty(), sharedRatchet == repeats);
+    }
+    menu.addSubMenu(tr(mm::core::text::kRollRatchet), ratchets, !selection_.empty());
     menu.addSeparator();
     menu.addItem(kMenuDelete, tr(mm::core::text::kRollDelete), !selection_.empty());
     return menu;
@@ -391,6 +416,8 @@ void EditableRoll::runMenuAction(int id) {
         toggleAccent();
     } else if (id == kMenuSlide) {
         toggleSlide();
+    } else if (id > kMenuRatchetBase && id <= kMenuRatchetBase + 4) {
+        setRatchet(id - kMenuRatchetBase);
     } else if (id == kMenuDelete) {
         deleteSelection();
     }
@@ -765,6 +792,14 @@ void EditableRoll::paint(juce::Graphics& g) {
                 triangle.addTriangle(box.getX(), top, box.getX() + 7.0f, top, box.getX() + 3.5f, top + 6.0f);
                 g.setColour(juce::Colours::white.withAlpha(alpha * 0.95f));
                 g.fillPath(triangle);
+            }
+            if (note.ratchet > 1) {
+                // Thin dividers inside the box show the repeats.
+                g.setColour(juce::Colours::black.withAlpha(alpha * 0.7f));
+                for (int part = 1; part < note.ratchet; ++part) {
+                    const float x = box.getX() + box.getWidth() * static_cast<float>(part) / static_cast<float>(note.ratchet);
+                    g.drawLine(x, box.getY(), x, box.getBottom(), 1.2f);
+                }
             }
             if (note.slide) {
                 // A line with a diamond from the end of the note to the start of the next one (or a short stub).

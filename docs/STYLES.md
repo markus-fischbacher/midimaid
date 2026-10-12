@@ -120,7 +120,7 @@ In 8- und 16-Takt-Phrasen kann der letzte Takt als **Turnaround** variieren (Pau
 Ratchet). Die Wahrscheinlichkeit steigt mit der Energie. Turnaround ist ein Merkmal der Phrase, keine
 eigene Phrasen-Rolle.
 
-### 1.13 [v1.1] Ratchets
+### 1.13 [v1.1] Ratchets (umgesetzt, D-227)
 - **Ratchet:** eine Note wird innerhalb eines 16tels 2–4× wiederholt. Erlaubt in `acid_siren`,
   `roll16_aggressive` und Turnarounds. Maximal 1 Ratchet pro Takt als Standard.
 - [Gestrichen] Euklidische Rhythmen als Feature; als interne Rhythmusquelle für `polymeter_seq` und

@@ -3,6 +3,7 @@
 #include "core/FormPlan.h"
 #include "core/Groove.h"
 #include "core/Progression.h"
+#include "core/Ratchet.h"
 #include "core/Turnaround.h"
 
 #include <algorithm>
@@ -111,6 +112,17 @@ void appendNotes(Pattern& pattern, size_t voice, std::vector<Note> notes) {
     }
 }
 
+/// Draws the ratchets of the voices (not `keep`) for the bars [fromBar, toBar), after the archetypes are known.
+void addRatchets(Pattern& pattern, const StyleProfile& style, int energyPct, uint64_t seed, uint32_t fromBar,
+                 uint32_t toBar, const std::vector<bool>& keep = {}) {
+    for (size_t i = 0; i < pattern.voices.size(); ++i) {
+        if (i < keep.size() && keep[i]) {
+            continue;
+        }
+        applyRatchets(pattern, i, style.id, energyPct, seed, fromBar, toBar);
+    }
+}
+
 /// One candidate around the locked voices of `current` (a pure function of `seed`, like `generateCandidate`): harmony,
 /// length, form plan, kick grid and locked voices stay; the other voices are generated again. A candidate that cannot
 /// be generated is an empty pattern without archetypes, which the hard check rejects.
@@ -168,6 +180,7 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
             }
         }
     }
+    addRatchets(pattern, style, request.settings.energyPct, seed, 0, pattern.lengthBars, keep);
     applyConstraints(pattern, constraintSettingsFor(pattern, style));
     pattern.info.source = "algorithm";
     pattern.info.seed = request.seed;
@@ -242,6 +255,7 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
             }
         }
     }
+    addRatchets(pattern, style, request.settings.energyPct, seed, 0, pattern.lengthBars);
     applyConstraints(pattern, constraintSettingsFor(pattern, style));
 
     pattern.info.source = "algorithm";
@@ -337,6 +351,7 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& ba
     if (!fillVoice(next, voiceIndex, style, request.settings, rng)) {
         return false;
     }
+    applyRatchets(next, voiceIndex, style.id, request.settings.energyPct, seed, 0, next.lengthBars);
     applyConstraints(next, constraintSettingsFor(next, style));
     next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));
     pattern = std::move(next);
@@ -377,6 +392,13 @@ bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& 
         appendNotes(next, i, (*notes)[i]);
         std::stable_sort(all.begin(), all.end(),
                          [](const Note& a, const Note& b) { return a.startTick < b.startTick; });
+    }
+    for (size_t i = 0; i < next.voices.size(); ++i) {
+        const LockFlags& lock = next.voices[i].lock;
+        if (!(lock.pitch && lock.rhythm && lock.velocity)) {
+            applyRatchets(next, i, style.id, request.settings.energyPct, seed, phrase.startBar,
+                          phrase.startBar + phrase.lengthBars);
+        }
     }
     applyConstraints(next, constraintSettingsFor(next, style));
     next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));

@@ -118,7 +118,7 @@ bei einem 27B-Modell nimm mindestens 600.
   leere Leiste alle Balken, die er kreuzt.
 - **Raster**, **Triolen** und **Einrasten** (nur im Experten-Modus sichtbar): Das Raster bestimmt die Schrittweite,
   **Einrasten: Skala** hält dich in der Tonleiter, **Einrasten: Chromatisch** nicht.
-- **Akzent**, **Slide** und **Löschen** wirken auf die gewählten Noten.
+- **Akzent**, **Slide**, **Ratchet** und **Löschen** wirken auf die gewählten Noten. *Ratchet* (Untermenü, ×2 bis ×4) wiederholt die Note innerhalb ihrer Länge; die Roll zeigt es mit Teilstrichen. Ein Ratchet nimmt den Slide der Note weg und umgekehrt. Beim Erzeugen setzen nur die Archetypen *acid_siren* und *roll16_aggressive* (und manchmal ein Turnaround) Ratchets, höchstens einen pro Takt.
 - **Fokus** (je Stimme) zeigt eine Stimme groß, die anderen als schmale Streifen.
 - Die **weiße senkrechte Linie** ist der Playhead: Sie zeigt, wo im Pattern gerade gespielt wird (in der Roll des spielenden Slots, im Hub und im Stimmen-Fenster). Steht der Transport, ist sie weg.
 - Jede Geste ist **ein** Rückgängig-Schritt und steht im **Verlauf**. Während der Wiedergabe kannst du bearbeiten; der
