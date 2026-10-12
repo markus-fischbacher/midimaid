@@ -13,6 +13,7 @@ TEST_CASE("the defaults are A minor, basic level, strength 30 and a 1/16 grid", 
     CHECK(defaults.variationStrength == 30);
     CHECK(defaults.grid == EditGrid{16, false});
     CHECK_FALSE(defaults.snapChromatic);
+    CHECK(defaults.middleC == 3);
     CHECK(sanitize(defaults) == defaults);
 }
 
@@ -24,6 +25,7 @@ TEST_CASE("settings survive writing and reading", "[global-settings]") {
     settings.variationStrength = 72;
     settings.grid = EditGrid{8, true};
     settings.snapChromatic = true;
+    settings.middleC = 4;
     REQUIRE(findScale("phrygian") != nullptr);
     const auto text = toJson(settings);
     CHECK(text.find("\"version\": 1") != std::string::npos);
@@ -178,4 +180,13 @@ TEST_CASE("sanitizing keeps the transposition within its limits", "[global-setti
     CHECK(parseTransposeTiming(toString(TransposeTiming::NextBeat)) == TransposeTiming::NextBeat);
     CHECK(parseTransposeTarget(toString(TransposeTarget::Bass)) == TransposeTarget::Bass);
     CHECK(parseTransposeBehavior(toString(TransposeBehavior::Momentary)) == TransposeBehavior::Momentary);
+}
+
+TEST_CASE("the middle C convention is 3 or 4, anything else gives the default", "[global-settings]") {
+    CHECK(parseGlobalSettings(R"({"version": 1, "middleC": 4})").middleC == 4);
+    CHECK(parseGlobalSettings(R"({"version": 1, "middleC": 5})").middleC == 3);
+    CHECK(parseGlobalSettings(R"({"version": 1, "middleC": "4"})").middleC == 3);
+    GlobalSettings bad;
+    bad.middleC = 9;
+    CHECK(sanitize(bad).middleC == 3);
 }

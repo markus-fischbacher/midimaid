@@ -978,7 +978,9 @@ void PlaceholderEditor::applyEditSettings() {
     const mm::core::EditGrid grid{static_cast<uint32_t>(std::max(gridBox_.getSelectedId(), 4)),
                                   tripletButton_.getToggleState()};
     const auto snap = snapBox_.getSelectedId() == 2 ? mm::core::PitchSnap::Chromatic : mm::core::PitchSnap::Scale;
+    const int middleC = globalSettings().ready() ? globalSettings().get().middleC : 3;
     for (auto& row : rows_) {
+        row->roll().setMiddleC(middleC);
         row->roll().setEditSettings(grid, snap);
     }
 }
@@ -1259,6 +1261,13 @@ void PlaceholderEditor::updateVoiceView() {
 }
 
 void PlaceholderEditor::timerCallback() {
+    if (auto& store = globalSettings(); store.ready() && store.revision() != namingRevision_) {
+        namingRevision_ = store.revision();
+        const int middleC = store.get().middleC;
+        for (auto& row : rows_) {
+            row->roll().setMiddleC(middleC);
+        }
+    }
     updateStatus();
     processor_.updateExport();
 }

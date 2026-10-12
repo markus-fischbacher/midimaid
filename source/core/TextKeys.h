@@ -164,6 +164,9 @@ namespace mm::core::text {
     X(kToggleLogPrompts, "settings.logPrompts")                                                                        \
     X(kLogHint, "settings.logHint")                                                                                    \
     X(kLabelDrumMap, "settings.drumMap")                                                                               \
+    X(kLabelNoteNaming, "settings.noteNaming")                                                                         \
+    X(kNoteNamingC3, "settings.noteNaming.c3")                                                                         \
+    X(kNoteNamingC4, "settings.noteNaming.c4")                                                                         \
     X(kLabelTranspose, "settings.transpose")                                                                           \
     X(kTransposeHint, "settings.transposeHint")                                                                        \
     X(kTransposeModeChromatic, "settings.transpose.mode.chromatic")                                                    \

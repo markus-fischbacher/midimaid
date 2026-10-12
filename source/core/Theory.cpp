@@ -134,4 +134,11 @@ std::optional<int> quantize(const Scale& scale, PitchClass root, const std::opti
     return std::nullopt;
 }
 
+std::string pitchName(int midi, int middleC) {
+    static constexpr const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    const int octave = midi >= 0 ? midi / 12 : -((11 - midi) / 12); // floor division
+    const int pc = ((midi % 12) + 12) % 12;
+    return std::string(names[pc]) + std::to_string(octave + middleC - 5);
+}
+
 } // namespace mm::core

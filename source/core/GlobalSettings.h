@@ -46,6 +46,7 @@ struct GlobalSettings {
     std::string startScaleId = "natural_minor"; ///< and its scale
     int variationStrength = 30;                 ///< 0 to 100: the strength "Variation" uses
     EditGrid grid;                              ///< the edit grid of the piano roll
+    int middleC = 3;                            ///< octave number of MIDI note 60: 3 (Live, Logic) or 4
     bool snapChromatic = false;                 ///< pitch snapping: chromatic instead of to the scale
     std::string drumMap; ///< drum rack notes as a line "60=kick, 61=closed_hat" (SPEC 3.14); empty: General MIDI only
     TransposeSettings transpose; ///< the keyboard transposition (SPEC 3.16, 8.4): reference, mode, timing, target ...

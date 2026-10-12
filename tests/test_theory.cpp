@@ -193,3 +193,16 @@ TEST_CASE("quantize properties over all roots, scales and chords", "[core][theor
         }
     }
 }
+
+TEST_CASE("pitch names follow the chosen middle C", "[theory]") {
+    CHECK(pitchName(60) == "C3");
+    CHECK(pitchName(60, 4) == "C4");
+    CHECK(pitchName(45) == "A1");
+    CHECK(pitchName(45, 4) == "A2");
+    CHECK(pitchName(61, 3) == "C#3");
+    CHECK(pitchName(0) == "C-2");
+    CHECK(pitchName(11) == "B-2");
+    CHECK(pitchName(12) == "C-1");
+    CHECK(pitchName(127) == "G8");
+    CHECK(pitchName(127, 4) == "G9");
+}

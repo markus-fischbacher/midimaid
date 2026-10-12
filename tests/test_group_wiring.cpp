@@ -3116,6 +3116,7 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
             settings.startScaleId = "dorian";
             settings.grid = mm::core::EditGrid{8, true};
             settings.snapChromatic = true;
+            settings.middleC = 4;
         });
         first.waitForWrites();
     }
@@ -3125,6 +3126,7 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
     CHECK(second.get().startScaleId == "dorian");
     CHECK(second.get().grid == mm::core::EditGrid{8, true});
     CHECK(second.get().snapChromatic);
+    CHECK(second.get().middleC == 4);
 }
 
 TEST_CASE("a change before the file is read wins for its field and keeps the rest of the file", "[settings][store]") {

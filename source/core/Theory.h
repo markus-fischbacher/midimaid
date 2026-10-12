@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace mm::core {
@@ -12,6 +13,10 @@ namespace mm::core {
 using PitchClass = uint8_t;
 
 PitchClass pitchClassOf(int midi);
+
+/// The name of a MIDI pitch for the UI, e.g. "C#3". `middleC` is the octave number of MIDI note 60: 3 (Live, Logic) or 4
+/// (Scientific pitch notation).
+std::string pitchName(int midi, int middleC = 3);
 
 /// A scale as semitone intervals above the root: ascending, first entry 0, all within one octave.
 struct Scale {

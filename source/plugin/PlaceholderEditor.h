@@ -155,6 +155,7 @@ private:
     int focusedVoice_ = 0;
     bool expert_ = false;
     bool settingsApplied_ = false;
+    uint64_t namingRevision_ = 0; ///< the settings revision the roll key labels were taken from
     bool voiceLayout_ = false;
     ProcessorBase::VoiceView shown_; // what the roll shows now
     juce::Label statusLabel_;

@@ -1,3 +1,4 @@
+#include "core/Theory.h"
 #include "plugin/EditableRoll.h"
 
 #include "core/PatternEdit.h"
@@ -91,6 +92,13 @@ void EditableRoll::setEditSettings(mm::core::EditGrid grid, mm::core::PitchSnap 
     grid_ = grid;
     pitchSnap_ = snap;
     repaint();
+}
+
+void EditableRoll::setMiddleC(int middleC) {
+    if (middleC != middleC_) {
+        middleC_ = middleC;
+        repaint();
+    }
 }
 
 void EditableRoll::setSource(const ProcessorBase::VoiceView* view) {
@@ -827,7 +835,7 @@ void EditableRoll::paint(juce::Graphics& g) {
         }
     }
 
-    // Key labels: the C of every octave, in the naming of Ableton and Logic (C3 = 60).
+    // Key labels: the C of every octave, named after the chosen convention (C3 = 60 or C4 = 60).
     g.setFont(juce::FontOptions(10.0f));
     juce::Graphics::ScopedSaveState labelState(g);
     g.reduceClipRegion(juce::Rectangle<int>(0, area.getY(), kGutter, area.getHeight()));
@@ -840,7 +848,7 @@ void EditableRoll::paint(juce::Graphics& g) {
         }
         if (pitch % 12 == 0) {
             g.setColour(juce::Colours::white.withAlpha(0.55f));
-            g.drawText("C" + juce::String(pitch / 12 - 2), 2, juce::roundToInt(y) - 4, kGutter - 6, 10,
+            g.drawText(juce::String(mm::core::pitchName(pitch, middleC_)), 2, juce::roundToInt(y) - 4, kGutter - 6, 10,
                        juce::Justification::centredRight);
         }
     }
