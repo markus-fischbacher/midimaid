@@ -461,6 +461,12 @@ Zweck: das laufende Pattern im Live-Set per Keyboard transponieren, wie bei eine
   die Taste ankommt; „nächster Schlag“ und „nächster Takt“ sind sample-genau (die Engine schneidet den Block am geplanten PPQ-Punkt).
   Steht der Transport still, gilt die Taste sofort. Das Tastatur-MIDI wird verbraucht und nicht durchgereicht (bis „MIDI Thru“, Etappe 3).
   Die Anzeige im Hub: „Transponiert +n“ in der Infozeile.
+- **Gruppe (D-216, Etappe 2):** Der Hub liest das Keyboard und plant die wirksame Transposition (Parameter + Taste) für die Gruppe über den
+  Gruppenkanal: ein Stempel (nächster Schlag, bei „nächster Takt“ die Taktgrenze, jeweils mindestens den Vorlauf voraus, wie der Slot-Wechsel
+  §3.4) und der Wert vor dem Ziel; jede Voice wendet ihren Teil an (Ziel, Tonumfang, Modus) und zeigt ihn. Parameteränderungen des Hubs werden
+  ebenso geplant. Eine Voice auf „Slot: eigener“ (D-131) spielt statt der Gruppe ihren eigenen Parameter `transpose` (kein Keyboard); eine
+  Voice, die startet, springt oder dazukommt, übernimmt den Wert, den der Hub gerade hat. **Export:** die gezogene Datei enthält die Noten mit der
+  aktuellen Transposition (Ziel und Oktavregel wie in der Ausgabe); abschaltbar (Einstellung `exportTransposed`, Dialog in Etappe 3).
 
 ### 3.17 [v1.1] MIDI-Eingang
 In v1.0 wertet MidiMaid den MIDI-Eingang nicht aus (er ist aber schon deklariert). Ab v1.1:

@@ -61,6 +61,23 @@ public:
     void reportHubMute(uint32_t mask) { hubMute_.store(mask, std::memory_order_release); }
     uint32_t hubMute() const { return hubMute_.load(std::memory_order_acquire); }
 
+    /// The live transposition of the group (SPEC 3.16, D-216): a change planned by the hub for `stampPpq`, and the
+    /// value the hub has in force now (for a member that starts, jumps or joins). The offset is the hub's total (host
+    /// parameter plus keyboard, +-12) before any target: every voice picks its own part.
+    struct TransposePlan {
+        uint32_t sequence = 0;
+        double stampPpq = 0.0;
+        int offset = 0; ///< -12 to +12
+    };
+    void publishTransposePlan(double stampPpq, int offset);
+    TransposePlan transposePlan() const;
+    struct HubTranspose {
+        bool valid = false; ///< false until the hub reported (after `setHub`)
+        int offset = 0;
+    };
+    void reportHubTranspose(int offset);
+    HubTranspose hubTranspose() const;
+
     /// A slot change planned by the hub for `stampPpq`.
     struct Plan {
         uint32_t sequence = 0;
@@ -72,6 +89,7 @@ public:
 
 private:
     static constexpr int64_t kNoHubState = INT64_MIN;
+    static constexpr int kNoTranspose = -1;
 
     std::array<std::atomic<bool>, kMaxGroupMembers> used_{};
     std::array<std::atomic<int64_t>, kMaxGroupMembers> position_{}; // (ticks << 1) | playing
@@ -79,6 +97,8 @@ private:
     std::atomic<int> hub_{kNone};
     std::atomic<int64_t> hubState_{kNoHubState}; // (ticks << 6) | (slot - 1) << 1 | playing
     std::atomic<uint64_t> plan_{0};              // (ticks << 21) | (slot - 1) << 16 | sequence
+    std::atomic<uint64_t> transposePlan_{0};     // (ticks << 21) | (offset + 16) << 16 | sequence
+    std::atomic<int> hubTranspose_{kNoTranspose}; // offset + 16, or `kNoTranspose`
     std::atomic<double> minLeadMs_{150.0};
     std::atomic<uint32_t> hubMute_{0};
 };

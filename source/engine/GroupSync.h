@@ -23,11 +23,13 @@ struct SlotDecision {
     double stampPpq = 0.0;
 };
 
-/// The stamp for a change planned now: the first bar line at or after the furthest block end among the playing members
+/// The stamp for a change planned now: the first multiple of `gridPpq` (a bar line by default, a beat for the live
+/// transposition) at or after the furthest block end among the playing members
 /// plus the minimum lead. `ownEndPpq` is the planner's own block end, when it is one of the playing members (the audio
 /// thread of the hub passes it; the message thread leaves it out). Empty when nobody plays: nothing to align then.
 /// Reads only atomics, so any thread may call it.
-std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std::optional<double> ownEndPpq = {});
+std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std::optional<double> ownEndPpq = {},
+                                   double gridPpq = 4.0);
 
 /// Audio-thread logic of a group member (one per instance): reports the block position to the channel, lets the hub
 /// plan slot changes and lets a voice follow them. No allocation, no lock. Call `beginBlock` once per block before
@@ -46,6 +48,7 @@ public:
     /// The channel slot of this member (`GroupChannel::kNone` for none: nothing is reported then). Any thread; the
     /// audio thread picks it up with the next block.
     void setMember(int member) { member_.store(member, std::memory_order_release); }
+    int member() const { return member_.load(std::memory_order_acquire); }
 
     /// `restart`: this block is a start or a jump (`PatternPlayer::startsOrJumps`). `ownSlot` is the slot parameter.
     SlotDecision beginBlock(SlotMode mode, int ownSlot, const TransportInfo& transport, int numSamples,

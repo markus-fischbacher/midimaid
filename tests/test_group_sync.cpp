@@ -630,3 +630,62 @@ TEST_CASE("the hub's mute switches reach a voice and vanish with the hub", "[gro
     CHECK_FALSE(voiceSync.mutedByHub(2));
     CHECK(channel.hubMute() == 0);
 }
+
+// --- live transposition on the channel (SPEC 3.16, D-216) -----------------------------------------------------
+
+TEST_CASE("the transposition plan carries stamp and offset, the sequence grows and wraps", "[group-channel][transpose]") {
+    GroupChannel channel;
+    CHECK(channel.transposePlan().sequence == 0);
+    channel.publishTransposePlan(16.0, 5);
+    auto plan = channel.transposePlan();
+    CHECK(plan.sequence == 1);
+    CHECK(plan.stampPpq == 16.0);
+    CHECK(plan.offset == 5);
+    channel.publishTransposePlan(17.0, -12);
+    plan = channel.transposePlan();
+    CHECK(plan.sequence == 2);
+    CHECK(plan.stampPpq == 17.0);
+    CHECK(plan.offset == -12);
+    channel.publishTransposePlan(18.0, 12);
+    CHECK(channel.transposePlan().offset == 12);
+    channel.publishTransposePlan(18.5, 40); // limited
+    CHECK(channel.transposePlan().offset == 12);
+    channel.publishTransposePlan(18.5, -40);
+    CHECK(channel.transposePlan().offset == -12);
+    channel.publishTransposePlan(-3.0, 0); // a stamp in the pre-roll
+    CHECK(channel.transposePlan().stampPpq == -3.0);
+    CHECK(channel.transposePlan().offset == 0);
+    for (int i = 0; i < 70000; ++i) {
+        channel.publishTransposePlan(1.0, 1);
+    }
+    CHECK(channel.transposePlan().sequence == ((6 + 70000) & 0xFFFF)); // wrapped, unequal on every step
+}
+
+TEST_CASE("the hub's transposition in force is empty until the hub reports and after a change of hub", "[group-channel][transpose]") {
+    GroupChannel channel;
+    CHECK_FALSE(channel.hubTranspose().valid);
+    channel.reportHubTranspose(-7);
+    auto state = channel.hubTranspose();
+    CHECK(state.valid);
+    CHECK(state.offset == -7);
+    channel.reportHubTranspose(0);
+    CHECK(channel.hubTranspose().valid);
+    CHECK(channel.hubTranspose().offset == 0);
+    channel.setHub(3);
+    CHECK_FALSE(channel.hubTranspose().valid);
+}
+
+TEST_CASE("a change planned on a beat grid lands on the next beat after the lead", "[group-sync][transpose]") {
+    GroupChannel channel;
+    const int hub = channel.acquire();
+    channel.setHub(hub);
+    channel.reportBlock(hub, 5.2, true);
+    // 150 ms lead at 120 BPM is 0.3 PPQ: from 5.5 on the next beat is 6, the next bar 8
+    CHECK(plannedStamp(channel, 120.0, std::nullopt, 1.0).value() == 6.0);
+    CHECK(plannedStamp(channel, 120.0, std::nullopt, 4.0).value() == 8.0);
+    CHECK(plannedStamp(channel, 120.0).value() == 8.0); // the default is the bar
+    channel.reportBlock(hub, 5.8, true);
+    CHECK(plannedStamp(channel, 120.0, std::nullopt, 1.0).value() == 7.0); // 6.1 is past the beat at 6
+    CHECK(plannedStamp(channel, 120.0, 6.5, 1.0).value() == 7.0);           // the planner's own block end counts
+    CHECK_FALSE(plannedStamp(GroupChannel{}, 120.0, std::nullopt, 1.0).has_value());
+}

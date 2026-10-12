@@ -236,7 +236,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
   - [x] Etappe 1 (D-215): Kern `core/Transpose`, Engine (Abspielen mit Versatz, geplanter Wechsel sample-genau, Oktavregel,
         chromatisch und diatonisch), Host-Parameter `transpose` aktiv, Tastatur für Hub/Solo (Halten/Momentan, Zeitpunkt Note/Schlag/Takt,
         Ziel, Kanal, Referenznote), Anzeige im Hub, Offline-Render ohne Tastatur; Einstellungen vorerst nur im Code
-  - [ ] Etappe 2: Gruppe (Voices folgen der geteilten Transposition mit geplantem Wechsel), Export mit Transposition
+  - [x] Etappe 2 (D-216): Gruppe (Voices folgen der geteilten Transposition mit geplantem Wechsel über den Gruppenkanal, „eigen“ nutzt den Parameter der Voice), Export mit Transposition (abschaltbar im Code), Anzeige in der Voice
   - [ ] Etappe 3: Einstellungsdialog und Speicherung (Referenznote, Modus, Verhalten, Zeitpunkt, Ziel, Kanal), MIDI Thru
 - [ ] Vorhören bei gestopptem Transport, auch für Voices (SPEC §3.11)
 - [ ] Legato-Einsatz (SPEC §3.4)
@@ -338,7 +338,7 @@ Euklidische Rhythmen als Feature
 | Laden, Editor öffnen, acht Instanzen: CPU und Verzögerung | v1.0 | | | | H45; Messung `[perf]` |
 | Nicht aktive Parameter (SPEC 3.13) sichtbar, aber ohne Wirkung | v1.0 | | | | H22 |
 | Evolve-Ebene: Behalten, Zurück, Verwerfen; Slot unverändert; Bounce spielt Slot | v1.1 | | | | H61, H62; umgesetzt (D-213, D-214) |
-| Live-Transponieren per Keyboard, auch während Slides | v1.1 | | | | H63; Etappe 1 (Hub/Solo) umgesetzt, Gruppe, Export und Dialog folgen |
+| Live-Transponieren per Keyboard, auch während Slides | v1.1 | | | | H63, H64; Etappe 1 und 2 umgesetzt, Dialog folgt |
 | Vorhören bei Stop, Übergabe an Transport-Start | v1.1 | | | | v1.1: noch nicht umgesetzt |
 | Wahrscheinlichkeiten: gleiche Song-Position klingt gleich, Bounce = Wiedergabe | v1.1 | | | | v1.1: noch nicht umgesetzt |
 | Referenz-Set wechseln: hörbar anderer Charakter | v1.1 | | | | v1.1: noch nicht umgesetzt |

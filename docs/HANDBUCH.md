@@ -164,8 +164,11 @@ höchstens ±12. Die Transposition wirkt ab der nächsten Note, bleibt bis zur n
 die gespeicherten Noten. Verlässt eine Stimme dadurch ihren Tonumfang, geht sie als Ganzes um eine Oktave, damit die Kontur bleibt. Der
 Host-Parameter **Transpose** addiert sich zur Taste. Das Keyboard selbst klingt nicht mit; ein Bounce ignoriert die Tasten und spielt nur den Parameter.
 Zeitpunkt, Modus (chromatisch oder diatonisch nach Skalenstufen), Momentan statt Halten, Ziel (Bass, Melodie, beide), MIDI-Kanal und die
-Referenznote sind schon eingebaut, aber noch nicht im Einstellungsdialog (kommt in Etappe 3). Etappe 1 gilt für **Solo und Hub ohne Stimmen**;
-die Weitergabe an die Stimmen einer Gruppe folgt in Etappe 2.
+Referenznote sind schon eingebaut, aber noch nicht im Einstellungsdialog (kommt in Etappe 3). **In einer Gruppe** nimmt der Hub das Keyboard
+und plant die Änderung für alle: Hub und Stimmen transponieren zum selben Schlag (mit „nächste Note“ ist das der nächste Schlag, den
+alle noch halten können; „nächster Takt“ gilt auch). Die Stimmen zeigen „Transponiert +n“ in der Statuszeile und folgen dem Hub; eine
+Stimme auf *Slot: eigener* spielt stattdessen ihren eigenen Parameter **Transpose** (für den Bounce einer einzelnen Spur). Eine Notenzeile, die
+du aus dem Fenster ziehst, enthält die Noten so, wie sie gerade klingen.
 
 ## 11. Hub und Stimmen
 

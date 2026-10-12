@@ -23,6 +23,7 @@ struct TransposeSettings {
     TransposeTarget target = TransposeTarget::Both;
     int referenceNote = -1;
     int channel = 0;
+    bool exportTransposed = true; ///< a file dragged out holds the notes as they sound now (SPEC 3.16)
     bool operator==(const TransposeSettings&) const = default;
 };
 
