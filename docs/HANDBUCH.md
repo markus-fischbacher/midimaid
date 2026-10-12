@@ -134,7 +134,7 @@ anderen Stimmen darum.
 
 **Drum-Referenz:** Ziehst du einen Drum-Clip (z. B. aus Live) auf dieselbe Stelle, erkennt MidiMaid ihn als Schlagzeug. Kick und Hi-Hat bestimmen dann Kick-Freiraum und
 Groove („Drum-Referenz übernommen: n Kicks, m Hi-Hats“). **Drums lösen** entfernt sie. Weicht deine Belegung von General
-MIDI ab, stellst du sie in den Einstellungen unter *Drum-Belegung* ein.
+MIDI ab, stellst du sie in den Einstellungen unter *Drum-Belegung* ein. Im Experten-Modus legt **Melodie zu Hats** fest, wie sich der Melodie-Rhythmus zu den Hi-Hats der Referenz verhält: *Frei* (Standard), *Mit Hats* (Noten rücken um ein 16tel auf Hat-Schritte) oder *Gegen Hats* (sie füllen die Lücken). Die Schläge bleiben, gesperrte Rhythmen und Slides auch; es wirkt beim Ablegen der Referenz auf ein Pattern und beim Erzeugen.
 
 **Sprache:** Unter *Einstellungen → Sprache* wählst du *Automatisch* (die Systemsprache), *Deutsch* oder *English*. Die Wahl gilt für Fenster, die du danach öffnest; schließe das Plug-in-Fenster und öffne es neu.
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/HatMode.h"
 #include "core/MidiImport.h"
 #include "core/Pattern.h"
 #include "core/StyleProfile.h"
@@ -46,8 +47,10 @@ std::optional<RhythmReference> deriveRhythmReference(const std::vector<MidiClipN
 /// Puts a reference into the pattern (SPEC 3.14): kick grid `custom`, the groove of every voice that plays generated
 /// material follows the reference (no swing of its own, D-179), then the constraint layer runs for the new kick. Locked
 /// voices keep their notes (the constraint layer leaves them alone); a voice with an imported line keeps its groove
-/// settings. The notes of the other voices adapt to the kick, they are not generated again.
-void applyRhythmReference(Pattern& pattern, const RhythmReference& reference, const StyleProfile& style);
+/// settings. The notes of the other voices adapt to the kick, they are not generated again. `hatMode` (v1.1, D-228)
+/// moves the melody notes towards or away from the hats first (`applyHatMode`).
+void applyRhythmReference(Pattern& pattern, const RhythmReference& reference, const StyleProfile& style,
+                          HatMode hatMode = HatMode::Free);
 
 /// Takes the reference out again: the default kick grid of the style and the straight groove of the style.
 void removeRhythmReference(Pattern& pattern, const StyleProfile& style);

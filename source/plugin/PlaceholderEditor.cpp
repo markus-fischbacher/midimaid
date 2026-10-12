@@ -394,6 +394,23 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         processor_.setInstanceSettings(next);
     };
     addChildComponent(chromaticSlider_);
+    hatModeBox_.setComponentID("hatMode");
+    hatModeBox_.addItem(tr(keys::kHatModeFree), 1);
+    hatModeBox_.addItem(tr(keys::kHatModeWith), 2);
+    hatModeBox_.addItem(tr(keys::kHatModeAgainst), 3);
+    hatModeBox_.setSelectedId(1, juce::dontSendNotification);
+    hatModeBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        const int id = hatModeBox_.getSelectedId();
+        next.generation.hatMode = id == 2   ? mm::core::HatMode::With
+                                  : id == 3 ? mm::core::HatMode::Against
+                                            : mm::core::HatMode::Free;
+        processor_.setInstanceSettings(next);
+    };
+    addChildComponent(hatModeBox_);
+    hatModeLabel_.setText(tr(keys::kLabelHatMode), juce::dontSendNotification);
+    hatModeLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    addChildComponent(hatModeLabel_);
     chromaticLabel_.setText(tr(keys::kLabelChromatic), juce::dontSendNotification);
     chromaticLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
     addChildComponent(chromaticLabel_);
@@ -976,6 +993,12 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     if (static_cast<int>(chromaticSlider_.getValue()) != generation.chromaticPct.value_or(-1)) {
         chromaticSlider_.setValue(generation.chromaticPct.value_or(-1), juce::dontSendNotification);
     }
+    const int hatId = generation.hatMode == mm::core::HatMode::With      ? 2
+                      : generation.hatMode == mm::core::HatMode::Against ? 3
+                                                                         : 1;
+    if (hatModeBox_.getSelectedId() != hatId) {
+        hatModeBox_.setSelectedId(hatId, juce::dontSendNotification);
+    }
     const bool outputNone = settings.outputMode == mm::core::OutputMode::None;
     if (outputBox_.getSelectedId() != (outputNone ? 2 : 1)) {
         outputBox_.setSelectedId(outputNone ? 2 : 1, juce::dontSendNotification);
@@ -1018,7 +1041,7 @@ void PlaceholderEditor::applyLevel() {
     const bool show = expert_ && !voiceLayout_;
     for (auto* component :
          std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
-                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_,
+                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &hatModeLabel_, &hatModeBox_,
                                                  &evolveEveryBox_,
                                                  &evolveOriginalButton_, &evolveStrengthLabel_,
                                                  &evolveStrengthSlider_}) {
@@ -1387,7 +1410,7 @@ void PlaceholderEditor::resized() {
     refineEditor_.setBounds(refineRow);
 
     auto sliders = area.removeFromTop(40).reduced(16, 6);
-    const int columns = expert_ ? 3 : 2; // the expert level adds the chromatic share (SPEC 3.8)
+    const int columns = expert_ ? 4 : 2; // the expert level adds the chromatic share (SPEC 3.8) and the hat mode (3.14)
     const int column = (sliders.getWidth() - (columns - 1) * 16) / columns;
     auto left = sliders.removeFromLeft(column);
     energyLabel_.setBounds(left.removeFromLeft(80));
@@ -1398,8 +1421,12 @@ void PlaceholderEditor::resized() {
     creativitySlider_.setBounds(middle);
     if (expert_) {
         sliders.removeFromLeft(16);
-        chromaticLabel_.setBounds(sliders.removeFromLeft(80));
-        chromaticSlider_.setBounds(sliders);
+        auto third = sliders.removeFromLeft(column);
+        chromaticLabel_.setBounds(third.removeFromLeft(80));
+        chromaticSlider_.setBounds(third);
+        sliders.removeFromLeft(16);
+        hatModeLabel_.setBounds(sliders.removeFromLeft(110));
+        hatModeBox_.setBounds(sliders);
     }
 
     auto strip = area.removeFromTop(40).reduced(16, 4);

@@ -402,7 +402,7 @@ Zweck: Bass und Melodie richten sich nach dem tatsächlichen Drum-Groove statt n
   - Groove-Vorlage aus dem Timing und der Velocity der Hi-Hats (Versatz pro 16tel)
   - Akzentpositionen (z. B. Open-Hat-Offbeats) als Hinweis für Bass- und Melodie-Akzente
   - Dichte-Referenz für die Energie
-- **[v1.1] Melodie-Rhythmus relativ zu den Hats:** „frei“ (Standard), „mit Hats“ (Noten bevorzugt auf
+- **[v1.1] Melodie-Rhythmus relativ zu den Hats (umgesetzt, D-228):** „frei“ (Standard), „mit Hats“ (Noten bevorzugt auf
   Hat-Positionen), „gegen Hats“ (Lücken füllen)
 - Die Referenz wird pro Slot gespeichert (neue Slots übernehmen die zuletzt verwendete) und in einer
   Hub-Gruppe geteilt

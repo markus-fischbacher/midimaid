@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/EvolveLayer.h"
+#include "core/HatMode.h"
 #include "core/Pattern.h"
 #include "core/Theory.h"
 
@@ -36,6 +37,7 @@ struct GenerationSettings {
     std::optional<uint64_t> seed;                         ///< fixed seed, else random per request
     std::string prompt; ///< what the musician asks the AI for (SPEC 3.1); offline: ignored
     std::optional<int> chromaticPct{}; ///< 0 to 100: the chromatic share of SPEC 3.8; none: the style's
+    HatMode hatMode = HatMode::Free;   ///< melody rhythm relative to the hats of a drum reference (SPEC 3.14, D-228)
 
     bool operator==(const GenerationSettings&) const = default;
 };
