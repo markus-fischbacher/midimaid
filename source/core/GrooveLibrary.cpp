@@ -60,6 +60,9 @@ GrooveTemplateLoad loadGrooveTemplate(std::string_view text) {
         return fail("$.nameDe: missing");
     }
     groove.nameDe = name->get<std::string>();
+    if (const auto english = root.find("nameEn"); english != root.end() && english->is_string()) {
+        groove.nameEn = english->get<std::string>();
+    }
     const auto bars = root.find("bars");
     if (bars == root.end() || !bars->is_number_integer() || (bars->get<long long>() != 1 && bars->get<long long>() != 2)) {
         return fail("$.bars: must be 1 or 2");

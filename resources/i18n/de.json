@@ -270,5 +270,10 @@
   "help.text.logic": "Logic Pro (AU, MIDI-FX „MidiMaid MIDI“)\n\nAufbau: Der Hub liegt als MIDI-FX auf einer Instrumentenspur (spielt dort z. B. den Bass), je eine Voice als MIDI-FX auf den weiteren Instrumentenspuren.\nVariante: Alle Instanzen als „MidiMaid MIDI“ (MIDI-FX-Slot).\nAufnahme: Auf jeder Spur mit einer Stimme „Record MIDI to Track Here“ einschalten. Logic nimmt dann die Ausgabe hinter MidiMaid auf, sonst entsteht keine Region.\nFreeze und Bounce: Stehen Hub und Voices auf verschiedenen Spuren, ist der Hub beim Einfrieren einer Spur eventuell nicht aktiv. Stelle die Voice auf „Slot: eigener“ und automatisiere ihren Slot-Parameter.\nArrangement: Slot-Automation im Hub; aufgenommene Regionen sind normales MIDI.",
   "help.text.other": "Bitwig: Stelle das Plug-in-Hosting auf „By Plug-in“ (nicht „Individually“). Hosts, die Plugins in eigenen Prozessen laufen lassen, verbinden Hub und Voices nicht; MidiMaid zeigt dann „Hub nicht gefunden“ mit einem Hinweis zur Sandbox.\n\nReaper und andere Hosts: Es gilt das Prinzip aus dem ersten Reiter. Prüfe, dass alle Instanzen dasselbe Format haben und im selben Prozess laufen.\n\nWenn sich Instanzen nicht finden:\n• Gleiche Variante und gleiches Format?\n• Plugin-Sandbox des Hosts abschalten.\n• Ein zweiter Hub bleibt solo und zeigt „Es gibt bereits einen Hub“.",
   "drag.label": "MIDI ziehen",
-  "settings.log": "Protokoll"
+  "settings.log": "Protokoll",
+  "settings.language": "Sprache",
+  "settings.language.auto": "Automatisch (Systemsprache)",
+  "settings.language.de": "Deutsch",
+  "settings.language.en": "English",
+  "settings.languageHint": "Gilt für Fenster, die du ab jetzt öffnest; öffne das Plug-in-Fenster neu"
 }

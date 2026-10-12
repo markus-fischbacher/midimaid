@@ -71,4 +71,11 @@ std::set<std::string> Translation::keys() const {
     return out;
 }
 
+std::string resolveLanguage(std::string_view setting, std::string_view systemLanguage) {
+    if (setting == "de" || setting == "en") {
+        return std::string(setting);
+    }
+    return systemLanguage.substr(0, 2) == "de" || systemLanguage.substr(0, 2) == "De" ? "de" : "en";
+}
+
 } // namespace mm::core

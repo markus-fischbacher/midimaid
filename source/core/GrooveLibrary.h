@@ -14,6 +14,7 @@ namespace mm::core {
 struct GrooveTemplate {
     std::string id;     ///< lower case, digits and underscore ("laid_back")
     std::string nameDe; ///< the name in the pick list
+    std::string nameEn; ///< the same in English; empty: the German name
     uint32_t bars = 1;  ///< 1 or 2: the template repeats every `bars` bars
     std::vector<int32_t> offsetTicks;       ///< per 16th: delay (positive) or push (negative) in ticks, +-240 at most
     std::vector<int32_t> velocityPermille;  ///< per 16th: factor on the velocity, 500 to 1500 (1000 = unchanged)

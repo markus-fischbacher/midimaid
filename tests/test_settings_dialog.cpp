@@ -682,3 +682,30 @@ TEST_CASE("the dialog with the transposition stays within a screen and nothing o
         }
     }
 }
+
+TEST_CASE("the language box saves the choice and switches the texts", "[settings-dialog]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    auto dialog = env.dialog();
+    auto& box = part<juce::ComboBox>(*dialog, "language");
+    CHECK(box.getSelectedId() == 1); // automatic
+    CHECK(env.store.get().language == "auto");
+
+    box.setSelectedId(3, juce::sendNotificationSync);
+    CHECK(env.store.get().language == "en");
+    CHECK(uiLanguage() == "en");
+    CHECK(tr(keys::kButtonClose) == "Close");
+    CHECK(localized("Deutsch", "English") == "English");
+    CHECK(localized("Deutsch", "") == "Deutsch");
+
+    box.setSelectedId(2, juce::sendNotificationSync);
+    CHECK(env.store.get().language == "de");
+    CHECK(uiLanguage() == "de");
+    CHECK(tr(keys::kButtonClose) == "Schließen");
+    CHECK(localized("Deutsch", "English") == "Deutsch");
+
+    env.store.waitForWrites();
+    auto reopened = env.dialog(); // a dialog opened later shows the choice
+    CHECK(part<juce::ComboBox>(*reopened, "language").getSelectedId() == 2);
+    setUiLanguage("de");
+}

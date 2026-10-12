@@ -252,7 +252,7 @@ void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {
     }
     int index = 0;
     for (const auto& groove : embeddedGrooves().templates()) {
-        grooveBox_.addItem(juce::String::fromUTF8(groove.nameDe.c_str()), 10 + index++);
+        grooveBox_.addItem(juce::String::fromUTF8(localized(groove.nameDe, groove.nameEn).c_str()), 10 + index++);
     }
     int selected = 1;
     if (filled) {

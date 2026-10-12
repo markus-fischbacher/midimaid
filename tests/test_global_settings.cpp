@@ -14,6 +14,7 @@ TEST_CASE("the defaults are A minor, basic level, strength 30 and a 1/16 grid", 
     CHECK(defaults.grid == EditGrid{16, false});
     CHECK_FALSE(defaults.snapChromatic);
     CHECK(defaults.middleC == 3);
+    CHECK(defaults.language == "auto");
     CHECK(sanitize(defaults) == defaults);
 }
 
@@ -26,6 +27,7 @@ TEST_CASE("settings survive writing and reading", "[global-settings]") {
     settings.grid = EditGrid{8, true};
     settings.snapChromatic = true;
     settings.middleC = 4;
+    settings.language = "en";
     REQUIRE(findScale("phrygian") != nullptr);
     const auto text = toJson(settings);
     CHECK(text.find("\"version\": 1") != std::string::npos);
@@ -189,4 +191,15 @@ TEST_CASE("the middle C convention is 3 or 4, anything else gives the default", 
     GlobalSettings bad;
     bad.middleC = 9;
     CHECK(sanitize(bad).middleC == 3);
+}
+
+TEST_CASE("the language is auto, de or en, anything else gives auto", "[global-settings]") {
+    CHECK(parseGlobalSettings(R"({"version": 1, "language": "en"})").language == "en");
+    CHECK(parseGlobalSettings(R"({"version": 1, "language": "de"})").language == "de");
+    CHECK(parseGlobalSettings(R"({"version": 1, "language": "auto"})").language == "auto");
+    CHECK(parseGlobalSettings(R"({"version": 1, "language": "fr"})").language == "auto");
+    CHECK(parseGlobalSettings(R"({"version": 1, "language": 3})").language == "auto");
+    GlobalSettings bad;
+    bad.language = "xx";
+    CHECK(sanitize(bad).language == "auto");
 }

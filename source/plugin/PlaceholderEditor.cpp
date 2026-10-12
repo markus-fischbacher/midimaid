@@ -100,7 +100,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     const auto& profiles = processor_.styles().profiles();
     const auto current = processor_.instanceSettings().generation.styleId;
     for (size_t i = 0; i < profiles.size(); ++i) {
-        styleBox_.addItem(juce::String::fromUTF8(profiles[i].nameDe.c_str()), static_cast<int>(i) + 1);
+        styleBox_.addItem(juce::String::fromUTF8(localized(profiles[i].nameDe, profiles[i].nameEn).c_str()), static_cast<int>(i) + 1);
         if (profiles[i].id == current) {
             styleBox_.setSelectedId(static_cast<int>(i) + 1, juce::dontSendNotification);
         }
@@ -309,7 +309,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         const auto id = processor_.instanceSettings().generation.styleId;
         const auto* style = processor_.styles().findOrFallback(id);
         ReferencesDialog::show(style != nullptr ? style->id : id,
-                               style != nullptr ? juce::String::fromUTF8(style->nameDe.c_str()) : juce::String(id));
+                               style != nullptr ? juce::String::fromUTF8(localized(style->nameDe, style->nameEn).c_str()) : juce::String(id));
     };
     addChildComponent(referencesButton_);
     libraryButton_.setButtonText(tr(keys::kButtonLibrary));
@@ -1226,7 +1226,7 @@ void PlaceholderEditor::updateFullView() {
         } else {
             const auto* style = processor_.styles().find(info.styleId);
             infoLabel_.setText(tr(keys::kSlotInfo, {{"slot", std::to_string(info.slot)},
-                                                    {"style", style != nullptr ? style->nameDe : info.styleId},
+                                                    {"style", style != nullptr ? localized(style->nameDe, style->nameEn) : info.styleId},
                                                     {"key", kKeyNames[info.root % 12]},
                                                     {"scale", scaleLabel(info.scaleId).toStdString()},
                                                     {"length", barsText(info.lengthBars).toStdString()},

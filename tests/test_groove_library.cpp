@@ -382,3 +382,15 @@ TEST_CASE("the velocity profile of a template scales the velocity, by the amount
         CHECK(half[i] == (i % 2 == 1 ? 95 : 100));
     }
 }
+
+TEST_CASE("a template may carry an English name", "[groove-library]") {
+    auto plain = loadGrooveTemplate(valid());
+    REQUIRE(plain.groove.has_value());
+    CHECK(plain.groove->nameEn.empty());
+    auto named = loadGrooveTemplate(valid(R"(, "nameEn": "Test EN")"));
+    REQUIRE(named.groove.has_value());
+    CHECK(named.groove->nameEn == "Test EN");
+    auto wrong = loadGrooveTemplate(valid(R"(, "nameEn": 5)"));
+    REQUIRE(wrong.groove.has_value());
+    CHECK(wrong.groove->nameEn.empty());
+}

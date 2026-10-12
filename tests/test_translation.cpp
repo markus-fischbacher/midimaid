@@ -75,11 +75,9 @@ TEST_CASE("the German table has exactly the keys the code asks for and no empty 
 
 TEST_CASE("every language file has the keys of the German one", "[i18n]") {
     const auto german = loadLanguage("de").keys();
-    for (const char* other : {"en"}) { // v1.1 adds en.json; a file that does not exist yet is skipped
+    for (const char* other : {"en"}) {
         std::ifstream probe(std::string(MIDIMAID_RESOURCE_DIR) + "/i18n/" + other + ".json");
-        if (!probe) {
-            continue;
-        }
+        REQUIRE(probe);
         CHECK(loadLanguage(other).keys() == german);
     }
 }
@@ -100,4 +98,47 @@ TEST_CASE("the placeholders of a text are the same in every use", "[i18n]") {
             CHECK(known.count(text.substr(i + 1, close - i - 1)) == 1);
         }
     }
+}
+
+namespace {
+
+std::set<std::string> placeholdersOf(const std::string& text) {
+    std::set<std::string> found;
+    for (size_t i = text.find('{'); i != std::string::npos; i = text.find('{', i + 1)) {
+        const auto close = text.find('}', i);
+        if (close == std::string::npos) {
+            break;
+        }
+        found.insert(text.substr(i + 1, close - i - 1));
+    }
+    return found;
+}
+
+} // namespace
+
+TEST_CASE("every English text has the placeholders of the German one and is not empty", "[i18n]") {
+    const auto german = loadLanguage("de");
+    const auto english = loadLanguage("en");
+    CHECK(english.problems().empty());
+    size_t same = 0;
+    for (const auto& key : german.keys()) {
+        INFO(key);
+        CHECK(placeholdersOf(english.tr(key)) == placeholdersOf(german.tr(key)));
+        CHECK_FALSE(english.tr(key).empty());
+        same += english.tr(key) == german.tr(key) ? 1 : 0;
+    }
+    // names and symbols are the same in both languages, texts are not: a copy of the German file would show here
+    CHECK(same < german.keys().size() / 10);
+}
+
+TEST_CASE("the language follows the choice, or the system when it is automatic", "[i18n]") {
+    CHECK(mm::core::resolveLanguage("de", "en_US") == "de");
+    CHECK(mm::core::resolveLanguage("en", "de_DE") == "en");
+    CHECK(mm::core::resolveLanguage("auto", "de_DE") == "de");
+    CHECK(mm::core::resolveLanguage("auto", "de") == "de");
+    CHECK(mm::core::resolveLanguage("auto", "en_GB") == "en");
+    CHECK(mm::core::resolveLanguage("auto", "fr_FR") == "en");
+    CHECK(mm::core::resolveLanguage("auto", "") == "en");
+    CHECK(mm::core::resolveLanguage("klingon", "de_AT") == "de"); // an unknown choice counts as automatic
+    CHECK(mm::core::resolveLanguage("", "fr") == "en");
 }

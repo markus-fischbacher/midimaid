@@ -337,6 +337,25 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
          {keys::kTransposeTargetBoth, keys::kTransposeTargetBass, keys::kTransposeTargetMelody});
     fill(transposeReferenceBox_, "transposeReference", {keys::kTransposeReferenceAuto});
     fillReferenceNotes();
+    makeLabel(languageLabel_, keys::kLabelLanguage);
+    languageBox_.setComponentID("language");
+    languageBox_.addItem(tr(keys::kLanguageAuto), 1);
+    languageBox_.addItem(tr(keys::kLanguageDe), 2);
+    languageBox_.addItem(tr(keys::kLanguageEn), 3);
+    {
+        const auto chosen = settings_().get().language;
+        languageBox_.setSelectedId(chosen == "de" ? 2 : chosen == "en" ? 3 : 1, juce::dontSendNotification);
+    }
+    languageBox_.onChange = [this] {
+        const int id = languageBox_.getSelectedId();
+        const std::string language = id == 2 ? "de" : id == 3 ? "en" : "auto";
+        settings_().update([&](mm::core::GlobalSettings& settings) { settings.language = language; });
+        setUiLanguage(language); // windows opened from now on use it
+    };
+    addAndMakeVisible(languageBox_);
+    languageHint_.setText(tr(keys::kLanguageHint), juce::dontSendNotification);
+    languageHint_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
+    addAndMakeVisible(languageHint_);
     makeLabel(noteNamingLabel_, keys::kLabelNoteNaming);
     noteNamingBox_.setComponentID("noteNaming");
     noteNamingBox_.addItem(tr(keys::kNoteNamingC3), 1);
@@ -430,6 +449,8 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {nullptr, {&transposeReferenceBox_, &transposeChannelBox_}, {250}, kControl, true},
              {nullptr, {&transposeExportToggle_, &midiThruToggle_}, {250}, kControl, true},
              {nullptr, {&transposeHint_}, {}, kHint, true},
+             {&languageLabel_, {&languageBox_}, {}, kControl, false, false, -1, 260},
+             {nullptr, {&languageHint_}, {}, kHint, true},
              {&noteNamingLabel_, {&noteNamingBox_}, {}, kControl, false, false, -1, 260},
              {&drumMapLabel_, {&drumMapEditor_}, {}, kControl, false, true},
              {nullptr, {&drumMapHint_}, {}, 40, true},
