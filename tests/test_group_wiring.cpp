@@ -70,6 +70,13 @@ public:
     }
     void setPpq(double ppq) { ppq_ = ppq; }
     void setPlaying(bool playing) { playing_ = playing; }
+    /// MIDI the host delivers to the plug-in in the next block (a keyboard): note on or off at a sample of the block.
+    void keyDown(int note, int channel = 1, int samplePosition = 0, int velocity = 100) {
+        input_.addEvent(juce::MidiMessage::noteOn(channel, note, static_cast<juce::uint8>(velocity)), samplePosition);
+    }
+    void keyUp(int note, int channel = 1, int samplePosition = 0) {
+        input_.addEvent(juce::MidiMessage::noteOff(channel, note), samplePosition);
+    }
     double ppq() const { return ppq_; }
     const std::vector<NoteOn>& notes() const { return notes_; }
     const std::vector<NoteOn>& noteOffs() const { return offs_; }
@@ -80,6 +87,8 @@ public:
         head_.info.setPpqPosition(ppq_);
         audio_.clear();
         midi_.clear();
+        midi_.addEvents(input_, 0, kBlock, 0);
+        input_.clear();
         processor.processBlock(audio_, midi_);
         for (const auto metadata : midi_) {
             const auto message = metadata.getMessage();
@@ -111,6 +120,7 @@ private:
     FakePlayHead head_;
     juce::AudioBuffer<float> audio_;
     juce::MidiBuffer midi_;
+    juce::MidiBuffer input_;
     double ppq_ = 0.0;
     bool playing_ = true;
     std::vector<NoteOn> notes_;
@@ -4879,4 +4889,311 @@ TEST_CASE("evolve in a group: a voice that runs behind the hub still plays every
         CHECK(pass(bass, 3) != pass(bass, 4));
         hub.processor.setEvolve(false);
     }
+}
+
+// --- live transposition (SPEC 3.16) ---------------------------------------------------------------------------
+
+namespace {
+
+/// A one-bar bass with a note of `pitch` on each of the four beats (key A minor, reference note 45).
+mm::core::Pattern beatPattern(uint8_t pitch, uint8_t second = 0) {
+    mm::core::Pattern pattern = mm::core::makeEmptyPattern(1, "peak_time");
+    for (uint32_t beat = 0; beat < 4; ++beat) {
+        mm::core::Note note;
+        note.id = mm::core::allocateNoteId(pattern);
+        note.pitch = pitch;
+        note.startTick = beat * 960 + 120; // an eighth after the beat: never at the edge of a block
+        note.lengthTicks = 240;
+        pattern.voices[0].notes.push_back(note);
+    }
+    if (second != 0) { // a melody note of its own
+        mm::core::Note note;
+        note.id = mm::core::allocateNoteId(pattern);
+        note.pitch = second;
+        note.startTick = 120;
+        note.lengthTicks = 240;
+        pattern.voices[1].notes.push_back(note);
+    }
+    return pattern;
+}
+
+struct TransposeRig {
+    Quiet quiet;
+    Instance solo{"Solo"};
+    explicit TransposeRig(uint8_t pitch = 41, uint8_t second = 0, int voice = 1) {
+        solo.setRole(InstanceRole::Solo, SlotFollow::Hub, voice);
+        solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, beatPattern(pitch, second))); });
+        solo.setSlotParameter(1);
+        // The pattern is playing before anything is pressed: the key of the playing pattern is the reference's.
+        while (solo.ppq() < 0.5) {
+            solo.step();
+        }
+    }
+    void run(double ppq) {
+        while (solo.ppq() < ppq - 1e-9) {
+            solo.step();
+        }
+    }
+    /// The pitches that started between two PPQ positions.
+    std::vector<int> pitches(double from, double to) const {
+        std::vector<int> result;
+        for (const auto& note : solo.notes()) {
+            if (note.sample + 2 >= at(from) && note.sample + 2 < at(to)) { // a note at a bar line may be a sample early
+                result.push_back(note.pitch);
+            }
+        }
+        return result;
+    }
+    void setSettings(const std::function<void(mm::core::TransposeSettings&)>& change) {
+        auto settings = solo.processor.transposeSettings();
+        change(settings);
+        solo.processor.setTransposeSettings(settings);
+    }
+};
+
+} // namespace
+
+TEST_CASE("transpose: the settings are packed and unpacked without loss", "[group-wiring][transpose]") {
+    Quiet quiet;
+    Instance instance("Solo");
+    CHECK(instance.processor.transposeSettings() == mm::core::TransposeSettings{});
+    for (const auto mode : {mm::core::TransposeMode::Chromatic, mm::core::TransposeMode::Diatonic}) {
+        for (const auto behavior : {mm::core::TransposeBehavior::Hold, mm::core::TransposeBehavior::Momentary}) {
+            for (const auto timing : {mm::core::TransposeTiming::NextNote, mm::core::TransposeTiming::NextBeat,
+                                      mm::core::TransposeTiming::NextBar}) {
+                for (const auto target : {mm::core::TransposeTarget::Both, mm::core::TransposeTarget::Bass,
+                                          mm::core::TransposeTarget::Melody}) {
+                    for (const int channel : {0, 1, 9, 16}) {
+                        for (const int reference : {-1, 0, 45, 127}) {
+                            const mm::core::TransposeSettings settings{mode, behavior, timing, target, reference, channel};
+                            instance.processor.setTransposeSettings(settings);
+                            CHECK(instance.processor.transposeSettings() == settings);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("transpose: a key transposes by its distance to the reference, from the next note on, and holds", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    rig.run(4.0); // the bar plays 41 on every beat
+    CHECK(rig.pitches(0.0, 4.0) == std::vector<int>{41, 41, 41, 41});
+    CHECK(rig.solo.processor.effectiveTranspose() == 0);
+    rig.solo.keyDown(48); // reference is A2 = 45: +3
+    rig.solo.step();
+    CHECK(rig.solo.processor.keyboardTranspose() == 3);
+    CHECK(rig.solo.processor.effectiveTranspose() == 3);
+    rig.run(8.0);
+    CHECK(rig.pitches(4.0, 8.0) == std::vector<int>{44, 44, 44, 44});
+    rig.solo.keyUp(48); // hold: the key up changes nothing
+    rig.run(12.0);
+    CHECK(rig.pitches(8.0, 12.0) == std::vector<int>{44, 44, 44, 44});
+    rig.solo.keyDown(43); // -2 from the reference
+    rig.run(16.0);
+    CHECK(rig.pitches(12.0, 16.0) == std::vector<int>{39, 39, 39, 39});
+    rig.solo.keyDown(45); // the reference itself is back to 0
+    rig.run(20.0);
+    CHECK(rig.pitches(16.0, 20.0) == std::vector<int>{41, 41, 41, 41});
+    // and nothing of the keyboard is passed on: no note of the pitches that were pressed
+    for (const auto& note : rig.solo.notes()) {
+        CHECK(note.pitch != 48);
+        CHECK(note.pitch != 43);
+        CHECK(note.pitch != 45);
+    }
+}
+
+TEST_CASE("transpose: momentary lasts as long as the key", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    rig.setSettings([](auto& s) { s.behavior = mm::core::TransposeBehavior::Momentary; });
+    rig.run(1.0);
+    rig.solo.keyDown(50);
+    rig.solo.keyDown(52); // a second key: the last one counts
+    rig.run(4.0);
+    CHECK(rig.pitches(1.0, 4.0) == std::vector<int>{48, 48, 48});
+    rig.solo.keyUp(50); // not the key that set it: nothing changes
+    rig.run(6.0);
+    CHECK(rig.pitches(4.0, 6.0) == std::vector<int>{48, 48});
+    rig.solo.keyUp(52);
+    rig.run(8.0);
+    CHECK(rig.pitches(6.0, 8.0) == std::vector<int>{41, 41});
+}
+
+TEST_CASE("transpose: the timing waits for the next beat or the next bar, sample-accurate", "[group-wiring][transpose]") {
+    for (const auto timing : {mm::core::TransposeTiming::NextBeat, mm::core::TransposeTiming::NextBar}) {
+        TransposeRig rig;
+        rig.setSettings([&](auto& s) { s.timing = timing; });
+        rig.run(1.3);
+        rig.solo.keyDown(47); // +2, in the middle of the second beat
+        rig.run(8.0);
+        INFO("timing " << static_cast<int>(timing));
+        if (timing == mm::core::TransposeTiming::NextBeat) {
+            CHECK(rig.pitches(0.0, 4.0) == std::vector<int>{41, 41, 43, 43}); // from beat 3 (2.0) on
+        } else {
+            CHECK(rig.pitches(0.0, 4.0) == std::vector<int>{41, 41, 41, 41});
+            CHECK(rig.pitches(4.0, 8.0) == std::vector<int>{43, 43, 43, 43}); // from the bar line
+        }
+        // the shown value is the one that is in force: after the point
+        CHECK(rig.solo.processor.keyboardTranspose() == 2);
+    }
+}
+
+TEST_CASE("transpose: with the transport stopped a key is in force at once", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    rig.setSettings([](auto& s) { s.timing = mm::core::TransposeTiming::NextBar; });
+    rig.solo.setPlaying(false);
+    rig.solo.step();
+    rig.solo.keyDown(48);
+    rig.solo.step();
+    CHECK(rig.solo.processor.keyboardTranspose() == 3);
+    rig.solo.setPlaying(true);
+    rig.run(4.0);
+    CHECK(rig.pitches(1.0, 4.0) == std::vector<int>{44, 44, 44}); // the first bar already
+}
+
+TEST_CASE("transpose: the host parameter and the keyboard add up and are limited", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    auto* parameter = rig.solo.processor.parameters().getParameter("transpose");
+    REQUIRE(parameter != nullptr);
+    CHECK(parameter->isAutomatable());
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(2.0f));
+    rig.run(4.0);
+    CHECK(rig.pitches(1.0, 4.0) == std::vector<int>{43, 43, 43}); // the parameter alone
+    CHECK(rig.solo.processor.effectiveTranspose() == 2);
+    CHECK(rig.solo.processor.keyboardTranspose() == 0);
+    rig.solo.keyDown(48); // +3
+    rig.run(8.0);
+    CHECK(rig.pitches(4.0, 8.0) == std::vector<int>{46, 46, 46, 46}); // 2 + 3
+    CHECK(rig.solo.processor.effectiveTranspose() == 5);
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(12.0f));
+    rig.run(12.0);
+    CHECK(rig.solo.processor.effectiveTranspose() == 12); // 12 + 3 limited
+    // the keyboard offset is not written back into the parameter
+    CHECK(static_cast<int>(std::lround(parameter->convertFrom0to1(parameter->getValue()))) == 12);
+}
+
+TEST_CASE("transpose: the target picks the voice", "[group-wiring][transpose]") {
+    for (const auto target : {mm::core::TransposeTarget::Bass, mm::core::TransposeTarget::Melody,
+                              mm::core::TransposeTarget::Both}) {
+        for (const int voice : {1, 2}) {
+            TransposeRig rig(41, 60, voice);
+            rig.setSettings([&](auto& s) { s.target = target; });
+            rig.solo.keyDown(48);
+            rig.run(4.0);
+            const bool hit = target == mm::core::TransposeTarget::Both ||
+                             (target == mm::core::TransposeTarget::Bass) == (voice == 1);
+            INFO("target " << static_cast<int>(target) << " voice " << voice);
+            const int base = voice == 1 ? 41 : 60;
+            if (voice == 1) {
+                CHECK(rig.pitches(1.0, 4.0) == std::vector<int>(3, hit ? base + 3 : base));
+            }
+            CHECK(rig.solo.processor.effectiveTranspose() == (hit ? 3 : 0));
+        }
+    }
+}
+
+TEST_CASE("transpose: only the chosen MIDI channel counts", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    rig.setSettings([](auto& s) { s.channel = 3; });
+    rig.solo.keyDown(48, 1);
+    rig.run(4.0);
+    CHECK(rig.solo.processor.keyboardTranspose() == 0);
+    rig.solo.keyDown(48, 3);
+    rig.run(8.0);
+    CHECK(rig.solo.processor.keyboardTranspose() == 3);
+    CHECK(rig.pitches(4.0, 8.0) == std::vector<int>{44, 44, 44, 44});
+}
+
+TEST_CASE("transpose: the reference note can be set", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    rig.setSettings([](auto& s) { s.referenceNote = 60; });
+    rig.solo.keyDown(62); // +2 from C4
+    rig.run(4.0);
+    CHECK(rig.solo.processor.keyboardTranspose() == 2);
+    CHECK(rig.pitches(1.0, 4.0) == std::vector<int>{43, 43, 43});
+}
+
+TEST_CASE("transpose: the diatonic mode moves by degrees and keeps the key", "[group-wiring][transpose]") {
+    TransposeRig rig(40); // E in A minor
+    rig.setSettings([](auto& s) { s.mode = mm::core::TransposeMode::Diatonic; });
+    rig.solo.keyDown(48); // A2 -> C3: two degrees up
+    rig.run(4.0);
+    CHECK(rig.solo.processor.keyboardTranspose() == 2);
+    CHECK(rig.pitches(1.0, 4.0) == std::vector<int>{43, 43, 43}); // E -> G
+}
+
+TEST_CASE("transpose: an offline render ignores the keyboard, a voice does not take part", "[group-wiring][transpose]") {
+    {
+        TransposeRig rig;
+        rig.solo.keyDown(48);
+        rig.run(4.0);
+        REQUIRE(rig.solo.processor.keyboardTranspose() == 3);
+        rig.solo.processor.setNonRealtime(true);
+        rig.solo.keyDown(50);
+        rig.run(8.0);
+        CHECK(rig.solo.processor.keyboardTranspose() == 0); // nothing of the keyboard stays in a bounce
+        CHECK(rig.pitches(4.0, 8.0) == std::vector<int>{41, 41, 41, 41});
+        rig.solo.processor.setNonRealtime(false);
+    }
+    {
+        TransposeRig rig;
+        rig.solo.setRole(InstanceRole::Voice);
+        rig.solo.keyDown(48);
+        rig.run(4.0);
+        CHECK(rig.solo.processor.keyboardTranspose() == 0);
+        CHECK(rig.solo.processor.effectiveTranspose() == 0);
+    }
+}
+
+TEST_CASE("transpose: a transposition during sounding notes leaves no hanging note", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    rig.run(0.1); // the first note sounds
+    rig.solo.keyDown(52);
+    rig.solo.keyUp(52);
+    rig.solo.keyDown(46);
+    rig.run(8.0);
+    // every note-on has its note-off, on the pitch that was sent
+    std::map<int, int> balance;
+    for (const auto& note : rig.solo.notes()) {
+        ++balance[note.pitch];
+    }
+    for (const auto& off : rig.solo.noteOffs()) {
+        --balance[off.pitch];
+    }
+    for (const auto& [pitch, count] : balance) {
+        INFO("pitch " << pitch);
+        CHECK(count == 0);
+    }
+}
+
+TEST_CASE("transpose: the hub window shows the live transposition next to the slot", "[group-wiring][transpose][editor]") {
+    TransposeRig rig;
+    rig.solo.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(rig.solo.processor.createEditor());
+    pumpMessages(60);
+    auto* info = child<juce::Label>(*editor, "info");
+    REQUIRE(info != nullptr);
+    CHECK_FALSE(info->getText().contains("Transponiert"));
+    rig.solo.keyDown(48);
+    rig.run(2.0);
+    CHECK(waitFor([&] { return info->getText().contains("Transponiert +3"); }));
+    rig.solo.keyDown(43);
+    rig.run(3.0);
+    CHECK(waitFor([&] { return info->getText().contains("Transponiert -2"); }));
+    rig.solo.keyDown(45);
+    rig.run(4.0);
+    CHECK(waitFor([&] { return !info->getText().contains("Transponiert"); }));
+}
+
+TEST_CASE("transpose: a change that waits for its bar line takes effect when the transport stops", "[group-wiring][transpose]") {
+    TransposeRig rig;
+    rig.setSettings([](auto& s) { s.timing = mm::core::TransposeTiming::NextBar; });
+    rig.run(1.3);
+    rig.solo.keyDown(48);
+    rig.solo.step();
+    CHECK(rig.solo.processor.keyboardTranspose() == 0); // it waits for the bar line at 4
+    rig.solo.setPlaying(false);
+    rig.solo.step();
+    CHECK(rig.solo.processor.keyboardTranspose() == 3); // nothing is waiting for a stopped transport
 }

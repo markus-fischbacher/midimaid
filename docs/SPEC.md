@@ -344,7 +344,7 @@ angelegten Parameter.
 |---|---|---|---|---|---|
 | `slot` | Slot | ganzzahlig 1–16 | 1 | Wechsel quantisiert, beim Start und nach Sprüngen sofort | v1.0 |
 | `mute_1` … `mute_8` | Mute Stimme 1 … 8 | Schalter | aus | sofort, mit Note-Off; aktiv: 1 = Bass, 2 = Melodie | v1.0 |
-| `transpose` | Transponieren | ganzzahlig −12 … +12 | 0 | §3.16 | v1.1 |
+| `transpose` | Transponieren | ganzzahlig −12 … +12 | 0 | §3.16; **aktiv** (D-215): addiert sich zum Tastatur-Offset | v1.1 |
 | `generate` | Generieren | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
 | `variation_1` … `variation_8` | Variation Stimme 1 … 8 | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
 | `variation_all` | Variation alle | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
@@ -455,6 +455,12 @@ Zweck: das laufende Pattern im Live-Set per Keyboard transponieren, wie bei eine
   würde die Harmonie brechen); pro Voice gibt es nur den Oktav-Offset.
 - **Technisch:** Die Note-Off-Tabelle speichert die tatsächlich gesendete Tonhöhe, damit eine
   Transposition während klingender Noten keine hängenden Noten erzeugt (§6.2)
+- **Umsetzung (D-215, Etappe 1: Hub und Solo):** Referenznote automatisch = 36 + Grundton der Tonart des klingenden Patterns (C2 bis B2).
+  Im diatonischen Modus zählt der Abstand der Taste zur Referenz in Stufen der Skala (eine Taste neben der Skala zählt als die
+  Stufe darunter), im chromatischen in Halbtönen, beides auf ±12 begrenzt. Der Zeitpunkt „nächste Note“ gilt ab dem Block, in dem
+  die Taste ankommt; „nächster Schlag“ und „nächster Takt“ sind sample-genau (die Engine schneidet den Block am geplanten PPQ-Punkt).
+  Steht der Transport still, gilt die Taste sofort. Das Tastatur-MIDI wird verbraucht und nicht durchgereicht (bis „MIDI Thru“, Etappe 3).
+  Die Anzeige im Hub: „Transponiert +n“ in der Infozeile.
 
 ### 3.17 [v1.1] MIDI-Eingang
 In v1.0 wertet MidiMaid den MIDI-Eingang nicht aus (er ist aber schon deklariert). Ab v1.1:

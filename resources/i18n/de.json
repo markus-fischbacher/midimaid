@@ -221,6 +221,7 @@
   "group.sandboxHint": " (liegt der Hub in diesem Projekt: der Host startet Plug-ins evtl. in getrennten Prozessen)",
   "button.help": "Hilfe",
   "button.follow": "Folgen",
+  "slot.transposed": "Transponiert {n}",
   "button.evolve": "Evolve",
   "button.evolveKeep": "Behalten",
   "button.evolveFromOriginal": "Vom Original",

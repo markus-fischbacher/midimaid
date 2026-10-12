@@ -120,6 +120,7 @@ private:
     std::vector<std::unique_ptr<VoiceRow>> rows_;
     std::vector<ProcessorBase::VoiceView> shownVoices_;
     ProcessorBase::SlotInfo shownInfo_;
+    int shownTranspose_ = 0; // the live transposition the info line shows
     ProcessorBase::RefineTargets shownTargets_;
     bool refinePending_ = false; // a refinement was started and its text stays until it is done
     juce::Label infoLabel_;

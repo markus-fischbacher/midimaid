@@ -16,13 +16,14 @@ namespace mm::engine {
 struct OwnedPattern {
     std::vector<core::PatternNote> notes;
     uint32_t lengthTicks = 0;
+    core::TransposeInfo transpose; ///< see `PatternView::transpose`
     uint64_t version = 0;
     double gridPpq = 4.0;  ///< quantization grid of a switch
     double stampPpq = 0.0; ///< planned switch point (hub), valid when `hasStamp`
     bool hasStamp = false;
     std::shared_ptr<const void> lifetimeToken; ///< kept alive until the pattern is freed (tests count with it)
 
-    core::PatternView view() const { return {notes.data(), notes.size(), lengthTicks}; }
+    core::PatternView view() const { return {notes.data(), notes.size(), lengthTicks, transpose}; }
 };
 
 /// Number of pattern slots per instance (SPEC 3.10).

@@ -65,6 +65,7 @@ namespace mm::core::text {
     X(kZoomItem, "zoom.item")                                                                                          \
     X(kButtonHelp, "button.help")                                                                                      \
     X(kButtonFollow, "button.follow")                                                                                  \
+    X(kSlotTransposed, "slot.transposed")                                                                              \
     X(kButtonEvolve, "button.evolve")                                                                                  \
     X(kButtonEvolveKeep, "button.evolveKeep")                                                                          \
     X(kButtonEvolveFromOriginal, "button.evolveFromOriginal")                                                          \

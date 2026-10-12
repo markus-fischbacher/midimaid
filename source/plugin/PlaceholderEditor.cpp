@@ -1178,8 +1178,10 @@ void PlaceholderEditor::updateFullView() {
     }
 
     const auto info = processor_.playingSlotInfo();
-    if (!(info == shownInfo_) || infoLabel_.getText().isEmpty()) {
+    const int transposed = processor_.effectiveTranspose();
+    if (!(info == shownInfo_) || infoLabel_.getText().isEmpty() || transposed != shownTranspose_) {
         shownInfo_ = info;
+        shownTranspose_ = transposed;
         if (!info.filled) {
             infoLabel_.setText(tr(keys::kSlotEmpty, {{"slot", std::to_string(info.slot)}}), juce::dontSendNotification);
         } else {
@@ -1191,6 +1193,11 @@ void PlaceholderEditor::updateFullView() {
                                                     {"length", barsText(info.lengthBars).toStdString()},
                                                     {"seed", std::to_string(info.seed)},
                                                     {"winner", std::to_string(info.winnerSeed)}}),
+                               juce::dontSendNotification);
+        }
+        if (transposed != 0) { // the live transposition (SPEC 3.16) is shown next to the slot
+            infoLabel_.setText(infoLabel_.getText() + "  |  " +
+                                   tr(keys::kSlotTransposed, {{"n", (transposed > 0 ? "+" : "") + std::to_string(transposed)}}),
                                juce::dontSendNotification);
         }
     }

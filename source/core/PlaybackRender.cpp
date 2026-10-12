@@ -1,5 +1,6 @@
 #include "core/PlaybackRender.h"
 
+#include "core/Archetype.h"
 #include "core/InstanceSettings.h"
 #include "core/OutputStage.h"
 #include "core/Register.h"
@@ -33,6 +34,28 @@ PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile&
     }
     std::stable_sort(result.notes.begin(), result.notes.end(),
                      [](const PatternNote& a, const PatternNote& b) { return a.startTick < b.startTick; });
+
+    // What the live transposition needs (SPEC 3.16): the key, the range of the voice and the extremes of its notes.
+    TransposeInfo& info = result.transpose;
+    info.root = static_cast<uint8_t>(pattern.context.root % 12);
+    if (const Scale* scale = findScale(pattern.context.scaleId)) {
+        for (const uint8_t interval : scale->intervals) {
+            info.scaleMask = static_cast<uint16_t>(info.scaleMask | (1u << (interval % 12)));
+        }
+    }
+    const ConstraintSettings constraints = constraintSettingsFor(pattern, style);
+    if (voiceIndex < constraints.voices.size()) {
+        info.rangeLow = static_cast<uint8_t>(std::clamp(constraints.voices[voiceIndex].rangeLow, 0, 127));
+        info.rangeHigh = static_cast<uint8_t>(std::clamp(constraints.voices[voiceIndex].rangeHigh, 0, 127));
+    }
+    info.melody = voiceIndex < pattern.voices.size() && pattern.voices[voiceIndex].role == VoiceRole::Melody;
+    if (!result.notes.empty()) {
+        const auto [lowest, highest] = std::minmax_element(
+            result.notes.begin(), result.notes.end(),
+            [](const PatternNote& a, const PatternNote& b) { return a.pitch < b.pitch; });
+        info.lowest = lowest->pitch;
+        info.highest = highest->pitch;
+    }
     return result;
 }
 

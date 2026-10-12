@@ -58,6 +58,34 @@ PatternPlayer::PatternPlayer(PatternView pattern) : pattern_(pattern) {
     slots_[0].view = pattern;
 }
 
+void PatternPlayer::setTransposeMode(core::TransposeMode mode) {
+    if (mode != transposeMode_) {
+        transposeMode_ = mode;
+        refreshTranspose();
+    }
+}
+
+void PatternPlayer::setTranspose(int offset) {
+    const int clamped = core::clampTranspose(offset);
+    pendingTranspose_.has = false;
+    if (clamped != transposeOffset_) {
+        transposeOffset_ = clamped;
+        refreshTranspose();
+    }
+}
+
+void PatternPlayer::setTransposeAt(int offset, double atPpq) {
+    pendingTranspose_ = {true, core::clampTranspose(offset), atPpq};
+}
+
+void PatternPlayer::refreshTranspose() {
+    voiceShift_ = core::voiceOctaveShift(transposeOffset_, transposeMode_, pattern_.transpose);
+}
+
+int PatternPlayer::mapPitch(int pitch) const {
+    return core::transposedPitch(pitch, transposeOffset_, transposeMode_, pattern_.transpose, voiceShift_);
+}
+
 PatternPlayer::~PatternPlayer() {
     // The audio thread no longer runs (host contract): the patterns in use are freed here.
     for (auto& entry : slots_) {
@@ -122,6 +150,7 @@ void PatternPlayer::setPattern(PatternView pattern) {
     retire(detachedOwner_);
     detachedOwner_ = nullptr;
     pattern_ = pattern;
+    refreshTranspose();
     playingSlot_ = selected_;
     timing_.resolved = false;
 }
@@ -161,6 +190,7 @@ void PatternPlayer::commitSelected() {
     retire(detachedOwner_);
     detachedOwner_ = nullptr;
     pattern_ = slots_[static_cast<size_t>(selected_)].view;
+    refreshTranspose();
     playingSlot_ = selected_;
     timing_.resolved = false;
     reportActive();
@@ -209,8 +239,9 @@ void PatternPlayer::storeEdit(size_t slot, OwnedPattern* edit, MidiEventList& ou
                     bool kept = false;
                     for (size_t i = 0; i < next.count && !kept; ++i) {
                         const PatternNote& candidate = next.notes[i];
-                        kept = candidate.channel == channel + 1 && candidate.pitch == pitch &&
-                               candidate.startTick == note.startTick && candidate.lengthTicks == note.lengthTicks;
+                        kept = candidate.channel == channel + 1 && candidate.pitch == note.patternPitch &&
+                               candidate.startTick == note.startTick && candidate.lengthTicks == note.lengthTicks &&
+                               mapPitch(candidate.pitch) == static_cast<int>(pitch);
                     }
                     if (!kept) {
                         out.push({0, static_cast<uint8_t>(channel + 1), static_cast<uint8_t>(pitch), 0, false});
@@ -221,6 +252,7 @@ void PatternPlayer::storeEdit(size_t slot, OwnedPattern* edit, MidiEventList& ou
             }
         }
         pattern_ = next;
+        refreshTranspose();
     }
     // An edit of a pattern that is not playing (a result still waiting for its point, another slot) only replaces
     // the entry.
@@ -292,10 +324,12 @@ void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset
     if (muted_) {
         return;
     }
-    auto& slot = active_[static_cast<size_t>(note.channel - 1)][note.pitch];
+    // The table is indexed by the pitch that is sent, so a transposition while notes sound leaves no hanging note.
+    const auto sent = static_cast<uint8_t>(mapPitch(note.pitch));
+    auto& slot = active_[static_cast<size_t>(note.channel - 1)][sent];
     if (slot.active) {
         // Same pitch still sounding: end it first so the new note-on is never swallowed.
-        out.push({offset, note.channel, note.pitch, 0, false});
+        out.push({offset, note.channel, sent, 0, false});
         slot.active = false;
         --activeCount_;
     }
@@ -303,8 +337,9 @@ void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset
     if (out.size() + activeCount_ + 2 > MidiEventList::kCapacity) {
         return;
     }
-    out.push({offset, note.channel, note.pitch, note.velocity, true});
+    out.push({offset, note.channel, sent, note.velocity, true});
     slot.active = true;
+    slot.patternPitch = note.pitch;
     slot.endPpq = endPpq;
     slot.startedInCall = call_;
     slot.startOffset = offset;
@@ -356,8 +391,8 @@ void PatternPlayer::processSegment(double scanFrom, double origin, double to, in
     }
 }
 
-void PatternPlayer::playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples,
-                              double ppqPerSample, MidiEventList& out) {
+void PatternPlayer::playRangeSwitch(double scanFrom, double origin, double to, int sampleBase, int numSamples,
+                                    double ppqPerSample, MidiEventList& out) {
     if (switchPending() && timing_.resolved && timing_.pointPpq < to && !canRetire()) {
         // The return queue is full: the old pattern cannot be handed back, so the switch waits for the next grid
         // point (SPEC 6.3). Until then the old pattern keeps playing.
@@ -372,6 +407,19 @@ void PatternPlayer::playRange(double scanFrom, double origin, double to, int sam
     } else {
         processSegment(scanFrom, origin, to, sampleBase, numSamples, ppqPerSample, out);
     }
+}
+
+void PatternPlayer::playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples,
+                              double ppqPerSample, MidiEventList& out) {
+    // A planned transposition inside the range cuts it: what comes before is played as it was (SPEC 3.16).
+    if (pendingTranspose_.has && pendingTranspose_.atPpq > scanFrom && pendingTranspose_.atPpq < to) {
+        const double point = pendingTranspose_.atPpq;
+        playRangeSwitch(scanFrom, origin, point, sampleBase, numSamples, ppqPerSample, out);
+        setTranspose(pendingTranspose_.offset);
+        playRangeSwitch(point, origin, to, sampleBase, numSamples, ppqPerSample, out);
+        return;
+    }
+    playRangeSwitch(scanFrom, origin, to, sampleBase, numSamples, ppqPerSample, out);
 }
 
 void PatternPlayer::process(const TransportInfo& transport, int numSamples, double sampleRate, MidiEventList& out) {
@@ -410,6 +458,10 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
     pendingWrapRelease_ = false;
     lastPpqPerSample_ = ppqPerSample;
     lastNumSamples_ = numSamples;
+
+    if (pendingTranspose_.has && (restart || pendingTranspose_.atPpq <= transport.ppq + 1e-9)) {
+        setTranspose(pendingTranspose_.offset); // its point is behind us (or the transport jumped): take it now
+    }
 
     if (switchPending()) {
         if (restart && canRetire()) {

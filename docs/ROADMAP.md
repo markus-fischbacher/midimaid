@@ -233,6 +233,11 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
   - [x] Etappe 2 (D-214): Stufe an die Voices der Gruppe weitergeben (Überlagerung mit PPQ-Stempel über die Registry), Host-Parameter `evolve` und `evolve_keep` aktiviert
 - [ ] Live-Transponieren: Modi, Verhalten, Zeitpunkt, Ziel, Gruppen-Timing, Parameter + Tastatur-Offset (SPEC §3.16, §3.17)
       inkl. Host-Check: Monitoring „In“ auf der Hub-Spur, exklusives Scharfschalten
+  - [x] Etappe 1 (D-215): Kern `core/Transpose`, Engine (Abspielen mit Versatz, geplanter Wechsel sample-genau, Oktavregel,
+        chromatisch und diatonisch), Host-Parameter `transpose` aktiv, Tastatur für Hub/Solo (Halten/Momentan, Zeitpunkt Note/Schlag/Takt,
+        Ziel, Kanal, Referenznote), Anzeige im Hub, Offline-Render ohne Tastatur; Einstellungen vorerst nur im Code
+  - [ ] Etappe 2: Gruppe (Voices folgen der geteilten Transposition mit geplantem Wechsel), Export mit Transposition
+  - [ ] Etappe 3: Einstellungsdialog und Speicherung (Referenznote, Modus, Verhalten, Zeitpunkt, Ziel, Kanal), MIDI Thru
 - [ ] Vorhören bei gestopptem Transport, auch für Voices (SPEC §3.11)
 - [ ] Legato-Einsatz (SPEC §3.4)
 - [ ] Trigger-Parameter Generieren/Variation (SPEC §3.13)
@@ -333,7 +338,7 @@ Euklidische Rhythmen als Feature
 | Laden, Editor öffnen, acht Instanzen: CPU und Verzögerung | v1.0 | | | | H45; Messung `[perf]` |
 | Nicht aktive Parameter (SPEC 3.13) sichtbar, aber ohne Wirkung | v1.0 | | | | H22 |
 | Evolve-Ebene: Behalten, Zurück, Verwerfen; Slot unverändert; Bounce spielt Slot | v1.1 | | | | H61, H62; umgesetzt (D-213, D-214) |
-| Live-Transponieren per Keyboard, auch während Slides | v1.1 | | | | v1.1: noch nicht umgesetzt |
+| Live-Transponieren per Keyboard, auch während Slides | v1.1 | | | | H63; Etappe 1 (Hub/Solo) umgesetzt, Gruppe, Export und Dialog folgen |
 | Vorhören bei Stop, Übergabe an Transport-Start | v1.1 | | | | v1.1: noch nicht umgesetzt |
 | Wahrscheinlichkeiten: gleiche Song-Position klingt gleich, Bounce = Wiedergabe | v1.1 | | | | v1.1: noch nicht umgesetzt |
 | Referenz-Set wechseln: hörbar anderer Charakter | v1.1 | | | | v1.1: noch nicht umgesetzt |
