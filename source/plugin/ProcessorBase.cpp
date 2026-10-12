@@ -1385,6 +1385,7 @@ bool ProcessorBase::renewVoice(size_t voice, std::optional<uint64_t> seed, std::
         isVoice = settings_.role == mm::core::InstanceRole::Voice;
         request.settings.energyPct = settings_.generation.energyPct;
         request.settings.creativityPct = settings_.generation.creativityPct;
+        request.settings.chromaticPct = settings_.generation.chromaticPct.value_or(-1);
     }
     if (isVoice) {
         generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
@@ -2294,6 +2295,9 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         root.setAttribute("genBars", static_cast<int>(settings_.generation.lengthBars));
         root.setAttribute("genEnergy", settings_.generation.energyPct);
         root.setAttribute("genCreativity", settings_.generation.creativityPct);
+        if (settings_.generation.chromaticPct) { // only when chosen: states of the style's share stay as they were
+            root.setAttribute("genChromatic", *settings_.generation.chromaticPct);
+        }
         root.setAttribute("genRoot", settings_.generation.root
                                          ? juce::String(static_cast<int>(*settings_.generation.root))
                                          : juce::String("auto"));
@@ -2358,6 +2362,9 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
          root->getIntAttribute("evolveStrength", mm::core::kDefaultEvolveStrength)});
     settings.generation.energyPct = root->getIntAttribute("genEnergy", defaults.energyPct);
     settings.generation.creativityPct = root->getIntAttribute("genCreativity", defaults.creativityPct);
+    if (root->hasAttribute("genChromatic")) {
+        settings.generation.chromaticPct = root->getIntAttribute("genChromatic", 0);
+    }
     // A state without key and scale comes from before they were settings: it keeps drawing them (D-149).
     settings.generation.root.reset();
     settings.generation.scaleId.reset();

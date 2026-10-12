@@ -157,6 +157,9 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
     pattern.info.styleProfileVersion = style.version;
     pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
     pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
+    pattern.info.chromaticPct = request.settings.chromaticPct < 0
+                                    ? int16_t{-1}
+                                    : static_cast<int16_t>(std::min(request.settings.chromaticPct, 100));
     pattern.info.referenceSetId = request.referenceSetId;
     return pattern;
 }
@@ -225,12 +228,16 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     pattern.info.styleProfileVersion = style.version;
     pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
     pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
+    pattern.info.chromaticPct = request.settings.chromaticPct < 0
+                                    ? int16_t{-1}
+                                    : static_cast<int16_t>(std::min(request.settings.chromaticPct, 100));
     pattern.info.referenceSetId = request.referenceSetId;
     return pattern;
 }
 
-SelectionResult generatePatternAroundLocks(const StyleProfile& style, const GenerationRequest& request,
+SelectionResult generatePatternAroundLocks(const StyleProfile& baseStyle, const GenerationRequest& request,
                                            const Pattern& current) {
+    const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
     const bool anythingToGenerate = std::any_of(current.voices.begin(), current.voices.end(),
                                                 [](const Track& track) { return !isVoiceLocked(track); });
     if (!anythingToGenerate) {
@@ -257,7 +264,8 @@ SelectionResult generatePatternAroundLocks(const StyleProfile& style, const Gene
     return result;
 }
 
-SelectionResult generatePattern(const StyleProfile& style, const GenerationRequest& request) {
+SelectionResult generatePattern(const StyleProfile& baseStyle, const GenerationRequest& request) {
+    const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
     const auto generate = [&](uint64_t seed) { return generateCandidate(style, request, seed); };
     const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
     HardCheck copyCheck;
@@ -277,14 +285,18 @@ SelectionResult generatePattern(const StyleProfile& style, const GenerationReque
     return result;
 }
 
-Pattern replayWinner(const StyleProfile& style, const GenerationRequest& request, uint64_t winnerSeed) {
+Pattern replayWinner(const StyleProfile& baseStyle, const GenerationRequest& request, uint64_t winnerSeed) {
+    const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
     Pattern pattern = generateCandidate(style, request, winnerSeed);
     pattern.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(pattern, style, request.settings), 0, 100));
     return pattern;
 }
 
-bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& style, const GenerationRequest& request,
+bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& baseStyle, const GenerationRequest& request,
                      uint64_t seed) {
+    // the share chosen in the request, else the one the pattern was made with, else the style's (SPEC 3.8)
+    const StyleProfile style =
+        withChromatic(baseStyle, request.settings.chromaticPct >= 0 ? request.settings.chromaticPct : pattern.info.chromaticPct);
     if (voiceIndex >= pattern.voices.size()) {
         return false;
     }
@@ -303,8 +315,10 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& st
     return true;
 }
 
-bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& style, const GenerationRequest& request,
+bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& baseStyle, const GenerationRequest& request,
                       uint64_t seed) {
+    const StyleProfile style =
+        withChromatic(baseStyle, request.settings.chromaticPct >= 0 ? request.settings.chromaticPct : pattern.info.chromaticPct);
     if (phraseIndex >= pattern.phrases.size() || pattern.phrases[phraseIndex].locked) {
         return false;
     }

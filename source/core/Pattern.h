@@ -109,6 +109,7 @@ struct GenerationInfo {
     uint32_t styleProfileVersion = 0;
     uint8_t creativityPct = 40;
     uint8_t energyPct = 50;
+    int16_t chromaticPct = -1; ///< the chromatic share chosen for this pattern (SPEC 3.8); -1: the style's
     std::string prompt;
     uint32_t promptVersion = 0; ///< AI only
     std::string providerId;

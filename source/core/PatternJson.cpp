@@ -109,7 +109,7 @@ json rhythmReferenceToJson(const RhythmReference& r) {
 }
 
 json infoToJson(const GenerationInfo& i) {
-    return json{{"source", i.source},
+    json info{{"source", i.source},
                 {"seed", i.seed},
                 {"winnerSeed", i.winnerSeed},
                 {"styleProfileVersion", i.styleProfileVersion},
@@ -122,6 +122,10 @@ json infoToJson(const GenerationInfo& i) {
                 {"rawResponse", i.rawResponse},
                 {"referenceSetId", i.referenceSetId},
                 {"createdUnixMs", i.createdUnixMs}};
+    if (i.chromaticPct >= 0) { // only when chosen: patterns of the style's share stay as they were
+        info["chromaticPct"] = i.chromaticPct;
+    }
+    return info;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -227,6 +231,9 @@ void readInfo(Reader& r, const json& object, const std::string& path, Generation
     r.uintValue(object, "styleProfileVersion", path, false, info.styleProfileVersion);
     r.uintValue(object, "creativityPct", path, false, info.creativityPct);
     r.uintValue(object, "energyPct", path, false, info.energyPct);
+    uint8_t chromatic = 255; // absent: the style's
+    r.uintValue(object, "chromaticPct", path, false, chromatic);
+    info.chromaticPct = chromatic <= 100 ? static_cast<int16_t>(chromatic) : int16_t{-1};
     r.stringValue(object, "prompt", path, false, info.prompt);
     r.uintValue(object, "promptVersion", path, false, info.promptVersion);
     r.stringValue(object, "providerId", path, false, info.providerId);

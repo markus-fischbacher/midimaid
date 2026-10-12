@@ -250,7 +250,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [ ] Turnaround (STYLES.md §1.12)
 - [ ] Chord-Memory (STYLES.md §1.10)
 - [ ] Groove-Vorlagen-Sammlung (SPEC §3.9)
-- [ ] Chromatik-Regler (SPEC §3.8)
+- [x] Chromatik-Regler (SPEC §3.8, D-219)
 - [ ] Wiederholungsschutz mit Gewinner-Seed (SPEC §4.3)
 
 **Bearbeitung**

@@ -2,6 +2,7 @@
 #include "core/Archetype.h"
 #include "core/Constraints.h"
 #include "core/Groove.h"
+#include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "core/PatternValidation.h"
 #include "core/Progression.h"
@@ -423,4 +424,121 @@ TEST_CASE("a cancel flag that is not set changes nothing", "[generator]") {
         CHECK(a.pattern == b.pattern);
         CHECK(a.seed == b.seed);
     }
+}
+
+// --- the chromatic share (SPEC 3.8) ---------------------------------------------------------------------------------
+
+namespace {
+
+/// How many notes of the voice are not in the scale of the pattern.
+size_t offScale(const Pattern& pattern, size_t voice) {
+    const Scale* scale = findScale(pattern.context.scaleId);
+    REQUIRE(scale != nullptr);
+    size_t count = 0;
+    for (const Note& note : pattern.voices[voice].notes) {
+        const int relative = ((note.pitch - pattern.context.root) % 12 + 12) % 12;
+        const bool inScale = std::find(scale->intervals.begin(), scale->intervals.end(), relative) != scale->intervals.end();
+        count += inScale ? 0 : 1;
+    }
+    return count;
+}
+
+} // namespace
+
+TEST_CASE("the style with a chromatic share of its own", "[generator][chromatic]") {
+    const StyleProfile style = loadShipped("peak_time");
+    CHECK(style.chromaticDefaultPercent == 10);
+    CHECK(withChromatic(style, -1).chromaticDefaultPercent == 10); // none: the style's
+    CHECK(withChromatic(style, 0).chromaticDefaultPercent == 0);
+    CHECK(withChromatic(style, 55).chromaticDefaultPercent == 55);
+    CHECK(withChromatic(style, 500).chromaticDefaultPercent == 100);
+    CHECK(withChromatic(style, 55).id == style.id); // nothing else changes
+}
+
+TEST_CASE("the less chromatic share the fewer notes off the scale, 0 % the fewest", "[generator][chromatic][series]") {
+    size_t none = 0;
+    size_t styleShare = 0;
+    size_t most = 0;
+    for (const std::string& name : kStyles) {
+        const StyleProfile style = loadShipped(name);
+        for (uint64_t seed = 1; seed <= 12; ++seed) {
+            for (const int percent : {0, -1, 100}) {
+                GenerationRequest request = requestFor(4, seed);
+                request.settings.chromaticPct = percent;
+                const auto result = generatePattern(style, request);
+                REQUIRE(result.success);
+                size_t count = 0;
+                for (size_t v = 0; v < result.pattern.voices.size(); ++v) {
+                    count += offScale(result.pattern, v);
+                }
+                (percent == 0 ? none : percent < 0 ? styleShare : most) += count;
+                CHECK(result.pattern.info.chromaticPct == (percent < 0 ? -1 : percent)); // the pattern remembers it
+            }
+        }
+    }
+    // 0 % keeps the notes that belong to the chords (a cluster or a colour tone is no chromatic note of the line, measured
+    // 40 in these series), the style's share adds some (64), 100 % many (259)
+    CHECK(none < styleShare);
+    CHECK(styleShare < most);
+    CHECK(most > 3 * none);
+}
+
+TEST_CASE("the constraint layer and the quality criteria work with the share of the pattern", "[generator][chromatic]") {
+    const StyleProfile style = loadShipped("melodic_techno"); // 0 % by default
+    GenerationRequest request = requestFor(2, 5);
+    const auto plain = generatePattern(style, request);
+    REQUIRE(plain.success);
+    CHECK(constraintSettingsFor(plain.pattern, style).chromaticPercent == style.chromaticDefaultPercent);
+    request.settings.chromaticPct = 60;
+    const auto chosen = generatePattern(style, request);
+    REQUIRE(chosen.success);
+    CHECK(constraintSettingsFor(chosen.pattern, style).chromaticPercent == 60); // not the style's: a variation or an edit keeps it
+    CHECK(qualityContextFor(chosen.pattern, style, request.settings).chromaticPercent == 60);
+    CHECK(qualityContextFor(plain.pattern, style, request.settings).chromaticPercent == style.chromaticDefaultPercent);
+}
+
+TEST_CASE("a voice generated anew keeps the share the pattern was made with, a request can change it", "[generator][chromatic]") {
+    const StyleProfile style = loadShipped("melodic_techno");
+    GenerationRequest request = requestFor(4, 9);
+    request.settings.chromaticPct = 100;
+    auto made = generatePattern(style, request);
+    REQUIRE(made.success);
+    size_t withShare = 0;
+    size_t withoutShare = 0;
+    for (uint64_t seed = 1; seed <= 30; ++seed) {
+        Pattern a = made.pattern;
+        Pattern b = made.pattern;
+        GenerationRequest keep = requestFor(4, 9); // no share in the request: the pattern's counts
+        GenerationRequest style0 = requestFor(4, 9);
+        style0.settings.chromaticPct = 0;
+        REQUIRE(regenerateVoice(a, 1, style, keep, seed));
+        REQUIRE(regenerateVoice(b, 1, style, style0, seed));
+        withShare += offScale(a, 1);
+        withoutShare += offScale(b, 1);
+    }
+    CHECK(withShare > 2 * withoutShare);
+}
+
+TEST_CASE("a generation around locked voices keeps the chromatic share and remembers it", "[generator][chromatic]") {
+    const StyleProfile style = loadShipped("melodic_techno");
+    GenerationRequest request = requestFor(4, 3);
+    const auto first = generatePattern(style, request);
+    REQUIRE(first.success);
+    Pattern locked = first.pattern;
+    REQUIRE(setVoiceLocked(locked, 0, true) == 1);
+    size_t plainOff = 0;
+    size_t chosenOff = 0;
+    for (uint64_t seed = 1; seed <= 12; ++seed) {
+        GenerationRequest plain = requestFor(4, seed);
+        GenerationRequest chosen = requestFor(4, seed);
+        chosen.settings.chromaticPct = 100;
+        const auto a = generatePatternAroundLocks(style, plain, locked);
+        const auto b = generatePatternAroundLocks(style, chosen, locked);
+        REQUIRE((a.success && b.success));
+        CHECK(a.pattern.info.chromaticPct == -1);
+        CHECK(b.pattern.info.chromaticPct == 100); // the pattern remembers it
+        plainOff += offScale(a.pattern, 1);
+        chosenOff += offScale(b.pattern, 1);
+    }
+    CHECK(chosenOff > plainOff);
 }

@@ -48,6 +48,8 @@
   "button.muteByHub": "Stumm (durch Hub)",
   "label.energy": "Energie",
   "label.creativity": "Kreativität",
+  "label.chromatic": "Chromatik",
+  "label.chromaticStyle": "Stil",
   "label.strength": "Stärke",
   "label.history": "Verlauf {n}/{m}",
   "label.historyNone": "Verlauf –",

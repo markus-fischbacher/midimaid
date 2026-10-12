@@ -273,7 +273,7 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
 ### 3.8 Chromatik-Anteil
 - Stilabhängige Werte: Melodic 0 %, Peak Time 10 %, Hard/Industrial 35 %. Sie bestimmen, wie viele Töne
   die Skala verlassen dürfen und wie stark.
-- [v1.1] Als Regler 0–100 % in der Experten-Ebene einstellbar
+- [v1.1] Als Regler 0–100 % in der Experten-Ebene einstellbar (**umgesetzt**, D-219: „Chromatik“, Stellung „Stil“ = der Wert des Profils; das Pattern merkt sich den Wert, damit Variation, Bearbeitung und neue Stimmen dabei bleiben)
 - Bei 0 % rastet die Constraint-Schicht alles auf die Skala ein. Darüber werden skalenfremde Töne
   gezielt gesetzt (Durchgangs- und Wechseltöne, b2/b5-Spannungen, Cluster bei hohen Werten), nicht zufällig.
 - Wird an die KI als Vorgabe übergeben und von der Constraint-Schicht unabhängig davon durchgesetzt.

@@ -44,6 +44,8 @@ namespace mm::core::text {
     X(kButtonMuteByHub, "button.muteByHub")                                                                            \
     X(kLabelEnergy, "label.energy")                                                                                    \
     X(kLabelCreativity, "label.creativity")                                                                            \
+    X(kLabelChromatic, "label.chromatic")                                                                              \
+    X(kChromaticStyle, "label.chromaticStyle")                                                                         \
     X(kButtonExpert, "button.expert")                                                                                  \
     X(kButtonRenew, "button.renew")                                                                                    \
     X(kButtonVary, "button.vary")                                                                                      \

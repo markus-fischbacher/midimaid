@@ -26,6 +26,7 @@ mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atom
     request.seed = job.seed;
     request.settings.energyPct = job.settings.energyPct;
     request.settings.creativityPct = job.settings.creativityPct;
+    request.settings.chromaticPct = job.settings.chromaticPct.value_or(-1);
     request.root = job.settings.root;
     request.scaleId = job.settings.scaleId;
     request.referenceSet = job.references.entries;
@@ -115,6 +116,9 @@ void GenerationService::request(const GenerationJob& job) {
         std::optional<mm::core::Pattern> pattern;
         GenerationReport report;
         if (style != nullptr && !cancel.cancelled()) {
+            // the AI is told the chromatic share the musician chose (SPEC 3.8), the generator works with it itself
+            const mm::core::StyleProfile effective =
+                mm::core::withChromatic(*style, job.settings.chromaticPct.value_or(-1));
             if (job.provider != nullptr && job.templates != nullptr) {
                 report.usedAi = true;
                 const auto createdUnixMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -124,7 +128,7 @@ void GenerationService::request(const GenerationJob& job) {
                 mm::ai::AiGenerateResult result;
                 if (job.refine) {
                     mm::ai::AiRefineInput input;
-                    input.style = style;
+                    input.style = &effective;
                     input.templates = job.templates;
                     input.pattern = job.refine->pattern;
                     input.instruction = job.refine->instruction;
@@ -140,7 +144,7 @@ void GenerationService::request(const GenerationJob& job) {
                     result = mm::ai::refineWithAi(*job.provider, input, cancel);
                 } else {
                     mm::ai::AiGenerateInput input;
-                    input.style = style;
+                    input.style = &effective;
                     input.templates = job.templates;
                     input.prompt.lengthBars = job.settings.lengthBars;
                     input.prompt.root = job.settings.root;
@@ -172,6 +176,9 @@ void GenerationService::request(const GenerationJob& job) {
                 report.score = result.score;
                 if (result.outcome == mm::ai::AiOutcome::Success && !cancel.cancelled()) {
                     pattern = std::move(result.pattern);
+                    if (job.settings.chromaticPct) { // the pattern remembers it: variations keep to the same share
+                        pattern->info.chromaticPct = static_cast<int16_t>(*job.settings.chromaticPct);
+                    }
                 }
             } else if (!job.refine) { // a refinement has no offline form: without a provider nothing comes out
                 const auto request = requestFor(job, cancel.flag());

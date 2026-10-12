@@ -379,6 +379,23 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         next.generation.creativityPct = static_cast<int>(creativitySlider_.getValue());
         processor_.setInstanceSettings(next);
     };
+    // The chromatic share (SPEC 3.8, expert level): -1 is "the style's", 0 to 100 the share of notes that may leave the scale.
+    chromaticSlider_.setComponentID("chromatic");
+    chromaticSlider_.setRange(-1.0, 100.0, 1.0);
+    chromaticSlider_.setValue(-1.0, juce::dontSendNotification);
+    chromaticSlider_.textFromValueFunction = [](double value) {
+        return value < 0.0 ? tr(keys::kChromaticStyle) : juce::String(static_cast<int>(value)) + " %";
+    };
+    chromaticSlider_.onValueChange = [this] {
+        auto next = processor_.instanceSettings();
+        const int value = static_cast<int>(chromaticSlider_.getValue());
+        next.generation.chromaticPct = value < 0 ? std::nullopt : std::optional<int>(value);
+        processor_.setInstanceSettings(next);
+    };
+    addChildComponent(chromaticSlider_);
+    chromaticLabel_.setText(tr(keys::kLabelChromatic), juce::dontSendNotification);
+    chromaticLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    addChildComponent(chromaticLabel_);
     energyLabel_.setText(tr(keys::kLabelEnergy), juce::dontSendNotification);
     creativityLabel_.setText(tr(keys::kLabelCreativity), juce::dontSendNotification);
     for (auto* label : {&energyLabel_, &creativityLabel_}) {
@@ -945,6 +962,9 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     if (static_cast<int>(creativitySlider_.getValue()) != generation.creativityPct) {
         creativitySlider_.setValue(generation.creativityPct, juce::dontSendNotification);
     }
+    if (static_cast<int>(chromaticSlider_.getValue()) != generation.chromaticPct.value_or(-1)) {
+        chromaticSlider_.setValue(generation.chromaticPct.value_or(-1), juce::dontSendNotification);
+    }
     const bool outputNone = settings.outputMode == mm::core::OutputMode::None;
     if (outputBox_.getSelectedId() != (outputNone ? 2 : 1)) {
         outputBox_.setSelectedId(outputNone ? 2 : 1, juce::dontSendNotification);
@@ -985,7 +1005,8 @@ void PlaceholderEditor::applyLevel() {
     const bool show = expert_ && !voiceLayout_;
     for (auto* component :
          std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
-                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &evolveEveryBox_,
+                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_,
+                                                 &evolveEveryBox_,
                                                  &evolveOriginalButton_, &evolveStrengthLabel_,
                                                  &evolveStrengthSlider_}) {
         component->setVisible(show);
@@ -1346,13 +1367,20 @@ void PlaceholderEditor::resized() {
     refineEditor_.setBounds(refineRow);
 
     auto sliders = area.removeFromTop(40).reduced(16, 6);
-    const int half = sliders.getWidth() / 2;
-    auto left = sliders.removeFromLeft(half - 8);
+    const int columns = expert_ ? 3 : 2; // the expert level adds the chromatic share (SPEC 3.8)
+    const int column = (sliders.getWidth() - (columns - 1) * 16) / columns;
+    auto left = sliders.removeFromLeft(column);
     energyLabel_.setBounds(left.removeFromLeft(80));
     energySlider_.setBounds(left);
     sliders.removeFromLeft(16);
-    creativityLabel_.setBounds(sliders.removeFromLeft(80));
-    creativitySlider_.setBounds(sliders);
+    auto middle = sliders.removeFromLeft(column);
+    creativityLabel_.setBounds(middle.removeFromLeft(80));
+    creativitySlider_.setBounds(middle);
+    if (expert_) {
+        sliders.removeFromLeft(16);
+        chromaticLabel_.setBounds(sliders.removeFromLeft(80));
+        chromaticSlider_.setBounds(sliders);
+    }
 
     auto strip = area.removeFromTop(40).reduced(16, 4);
     const int buttonWidth = strip.getWidth() / static_cast<int>(slotButtons_.size());
