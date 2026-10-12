@@ -30,7 +30,11 @@ namespace {
 
 constexpr int kReturnCollectIntervalMs = 250;
 constexpr unsigned kTransposeThruBit = 20; ///< `midiThru` in the packed transposition settings (see `packTranspose`)
-constexpr int kEvolveTickMs = 40; ///< how often the Evolve layer looks at the playhead
+constexpr int kEvolveTickMs = 40;
+/// The host parameters the message thread acts on: Evolve (D-214) and the triggers of SPEC 3.13 (D-218).
+constexpr const char* kTriggerParameterIds[] = {"evolve",      "evolve_keep", "generate",    "variation_1",
+                                                "variation_2", "variation_3", "variation_4", "variation_5",
+                                                "variation_6", "variation_7", "variation_8", "variation_all"}; ///< how often the Evolve layer looks at the playhead
 /// Upper bound of the bytes one block can write: the engine's event capacity, with room for the event header.
 constexpr size_t kMidiBufferBytes = mm::engine::MidiEventList::kCapacity * 12;
 
@@ -146,8 +150,9 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     }
     player_.attach(&handover_);
     evolveListener_ = std::make_unique<EvolveParameterListener>(*this, libraryAlive_);
-    parameters_.addParameterListener("evolve", evolveListener_.get());
-    parameters_.addParameterListener("evolve_keep", evolveListener_.get());
+    for (const auto id : kTriggerParameterIds) {
+        parameters_.addParameterListener(id, evolveListener_.get());
+    }
     groupLink_ = GroupLink::create(*this);
     groupLink_->setRole(settings_.role, settings_.outputVoice);
     applyStartKey();
@@ -186,8 +191,9 @@ void ProcessorBase::applyStartKey() {
 
 ProcessorBase::~ProcessorBase() {
     transposeSyncTimer_.reset();
-    parameters_.removeParameterListener("evolve", evolveListener_.get());
-    parameters_.removeParameterListener("evolve_keep", evolveListener_.get());
+    for (const auto id : kTriggerParameterIds) {
+        parameters_.removeParameterListener(id, evolveListener_.get());
+    }
     evolveTimer_.reset();
     *libraryAlive_ = false;
     groupLink_->detach();                              // first: from here on no registry callback reaches this instance
@@ -252,14 +258,56 @@ void ProcessorBase::onEvolveParameter(const juce::String& id, bool on) {
         if (!isNonRealtime()) { // an offline render ignores it (SPEC 6.6)
             setEvolve(on);
         }
-    } else if (id == "evolve_keep" && on) {
+    } else if (!on) {
+        return; // the fall of a trigger back to 0 is no edge
+    } else if (id == "evolve_keep") {
         if (!isNonRealtime()) {
             evolveKeep();
         }
-        if (auto* parameter = parameters_.getParameter("evolve_keep")) { // a trigger: back to 0 for the next edge
-            parameter->setValueNotifyingHost(0.0f);
+        resetTrigger(id);
+    } else if (id == "generate") {
+        if (!isNonRealtime()) { // an AI request is neither fast nor reproducible: not in a bounce (SPEC 3.13)
+            generate();
         }
+        resetTrigger(id);
+    } else if (id == "variation_all") {
+        if (!isNonRealtime()) {
+            varyFromTrigger(0);
+        }
+        resetTrigger(id);
+    } else if (id.startsWith("variation_")) {
+        if (!isNonRealtime()) {
+            varyFromTrigger(id.fromLastOccurrenceOf("_", false, false).getIntValue());
+        }
+        resetTrigger(id);
     }
+}
+
+void ProcessorBase::resetTrigger(const juce::String& id) {
+    if (auto* parameter = parameters_.getParameter(id)) { // a trigger: back to 0 for the next edge
+        parameter->setValueNotifyingHost(0.0f);
+    }
+}
+
+void ProcessorBase::varyFromTrigger(int voice) {
+    mm::core::InstanceRole role;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        role = settings_.role;
+    }
+    if (role == mm::core::InstanceRole::Voice) {
+        // A voice's triggers go to the hub (SPEC 3.13); without a hub there is nothing to vary.
+        if (groupLink_->status() == mm::core::GroupStatus::VoiceConnected) {
+            generationStatus_ = GenerationStatus::Forwarded;
+            groupLink_->forwardVary(voice);
+        } else {
+            generationStatus_ = GenerationStatus::UseHub;
+        }
+        return;
+    }
+    auto& store = globalSettings();
+    const int strength = store.enabled() ? store.get().variationStrength : mm::core::GlobalSettings{}.variationStrength;
+    vary(strength, voice > 0 ? std::optional<size_t>(static_cast<size_t>(voice - 1)) : std::nullopt);
 }
 
 void ProcessorBase::setEvolveParameter(bool on) {

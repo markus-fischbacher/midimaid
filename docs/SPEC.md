@@ -345,9 +345,9 @@ angelegten Parameter.
 | `slot` | Slot | ganzzahlig 1–16 | 1 | Wechsel quantisiert, beim Start und nach Sprüngen sofort | v1.0 |
 | `mute_1` … `mute_8` | Mute Stimme 1 … 8 | Schalter | aus | sofort, mit Note-Off; aktiv: 1 = Bass, 2 = Melodie | v1.0 |
 | `transpose` | Transponieren | ganzzahlig −12 … +12 | 0 | §3.16; **aktiv** (D-215): addiert sich zum Tastatur-Offset | v1.1 |
-| `generate` | Generieren | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
-| `variation_1` … `variation_8` | Variation Stimme 1 … 8 | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
-| `variation_all` | Variation alle | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus | v1.1 |
+| `generate` | Generieren | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus; **aktiv** (D-218), springt nach der Flanke von selbst auf 0 zurück | v1.1 |
+| `variation_1` … `variation_8` | Variation Stimme 1 … 8 | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus; **aktiv** (D-218), Stärke der Einstellungen, Voices reichen sie an den Hub weiter | v1.1 |
+| `variation_all` | Variation alle | Trigger (Schalter) | aus | Flanke 0 → 1 löst aus; **aktiv** (D-218) | v1.1 |
 | `evolve` | Auto-Evolve | Schalter | aus | §6.7; **aktiv** (D-214): schaltet die Evolve-Ebene des Hubs; Voices und Offline-Render ignorieren ihn | v1.1 |
 | `evolve_keep` | Evolve behalten | Trigger (Schalter) | aus | übernimmt die klingende Stufe in den Slot; **aktiv** (D-214), springt nach der Flanke von selbst auf 0 zurück | v1.1 |
 | `creativity` | Kreativität | 0–100 % | 40 % | wirkt erst bei der nächsten Generierung (§7.6) | Backlog |

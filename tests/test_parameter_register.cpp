@@ -64,24 +64,25 @@ TEST_CASE("ranges, defaults and types follow SPEC 3.13", "[parameters]") {
     }
 }
 
-TEST_CASE("only slot, the eight mutes, the two Evolve parameters and transpose are active", "[parameters]") {
-    // v1.0 activated slot and mute_1..8; the Evolve parameters followed with the Evolve layer (D-214), transpose with
-    // the live transposition (D-215).
+TEST_CASE("slot, mutes, Evolve, transpose and the triggers are active", "[parameters]") {
+    // v1.0 activated slot and mute_1..8; Evolve followed with the Evolve layer (D-214), transpose with the live
+    // transposition (D-215), generate and the variations with the trigger parameters (D-218).
     size_t active = 0;
     for (const ParamSpec& spec : parameterRegister()) {
         const std::string id(spec.id);
         const bool expectedActive = id == "slot" || id.rfind("mute_", 0) == 0 || id == "evolve" || id == "evolve_keep" ||
-                                    id == "transpose";
+                                    id == "transpose" || id == "generate" || id.rfind("variation_", 0) == 0;
         CHECK(spec.isActive() == expectedActive);
         active += spec.isActive() ? 1 : 0;
     }
-    CHECK(active == 12);
+    CHECK(active == 22);
     CHECK(findParameter("transpose")->active == ParamActive::V1_1Live);
-    CHECK(findParameter("generate")->active == ParamActive::V1_1);
-    CHECK(findParameter("evolve")->active == ParamActive::V1_1Live);
-    CHECK(findParameter("evolve_keep")->active == ParamActive::V1_1Live);
+    CHECK(findParameter("generate")->active == ParamActive::V1_1Live);
+    CHECK(findParameter("variation_all")->active == ParamActive::V1_1Live);
+    CHECK(findParameter("variation_8")->active == ParamActive::V1_1Live);
     CHECK(findParameter("slot")->active == ParamActive::V1_0);
     CHECK(findParameter("creativity")->active == ParamActive::Backlog);
+    CHECK(findParameter("energy")->active == ParamActive::Backlog);
 }
 
 TEST_CASE("lookup and the mute IDs", "[parameters]") {

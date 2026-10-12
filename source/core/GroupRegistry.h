@@ -59,6 +59,12 @@ public:
         (void)action;
         return true;
     }
+    /// Hub: a voice asked for a variation of voice `voice` (1 to `kMaxVoices`; 0 = all voices), SPEC 3.13: the triggers
+    /// of a voice go to the hub. The default counts as done.
+    virtual bool onVary(int voice) {
+        (void)voice;
+        return true;
+    }
     /// The slot set of this member as it is now (the registry asks when a member becomes hub).
     virtual SlotSnapshot currentSlots() = 0;
 };
@@ -91,6 +97,9 @@ public:
     bool publishOverlay(MemberId id, OverlayPtr overlay, std::optional<double> stampPpq = std::nullopt);
     /// A voice forwards `action` to the hub. False when `id` is not a voice or there is no hub.
     bool forward(MemberId id, GroupAction action);
+    /// A voice forwards a variation trigger (voice 1 to `kMaxVoices`, 0 = all) to the hub. False when `id` is not a voice
+    /// or there is no hub.
+    bool forwardVary(MemberId id, int voice);
     /// A member with status `HubOffered` becomes the hub. False when it is not offered the role.
     bool acceptOffer(MemberId id);
 

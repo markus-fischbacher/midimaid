@@ -150,6 +150,19 @@ bool GroupRegistry::forward(MemberId id, GroupAction action) {
     return member->onAction(action);
 }
 
+bool GroupRegistry::forwardVary(MemberId id, int voice) {
+    const Entry* from = find(id);
+    if (from == nullptr || from->role != InstanceRole::Voice || hub_ == 0) {
+        return false;
+    }
+    const Entry* hub = find(hub_);
+    if (hub == nullptr) {
+        return false;
+    }
+    const auto member = hub->member; // the callback may change the member list
+    return member->onVary(std::clamp(voice, 0, kMaxVoices));
+}
+
 bool GroupRegistry::acceptOffer(MemberId id) {
     const Entry* entry = find(id);
     if (entry == nullptr || statusOf(*entry) != GroupStatus::HubOffered) {
