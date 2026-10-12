@@ -610,6 +610,9 @@ void PlaceholderEditor::updateStatus() {
     followBox_.setVisible(isVoice);
     openHubButton_.setEnabled(processor_.groupStatus() == GroupStatus::VoiceConnected);
     outputBox_.setVisible(role == mm::core::InstanceRole::Hub);
+    if (role != mm::core::InstanceRole::Solo && processor_.otherFormatInProcess()) {
+        group += tr(keys::kGroupMixedFormats);
+    }
     if (isVoice && processor_.lateSwitches() > 0) {
         group += tr(keys::kStatusLate, {{"n", std::to_string(processor_.lateSwitches())}});
     }

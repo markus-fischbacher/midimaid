@@ -1094,7 +1094,7 @@ Kanalkonflikte (D-63).
 - **Mute** wirkt doppelt: Mute im Hub für Stimme X oder Mute in der Voice selbst schaltet die Stimme stumm.
 - Wird der Hub gelöscht, bietet die älteste Voice an, Hub zu werden (keine stille Übernahme)
 - **Gleiches Format:** Globale Daten werden zwischen AU- und VST3-Instanzen nicht zuverlässig geteilt.
-  Setup-Hilfe und Vorlagen nutzen deshalb ein Format; [v1.1] die UI warnt bei gemischten Formaten.
+  Setup-Hilfe und Vorlagen nutzen deshalb ein Format; [v1.1] die UI warnt bei gemischten Formaten (umgesetzt, D-222).
   **Gleiche Variante (D-141):** Jede Plugin-Variante ist ein eigenes Binary mit eigener Registry (Instrument und MIDI-FX,
   jeweils je Format). Eine Gruppe besteht daher nur aus Instanzen desselben Bundles; eine Kopplung über Varianten
   hinweg gibt es in v1.0 nicht. Die Setup-Hilfe nennt es (Logic: Hub und Voices alle als MIDI-FX; Live: alle als VST3).

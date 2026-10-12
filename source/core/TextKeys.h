@@ -270,6 +270,7 @@ namespace mm::core::text {
     X(kGroupMissing, "group.missing")                                                                                  \
     X(kGroupOffered, "group.offered")                                                                                  \
     X(kGroupRefused, "group.refused")                                                                                  \
+    X(kGroupMixedFormats, "group.mixedFormats")                                                                        \
     X(kGroupSandboxHint, "group.sandboxHint")
 
 #define MM_TEXT_KEY_CONSTANT(name, key) inline constexpr std::string_view name = key;

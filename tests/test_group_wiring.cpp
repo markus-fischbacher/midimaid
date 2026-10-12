@@ -877,6 +877,33 @@ template <typename T> T* child(juce::Component& parent, const juce::String& id) 
 
 } // namespace
 
+TEST_CASE("a group line warns when AU and VST3 instances share the process", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.processor.setFormatTag("au");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    REQUIRE(editor != nullptr);
+    const auto statusText = [&] { return child<juce::Label>(*editor, "status")->getText(); };
+    const auto warns = [&] { return statusText().contains("AU- und VST3"); };
+    CHECK_FALSE(hub.processor.otherFormatInProcess());
+    Instance other("Other");
+    other.processor.setFormatTag("au"); // the same format: no warning
+    CHECK_FALSE(hub.processor.otherFormatInProcess());
+    CHECK_FALSE(warns());
+    other.processor.setFormatTag("vst3");
+    CHECK(hub.processor.otherFormatInProcess());
+    CHECK(waitFor(warns));
+    other.setRole(InstanceRole::Solo);
+    hub.setRole(InstanceRole::Solo); // a solo instance is in no group: no warning
+    CHECK(waitFor([&] { return !warns(); }));
+    hub.setRole(InstanceRole::Hub);
+    CHECK(waitFor(warns));
+    other.processor.setFormatTag(""); // the instance leaves the count
+    CHECK_FALSE(hub.processor.otherFormatInProcess());
+    CHECK(waitFor([&] { return !warns(); }));
+}
+
 TEST_CASE("the editor of a voice is the compact voice UI, other roles get the hub UI", "[group-wiring][editor]") {
     Quiet quiet;
     Instance voice("Voice");

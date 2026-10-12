@@ -270,7 +270,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [ ] Englische Sprachdatei, Sprachumschaltung
 - [x] Notennamen-Konvention wählbar (D-221)
 - [ ] Token- und Kostenanzeige, `pricing.json`
-- [ ] Warnung bei gemischten Formaten in einer Gruppe
+- [x] Warnung bei gemischten Formaten in einer Gruppe (D-222)
 
 ## Formate nach v1.0 (Architektur vorbereitet, D-81)
 - [ ] CLAP (Erweiterung oder JUCE 9 nativ), ggf. Note-Effekt-Variante für Bitwig/Reaper
