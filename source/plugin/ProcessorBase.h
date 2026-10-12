@@ -200,6 +200,9 @@ public:
     /// `setTransposeSettings` is for the message thread, the audio thread reads it at each block.
     void setTransposeSettings(const mm::core::TransposeSettings& settings);
     mm::core::TransposeSettings transposeSettings() const;
+    /// Takes the transposition settings from the settings file of the user (SPEC 8.4) when they changed since the last
+    /// time; the timer calls it, tests call it to not wait. A store without file changes nothing.
+    void syncTransposeSettings();
     /// The transposition this instance applies to its notes now (parameter + keyboard, 0 when the target is another
     /// voice). Any thread.
     int effectiveTranspose() const { return effectiveTranspose_.load(std::memory_order_relaxed); }
@@ -545,6 +548,8 @@ private:
     // Live transposition: the settings packed in one word (message thread writes, audio thread reads), the state of
     // the keyboard (audio thread only) and what it came to (read by the UI).
     std::atomic<uint32_t> transposeConfig_{0};
+    uint64_t transposeRevision_ = 0;                // message thread: the settings file version taken last
+    std::unique_ptr<ParkTimer> transposeSyncTimer_; // message thread
     struct KeyboardTranspose {
         int current = 0;      // keyboard offset in effect
         bool pending = false; // a change that waits for its point (beat, bar, or the group's planned stamp)

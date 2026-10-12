@@ -5411,3 +5411,113 @@ TEST_CASE("transpose in a group: a voice drags out its notes with the transposit
     REQUIRE(waitFor([&] { return melodyExporter.readyFile().existsAsFile() && !pitchesOf(melodyExporter.readyFile()).empty(); }));
     CHECK(pitchesOf(melodyExporter.readyFile()).front() == 63);
 }
+
+// --- transposition settings from the settings file, MIDI Thru (SPEC 8.4, 3.17, D-217) -----------------------------
+
+TEST_CASE("the settings store counts its changes", "[settings][store][transpose]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    const auto start = store.revision();
+    CHECK(start > 0); // the read of the file counts
+    store.update([](mm::core::GlobalSettings& settings) { settings.expert = true; });
+    CHECK(store.revision() == start + 1);
+    store.update([](mm::core::GlobalSettings& settings) { settings.expert = true; }); // nothing changed
+    CHECK(store.revision() == start + 1);
+    store.update([](mm::core::GlobalSettings& settings) { settings.transpose.midiThru = true; });
+    CHECK(store.revision() == start + 2);
+    store.waitForWrites();
+    // the transposition is in the file and a new store reads it
+    mm::plugin::GlobalSettingsStore other(temp.file);
+    REQUIRE(waitFor([&] { return other.ready(); }));
+    CHECK(other.get().transpose.midiThru);
+}
+
+TEST_CASE("an instance takes the transposition settings from the settings file, once per change", "[group-wiring][transpose][settings]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Instance instance("Solo");
+    CHECK(instance.processor.transposeSettings() == mm::core::TransposeSettings{});
+    mm::core::TransposeSettings wanted{mm::core::TransposeMode::Diatonic,   mm::core::TransposeBehavior::Momentary,
+                                       mm::core::TransposeTiming::NextBar, mm::core::TransposeTarget::Bass,
+                                       50,                                 4,
+                                       false,                              true};
+    store.update([&](mm::core::GlobalSettings& settings) { settings.transpose = wanted; });
+    instance.processor.syncTransposeSettings();
+    CHECK(instance.processor.transposeSettings() == wanted);
+    // nothing changed in the file: what is set directly stays
+    auto direct = wanted;
+    direct.channel = 9;
+    instance.processor.setTransposeSettings(direct);
+    instance.processor.syncTransposeSettings();
+    CHECK(instance.processor.transposeSettings() == direct);
+    // the next change in the file wins again
+    store.update([&](mm::core::GlobalSettings& settings) { settings.transpose.channel = 2; });
+    instance.processor.syncTransposeSettings();
+    CHECK(instance.processor.transposeSettings().channel == 2);
+}
+
+TEST_CASE("the timer of an instance brings in a change of the settings file by itself", "[group-wiring][transpose][settings]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Instance instance("Solo");
+    store.update([](mm::core::GlobalSettings& settings) { settings.transpose.timing = mm::core::TransposeTiming::NextBeat; });
+    CHECK(waitFor([&] { return instance.processor.transposeSettings().timing == mm::core::TransposeTiming::NextBeat; }));
+    // an instance that is created later starts with what the file says
+    Instance later("Later");
+    CHECK(later.processor.transposeSettings().timing == mm::core::TransposeTiming::NextBeat);
+}
+
+TEST_CASE("a store without file leaves the settings that were set directly", "[group-wiring][transpose][settings]") {
+    Quiet quiet; // the tests of the other parts run with a store without file (NoUserSettings.h)
+    Instance instance("Solo");
+    mm::core::TransposeSettings direct;
+    direct.target = mm::core::TransposeTarget::Melody;
+    instance.processor.setTransposeSettings(direct);
+    instance.processor.syncTransposeSettings();
+    pumpMessages(300);
+    CHECK(instance.processor.transposeSettings() == direct);
+}
+
+TEST_CASE("MIDI Thru passes the incoming MIDI on, off by default", "[group-wiring][transpose][thru]") {
+    for (const bool thru : {false, true}) {
+        TransposeRig rig;
+        rig.setSettings([&](auto& s) { s.midiThru = thru; });
+        rig.run(1.0);
+        rig.solo.keyDown(100); // a note the pattern never plays
+        rig.solo.step();
+        rig.solo.keyUp(100);
+        rig.solo.step();
+        INFO("thru " << thru);
+        CHECK(rig.solo.played(100) == thru);
+        bool off = false;
+        for (const auto& note : rig.solo.noteOffs()) {
+            off = off || note.pitch == 100;
+        }
+        CHECK(off == thru);
+        // the transposition works either way: the key is 100 - 45 = 55, limited to 12
+        CHECK(rig.solo.processor.keyboardTranspose() == 12);
+    }
+}
+
+TEST_CASE("a transposition setting changed before the file is read wins and the rest of the file stays", "[settings][store][transpose]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    temp.writeFile(R"({"version": 1, "variationStrength": 44, "transpose": {"mode": "diatonic", "channel": 5}})");
+    auto& store = temp.open(false);
+    store.update([](mm::core::GlobalSettings& settings) { settings.transpose.midiThru = true; });
+    store.beginRead();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.waitForWrites();
+    const auto now = store.get();
+    CHECK(now.transpose.midiThru); // the change made first
+    CHECK(now.transpose.mode == mm::core::TransposeMode::Diatonic); // what the file said stays, field by field
+    CHECK(now.transpose.channel == 5);
+    CHECK(now.variationStrength == 44);
+    CHECK(mm::core::parseGlobalSettings(temp.file.loadFileAsString().toStdString()) == now);
+}

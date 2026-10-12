@@ -1,6 +1,7 @@
 #include "core/Transpose.h"
 
 #include <algorithm>
+#include <cstring>
 
 namespace mm::core {
 
@@ -85,6 +86,50 @@ int shifted(int pitch, int offset, TransposeMode mode, const TransposeInfo& info
 
 int clampTranspose(int offset) {
     return std::clamp(offset, -kMaxTranspose, kMaxTranspose);
+}
+
+TransposeSettings sanitize(TransposeSettings settings) {
+    settings.referenceNote = settings.referenceNote < 0 ? -1 : std::min(settings.referenceNote, 127);
+    settings.channel = std::clamp(settings.channel, 0, 16);
+    return settings;
+}
+
+const char* toString(TransposeMode mode) {
+    return mode == TransposeMode::Diatonic ? "diatonic" : "chromatic";
+}
+const char* toString(TransposeBehavior behavior) {
+    return behavior == TransposeBehavior::Momentary ? "momentary" : "hold";
+}
+const char* toString(TransposeTiming timing) {
+    return timing == TransposeTiming::NextBeat ? "beat" : timing == TransposeTiming::NextBar ? "bar" : "note";
+}
+const char* toString(TransposeTarget target) {
+    return target == TransposeTarget::Bass ? "bass" : target == TransposeTarget::Melody ? "melody" : "both";
+}
+TransposeMode parseTransposeMode(const char* text) {
+    return text != nullptr && std::strcmp(text, "diatonic") == 0 ? TransposeMode::Diatonic : TransposeMode::Chromatic;
+}
+TransposeBehavior parseTransposeBehavior(const char* text) {
+    return text != nullptr && std::strcmp(text, "momentary") == 0 ? TransposeBehavior::Momentary
+                                                                   : TransposeBehavior::Hold;
+}
+TransposeTiming parseTransposeTiming(const char* text) {
+    if (text != nullptr && std::strcmp(text, "beat") == 0) {
+        return TransposeTiming::NextBeat;
+    }
+    if (text != nullptr && std::strcmp(text, "bar") == 0) {
+        return TransposeTiming::NextBar;
+    }
+    return TransposeTiming::NextNote;
+}
+TransposeTarget parseTransposeTarget(const char* text) {
+    if (text != nullptr && std::strcmp(text, "bass") == 0) {
+        return TransposeTarget::Bass;
+    }
+    if (text != nullptr && std::strcmp(text, "melody") == 0) {
+        return TransposeTarget::Melody;
+    }
+    return TransposeTarget::Both;
 }
 
 int referenceNoteFor(const TransposeSettings& settings, int rootPitchClass) {

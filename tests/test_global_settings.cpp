@@ -101,3 +101,81 @@ TEST_CASE("the drum mapping line is kept, cleaned and survives writing", "[globa
     CHECK(parseGlobalSettings("{\"version\":1,\"drumMap\":\"60=kick;70=tuba\"}").drumMap == "60=kick");
     CHECK(parseGlobalSettings("{\"version\":1,\"drumMap\":5}").drumMap.empty());
 }
+
+// --- the keyboard transposition (SPEC 3.16, 8.4) ----------------------------------------------------------------
+
+TEST_CASE("the transposition defaults are those of the specification", "[global-settings][transpose]") {
+    const GlobalSettings defaults;
+    CHECK(defaults.transpose == TransposeSettings{});
+    CHECK(defaults.transpose.mode == TransposeMode::Chromatic);
+    CHECK(defaults.transpose.behavior == TransposeBehavior::Hold);
+    CHECK(defaults.transpose.timing == TransposeTiming::NextNote);
+    CHECK(defaults.transpose.target == TransposeTarget::Both);
+    CHECK(defaults.transpose.referenceNote == -1);
+    CHECK(defaults.transpose.channel == 0);
+    CHECK(defaults.transpose.exportTransposed);
+    CHECK_FALSE(defaults.transpose.midiThru); // SPEC 3.17: not passed on unless asked
+}
+
+TEST_CASE("every transposition setting survives writing and reading", "[global-settings][transpose]") {
+    for (const auto mode : {TransposeMode::Chromatic, TransposeMode::Diatonic}) {
+        for (const auto behavior : {TransposeBehavior::Hold, TransposeBehavior::Momentary}) {
+            for (const auto timing : {TransposeTiming::NextNote, TransposeTiming::NextBeat, TransposeTiming::NextBar}) {
+                for (const auto target : {TransposeTarget::Both, TransposeTarget::Bass, TransposeTarget::Melody}) {
+                    GlobalSettings settings;
+                    settings.transpose = {mode, behavior, timing, target, 52, 9, false, true};
+                    CHECK(parseGlobalSettings(toJson(settings)) == settings);
+                }
+            }
+        }
+    }
+    GlobalSettings settings;
+    settings.transpose.referenceNote = 0;
+    settings.transpose.channel = 16;
+    CHECK(parseGlobalSettings(toJson(settings)).transpose.referenceNote == 0);
+    CHECK(parseGlobalSettings(toJson(settings)).transpose.channel == 16);
+}
+
+TEST_CASE("a file without transposition, or with bad transposition fields, gives the defaults field by field",
+          "[global-settings][transpose]") {
+    const TransposeSettings defaults;
+    CHECK(parseGlobalSettings("{\"version\": 1, \"expert\": true}").transpose == defaults);
+    const auto parsed = parseGlobalSettings(
+        "{\"version\": 1, \"transpose\": {\"mode\": \"diatonic\", \"behavior\": 7, \"timing\": \"later\", "
+        "\"target\": \"melody\", \"referenceNote\": \"A\", \"channel\": 99, \"export\": \"yes\", \"midiThru\": true, "
+        "\"unknown\": 1}}");
+    CHECK(parsed.transpose.mode == TransposeMode::Diatonic);
+    CHECK(parsed.transpose.behavior == TransposeBehavior::Hold);       // not a text
+    CHECK(parsed.transpose.timing == TransposeTiming::NextNote);       // an unknown text
+    CHECK(parsed.transpose.target == TransposeTarget::Melody);
+    CHECK(parsed.transpose.referenceNote == -1);                       // not a number
+    CHECK(parsed.transpose.channel == 16);                             // limited
+    CHECK(parsed.transpose.exportTransposed);                          // not a boolean
+    CHECK(parsed.transpose.midiThru);
+    // a transposition that is no object is left alone
+    CHECK(parseGlobalSettings("{\"version\": 1, \"transpose\": 5}").transpose == defaults);
+    CHECK(parseGlobalSettings("{\"version\": 1, \"transpose\": {\"referenceNote\": 500, \"channel\": -4}}")
+              .transpose.referenceNote == 127);
+    CHECK(parseGlobalSettings("{\"version\": 1, \"transpose\": {\"referenceNote\": -90}}").transpose.referenceNote == -1);
+    CHECK(parseGlobalSettings("{\"version\": 1, \"transpose\": {\"channel\": -4}}").transpose.channel == 0);
+}
+
+TEST_CASE("sanitizing keeps the transposition within its limits", "[global-settings][transpose]") {
+    GlobalSettings settings;
+    settings.transpose.referenceNote = 400;
+    settings.transpose.channel = 77;
+    const auto clean = sanitize(settings);
+    CHECK(clean.transpose.referenceNote == 127);
+    CHECK(clean.transpose.channel == 16);
+    settings.transpose.referenceNote = -30;
+    settings.transpose.channel = -1;
+    CHECK(sanitize(settings).transpose.referenceNote == -1);
+    CHECK(sanitize(settings).transpose.channel == 0);
+    // the words of the file
+    CHECK(parseTransposeMode("nonsense") == TransposeMode::Chromatic);
+    CHECK(parseTransposeMode(nullptr) == TransposeMode::Chromatic);
+    CHECK(parseTransposeTiming(toString(TransposeTiming::NextBar)) == TransposeTiming::NextBar);
+    CHECK(parseTransposeTiming(toString(TransposeTiming::NextBeat)) == TransposeTiming::NextBeat);
+    CHECK(parseTransposeTarget(toString(TransposeTarget::Bass)) == TransposeTarget::Bass);
+    CHECK(parseTransposeBehavior(toString(TransposeBehavior::Momentary)) == TransposeBehavior::Momentary);
+}

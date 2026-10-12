@@ -159,12 +159,14 @@ Arrangement um. In einer Gruppe automatisierst du den **Slot im Hub**; eine Stim
 werden, wenn sie ihren Slot selbst automatisieren soll (Bounce, Freeze). Die Wechsel greifen zum nächsten Takt.
 
 **Live-Transponieren** (ab v1.1, Etappe 1): Ein Keyboard am MIDI-Eingang der MidiMaid-Spur transponiert das laufende Pattern. Die **Referenznote**
-ist der Grundton der Tonart in der Oktave ab C2 (bei A-Moll A2): Spielst du sie, bleibt alles; einen Halbton darüber transponiert um +1, bis
+ist der Grundton der Tonart in den MIDI-Noten 36 bis 47 (bei A-Moll Note 45, das ist in Live und Logic A1): Spielst du sie, bleibt alles; einen Halbton darüber transponiert um +1, bis
 höchstens ±12. Die Transposition wirkt ab der nächsten Note, bleibt bis zur nächsten Taste (*Halten*) und wirkt auf die Ausgabe, nicht auf
 die gespeicherten Noten. Verlässt eine Stimme dadurch ihren Tonumfang, geht sie als Ganzes um eine Oktave, damit die Kontur bleibt. Der
 Host-Parameter **Transpose** addiert sich zur Taste. Das Keyboard selbst klingt nicht mit; ein Bounce ignoriert die Tasten und spielt nur den Parameter.
-Zeitpunkt, Modus (chromatisch oder diatonisch nach Skalenstufen), Momentan statt Halten, Ziel (Bass, Melodie, beide), MIDI-Kanal und die
-Referenznote sind schon eingebaut, aber noch nicht im Einstellungsdialog (kommt in Etappe 3). **In einer Gruppe** nimmt der Hub das Keyboard
+Zeitpunkt, Modus (chromatisch oder diatonisch nach Skalenstufen), Momentan statt Halten, Ziel (Bass, Melodie, beide), MIDI-Kanal, Referenznote,
+den Export mit Transposition und **MIDI Thru** (das eingehende MIDI geht zusätzlich an den Ausgang, sonst nicht) stellst du im Dialog
+**Einstellungen** im Abschnitt *Transponieren* ein. Die Werte gelten für alle Instanzen und stehen in der Datei `settings.json`; eine Änderung wirkt
+nach einer Viertelsekunde. **In einer Gruppe** nimmt der Hub das Keyboard
 und plant die Änderung für alle: Hub und Stimmen transponieren zum selben Schlag (mit „nächste Note“ ist das der nächste Schlag, den
 alle noch halten können; „nächster Takt“ gilt auch). Die Stimmen zeigen „Transponiert +n“ in der Statuszeile und folgen dem Hub; eine
 Stimme auf *Slot: eigener* spielt stattdessen ihren eigenen Parameter **Transpose** (für den Bounce einer einzelnen Spur). Eine Notenzeile, die

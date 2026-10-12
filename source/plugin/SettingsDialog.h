@@ -59,6 +59,12 @@ private:
     mm::ai::ModelsConfig models_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 
+    juce::Label transposeLabel_, transposeHint_;
+    juce::ComboBox transposeModeBox_, transposeBehaviorBox_, transposeTimingBox_, transposeTargetBox_,
+        transposeReferenceBox_, transposeChannelBox_;
+    juce::ToggleButton transposeExportToggle_, midiThruToggle_;
+    void changeTranspose(const std::function<void(mm::core::TransposeSettings&)>& change);
+    void updateTranspose();
     juce::Label drumMapLabel_, drumMapHint_;
     juce::TextEditor drumMapEditor_;
     juce::Label providerLabel_, keyLabel_, urlLabel_, modelLabel_, timeoutLabel_, tokensLabel_, levelLabel_,

@@ -15,7 +15,7 @@ enum class TransposeTarget { Both, Bass, Melody };
 constexpr int kMaxTranspose = 12;
 
 /// The settings of the keyboard transposition (SPEC 3.16, 8.4). `referenceNote` < 0 means "the key of the pattern, in
-/// the bass register": MIDI 36 + root (C2 to B2, D-215). `channel` 0 accepts every MIDI channel, 1 to 16 only that one.
+/// the bass register": MIDI 36 + root (notes 36 to 47, D-215). `channel` 0 accepts every MIDI channel, 1 to 16 only that one.
 struct TransposeSettings {
     TransposeMode mode = TransposeMode::Chromatic;
     TransposeBehavior behavior = TransposeBehavior::Hold;
@@ -24,6 +24,7 @@ struct TransposeSettings {
     int referenceNote = -1;
     int channel = 0;
     bool exportTransposed = true; ///< a file dragged out holds the notes as they sound now (SPEC 3.16)
+    bool midiThru = false;        ///< incoming MIDI is also passed on to the output (SPEC 3.17); off by default
     bool operator==(const TransposeSettings&) const = default;
 };
 
@@ -41,6 +42,19 @@ struct TransposeInfo {
 };
 
 int clampTranspose(int offset);
+
+/// Brings every field into its valid range: a reference note of 0 to 127 or -1 (automatic), a channel of 0 to 16.
+TransposeSettings sanitize(TransposeSettings settings);
+
+/// The text of the enums in the settings file, and back; unknown text gives the default.
+const char* toString(TransposeMode mode);
+const char* toString(TransposeBehavior behavior);
+const char* toString(TransposeTiming timing);
+const char* toString(TransposeTarget target);
+TransposeMode parseTransposeMode(const char* text);
+TransposeBehavior parseTransposeBehavior(const char* text);
+TransposeTiming parseTransposeTiming(const char* text);
+TransposeTarget parseTransposeTarget(const char* text);
 
 /// The note a reference of `settings` resolves to: the given one, or 36 + root.
 int referenceNoteFor(const TransposeSettings& settings, int rootPitchClass);

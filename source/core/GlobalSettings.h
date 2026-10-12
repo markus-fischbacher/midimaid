@@ -2,6 +2,7 @@
 
 #include "core/EditGrid.h"
 #include "core/Theory.h"
+#include "core/Transpose.h"
 
 #include <map>
 #include <set>
@@ -47,6 +48,7 @@ struct GlobalSettings {
     EditGrid grid;                              ///< the edit grid of the piano roll
     bool snapChromatic = false;                 ///< pitch snapping: chromatic instead of to the scale
     std::string drumMap; ///< drum rack notes as a line "60=kick, 61=closed_hat" (SPEC 3.14); empty: General MIDI only
+    TransposeSettings transpose; ///< the keyboard transposition (SPEC 3.16, 8.4): reference, mode, timing, target ...
     AiSettings ai;       ///< provider, models, consent, logging
 
     bool operator==(const GlobalSettings&) const = default;

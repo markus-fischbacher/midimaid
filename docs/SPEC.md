@@ -455,11 +455,11 @@ Zweck: das laufende Pattern im Live-Set per Keyboard transponieren, wie bei eine
   würde die Harmonie brechen); pro Voice gibt es nur den Oktav-Offset.
 - **Technisch:** Die Note-Off-Tabelle speichert die tatsächlich gesendete Tonhöhe, damit eine
   Transposition während klingender Noten keine hängenden Noten erzeugt (§6.2)
-- **Umsetzung (D-215, Etappe 1: Hub und Solo):** Referenznote automatisch = 36 + Grundton der Tonart des klingenden Patterns (C2 bis B2).
+- **Umsetzung (D-215, Etappe 1: Hub und Solo):** Referenznote automatisch = 36 + Grundton der Tonart des klingenden Patterns (MIDI 36 bis 47; in Live und Logic mit C3 = 60 ist das C1 bis B1).
   Im diatonischen Modus zählt der Abstand der Taste zur Referenz in Stufen der Skala (eine Taste neben der Skala zählt als die
   Stufe darunter), im chromatischen in Halbtönen, beides auf ±12 begrenzt. Der Zeitpunkt „nächste Note“ gilt ab dem Block, in dem
   die Taste ankommt; „nächster Schlag“ und „nächster Takt“ sind sample-genau (die Engine schneidet den Block am geplanten PPQ-Punkt).
-  Steht der Transport still, gilt die Taste sofort. Das Tastatur-MIDI wird verbraucht und nicht durchgereicht (bis „MIDI Thru“, Etappe 3).
+  Steht der Transport still, gilt die Taste sofort. Das Tastatur-MIDI wird verbraucht und nicht durchgereicht, außer mit der Einstellung „MIDI Thru“ (Etappe 3, §3.17).
   Die Anzeige im Hub: „Transponiert +n“ in der Infozeile.
 - **Gruppe (D-216, Etappe 2):** Der Hub liest das Keyboard und plant die wirksame Transposition (Parameter + Taste) für die Gruppe über den
   Gruppenkanal: ein Stempel (nächster Schlag, bei „nächster Takt“ die Taktgrenze, jeweils mindestens den Vorlauf voraus, wie der Slot-Wechsel
@@ -474,7 +474,7 @@ In v1.0 wertet MidiMaid den MIDI-Eingang nicht aus (er ist aber schon deklariert
 2. sonst wird der Eingang ignoriert
 
 Eingehendes MIDI wird standardmäßig **nicht** an den Ausgang durchgereicht (Option „MIDI Thru“ für
-Sonderfälle).
+Sonderfälle; **umgesetzt**, D-217: dann geht der ganze Eingangspuffer unverändert zusätzlich an den Ausgang, auch in Voices).
 
 ### 3.18 Eigene Stimme importieren
 Zweck: Der häufigste Fall im Studio: „Ich habe schon eine Bassline, gib mir eine passende Melodie“
