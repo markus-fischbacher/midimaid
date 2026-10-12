@@ -270,6 +270,8 @@ namespace mm::core::text {
     X(kGroupMissing, "group.missing")                                                                                  \
     X(kGroupOffered, "group.offered")                                                                                  \
     X(kGroupRefused, "group.refused")                                                                                  \
+    X(kUsageTokens, "status.usageTokens")                                                                              \
+    X(kUsageCost, "status.usageCost")                                                                                  \
     X(kGroupMixedFormats, "group.mixedFormats")                                                                        \
     X(kGroupSandboxHint, "group.sandboxHint")
 

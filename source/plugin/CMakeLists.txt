@@ -70,7 +70,7 @@ file(GLOB MIDIMAID_I18N_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/resources/
 juce_add_binary_data(mm_i18n_data HEADER_NAME "MidiMaidI18n.h" NAMESPACE MidiMaidI18n SOURCES ${MIDIMAID_I18N_FILES})
 set_target_properties(mm_i18n_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(mm_plugin_common STATIC ProcessorBase.cpp EmbeddedStyles.cpp EmbeddedGrooves.cpp EmbeddedPrompts.cpp AiBackend.cpp JuceHttpClient.cpp AppLog.cpp AiConnection.cpp AiText.cpp SettingsDialog.cpp EmbeddedTranslation.cpp GenerationService.cpp StateMigration.cpp AtomicFile.cpp LibraryStore.cpp
+add_library(mm_plugin_common STATIC ProcessorBase.cpp EmbeddedStyles.cpp EmbeddedGrooves.cpp EmbeddedPrompts.cpp AiBackend.cpp JuceHttpClient.cpp AppLog.cpp AiConnection.cpp AiText.cpp SettingsDialog.cpp EmbeddedTranslation.cpp GenerationService.cpp AiUsage.cpp StateMigration.cpp AtomicFile.cpp LibraryStore.cpp
     MidiImportService.cpp ReferenceStore.cpp ReferencesDialog.cpp LibraryDialog.cpp HelpDialog.cpp GroupLink.cpp GroupText.cpp RollView.cpp EditableRoll.cpp EditorParts.cpp MidiMaidLookAndFeel.cpp PlaceholderEditor.cpp HostDetection.cpp MidiExporter.cpp GlobalSettingsStore.cpp)
 target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(

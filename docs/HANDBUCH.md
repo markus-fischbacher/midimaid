@@ -98,6 +98,8 @@ nichts Gutes zurückkommt.
 **Zeitlimit:** Große lokale Modelle brauchen mehrere Minuten. Das *Zeitlimit (s)* in den Einstellungen gilt pro Anfrage;
 bei einem 27B-Modell nimm mindestens 600.
 
+**Tokens und Kosten:** Nach jeder KI-Anfrage zeigt die Statuszeile die verbrauchten Tokens und, bei Cloud-Anbietern, die *geschätzten* Kosten, dazu die Summe der Sitzung (bis zum Schließen des Hosts). Lokale Modelle zeigen nur Tokens. Die Preise stehen in `pricing.json`; legst du eine Datei gleichen Namens in den Datenordner (`Klirrwerk/MidiMaid`), ersetzt sie die mitgelieferten Preise je Modell.
+
 ## 6. Noten bearbeiten (Piano-Roll)
 
 - **Klick** wählt eine Note, **Ziehen im Leeren** zieht einen Auswahlrahmen, **Doppelklick** setzt eine Note oder löscht

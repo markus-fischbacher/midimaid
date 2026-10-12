@@ -29,14 +29,6 @@ mm::ai::ProviderChoice choiceFrom(const mm::core::AiProviderSettings& settings) 
     return choice;
 }
 
-juce::File userDataFolder() {
-    auto folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
-    if ((juce::SystemStats::getOperatingSystemType() & juce::SystemStats::MacOSX) != 0) {
-        folder = folder.getChildFile("Application Support");
-    }
-    return folder.getChildFile("Klirrwerk").getChildFile("MidiMaid");
-}
-
 /// Runs `done` on the message thread if the connection still exists.
 void backToMessageThread(const std::shared_ptr<bool>& alive, std::function<void()> done) {
     juce::MessageManager::callAsync([alive, done = std::move(done)] {
@@ -47,6 +39,14 @@ void backToMessageThread(const std::shared_ptr<bool>& alive, std::function<void(
 }
 
 } // namespace
+
+juce::File midiMaidDataFolder() {
+    auto folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+    if ((juce::SystemStats::getOperatingSystemType() & juce::SystemStats::MacOSX) != 0) {
+        folder = folder.getChildFile("Application Support");
+    }
+    return folder.getChildFile("Klirrwerk").getChildFile("MidiMaid");
+}
 
 AiConnection::AiConnection(Dependencies dependencies) : dependencies_(std::move(dependencies)) {
     shipped_ = embeddedModels();
@@ -68,7 +68,7 @@ AiConnection::~AiConnection() {
 AiConnection& AiConnection::instance() {
     static AiConnection connection([] {
         Dependencies dependencies;
-        dependencies.userModelsFile = userDataFolder().getChildFile("models.json");
+        dependencies.userModelsFile = midiMaidDataFolder().getChildFile("models.json");
         return dependencies;
     }());
     return connection;
