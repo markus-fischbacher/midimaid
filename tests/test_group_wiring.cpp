@@ -2587,6 +2587,117 @@ TEST_CASE("the ratchet submenu sets the repeats of the selection and shows them"
     CHECK(rig.melody()[1].ratchet == 1);
 }
 
+TEST_CASE("the lock submenu of the roll locks single dimensions of the selected notes", "[roll][editor][lock]") {
+    using Roll = mm::plugin::EditableRoll;
+    RollRig rig;
+    const auto lockItems = [&] {
+        std::vector<std::tuple<int, juce::String, bool, bool>> found;
+        juce::PopupMenu menu = rig.roll.contextMenu();
+        for (juce::PopupMenu::MenuItemIterator it(menu, true); it.next();) {
+            const int id = it.getItem().itemID;
+            if (id > Roll::kMenuLockBase && id <= Roll::kMenuLockBase + 3) {
+                found.emplace_back(id, it.getItem().text, it.getItem().isEnabled, it.getItem().isTicked);
+            }
+        }
+        return found;
+    };
+    auto shown = lockItems();
+    REQUIRE(shown.size() == 3);
+    CHECK(std::get<1>(shown[0]) == "Tonhöhe");
+    CHECK(std::get<1>(shown[1]) == "Rhythmus");
+    CHECK(std::get<1>(shown[2]) == "Velocity");
+    for (const auto& item : shown) {
+        CHECK_FALSE(std::get<2>(item)); // nothing selected
+    }
+    rig.roll.toggleNoteLock(mm::core::LockDimension::Rhythm);
+    CHECK(rig.melody()[1].lock == mm::core::LockFlags{}); // no selection: nothing changes
+    CHECK_FALSE(rig.solo.processor.canUndo());
+
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    rig.roll.runMenuAction(Roll::kMenuLockBase + 2);
+    CHECK(rig.melody()[1].lock == mm::core::LockFlags(false, true, false));
+    CHECK(rig.melody()[0].lock == mm::core::LockFlags{});
+    rig.refresh();
+    shown = lockItems();
+    CHECK(std::get<3>(shown[1]));
+    CHECK_FALSE(std::get<3>(shown[0]));
+    CHECK(rig.note(1).lock.rhythm); // the roll knows it (it draws a mark)
+    rig.roll.runMenuAction(Roll::kMenuLockBase + 1);
+    rig.roll.runMenuAction(Roll::kMenuLockBase + 3);
+    CHECK(rig.melody()[1].lock == mm::core::LockFlags(true, true, true));
+    rig.refresh();
+    rig.roll.runMenuAction(Roll::kMenuLockBase + 2); // all selected notes have it: takes it away
+    CHECK(rig.melody()[1].lock == mm::core::LockFlags(true, false, true));
+    REQUIRE(rig.solo.processor.undo());
+    CHECK(rig.melody()[1].lock == mm::core::LockFlags(true, true, true));
+    rig.roll.runMenuAction(Roll::kMenuLockBase + 4); // not an item
+    CHECK(rig.melody()[1].lock == mm::core::LockFlags(true, true, true));
+}
+
+TEST_CASE("the lock button of a voice has a menu for the dimensions", "[roll][editor][lock]") {
+    RollRig rig;
+    mm::plugin::VoiceRow row(rig.solo.processor, 2);
+    row.setBounds(0, 0, 900, 200);
+    const auto views = rig.solo.processor.playingVoices();
+    REQUIRE(views.size() >= 2);
+    const auto items = [&] {
+        std::vector<std::tuple<int, juce::String, bool, bool>> found;
+        juce::PopupMenu menu = row.lockMenu();
+        for (juce::PopupMenu::MenuItemIterator it(menu); it.next();) {
+            if (it.getItem().itemID != 0) {
+                found.emplace_back(it.getItem().itemID, it.getItem().text, it.getItem().isEnabled, it.getItem().isTicked);
+            }
+        }
+        return found;
+    };
+    auto shown = items();
+    REQUIRE(shown.size() == 4);
+    for (const auto& item : shown) {
+        CHECK_FALSE(std::get<2>(item)); // no view yet
+    }
+    row.setView(&views[1], "Melodie", true);
+    shown = items();
+    CHECK(std::get<1>(shown[0]) == "Tonhöhe");
+    CHECK(std::get<1>(shown[3]) == "Alles");
+    for (const auto& item : shown) {
+        CHECK(std::get<2>(item));
+        CHECK_FALSE(std::get<3>(item));
+    }
+    const auto lock = [&] { return rig.solo.processor.slotsSnapshot().slot(0)->pattern->voices[1].lock; };
+    const auto show = [&] {
+        const auto fresh = rig.solo.processor.playingVoices();
+        row.setView(&fresh[1], "Melodie", true);
+    };
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 2);
+    CHECK(lock() == mm::core::LockFlags(false, true, false));
+    show();
+    CHECK(std::get<3>(items()[1]));
+    CHECK_FALSE(std::get<3>(items()[0]));
+    CHECK_FALSE(std::get<3>(items()[3])); // not everything
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 2); // the same item again takes the lock away
+    CHECK(lock() == mm::core::LockFlags{});
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 3);
+    CHECK(lock() == mm::core::LockFlags(false, false, true));
+    show();
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 3);
+    CHECK(lock() == mm::core::LockFlags{});
+    show();
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 4); // all
+    CHECK(lock() == mm::core::LockFlags(true, true, true));
+    show();
+    CHECK(std::get<3>(items()[3]));
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 4); // all again: free
+    CHECK(lock() == mm::core::LockFlags{});
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 9); // not an item
+    CHECK(lock() == mm::core::LockFlags{});
+    show();
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 1);
+    show();
+    row.runLockAction(mm::plugin::VoiceRow::kLockMenuBase + 1); // takes it away again
+    CHECK(lock() == mm::core::LockFlags{});
+}
+
 TEST_CASE("the mouse handlers reach the velocity lane below the notes", "[roll][lane][editor]") {
     RollRig rig;
     const auto gutter = static_cast<float>(mm::plugin::EditableRoll::kGutter);

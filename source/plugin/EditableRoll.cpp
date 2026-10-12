@@ -360,6 +360,31 @@ void EditableRoll::setRatchet(int repeats) {
     });
 }
 
+void EditableRoll::toggleNoteLock(mm::core::LockDimension dimension) {
+    if (selection_.empty() || !haveView_) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        if (voice >= pattern.voices.size()) {
+            return 0;
+        }
+        const auto has = [&](const mm::core::Note& note) {
+            return dimension == mm::core::LockDimension::Pitch      ? note.lock.pitch
+                   : dimension == mm::core::LockDimension::Rhythm ? note.lock.rhythm
+                                                                    : note.lock.velocity;
+        };
+        bool all = true;
+        for (const auto& note : pattern.voices[voice].notes) {
+            if (std::find(ids.begin(), ids.end(), note.id) != ids.end() && !has(note)) {
+                all = false;
+            }
+        }
+        return mm::core::setNoteLock(pattern, voice, ids, dimension, !all);
+    });
+}
+
 void EditableRoll::changeVelocity(int delta) {
     if (selection_.empty() || !haveView_) {
         return;
@@ -406,6 +431,21 @@ juce::PopupMenu EditableRoll::contextMenu() const {
                          !selection_.empty(), sharedRatchet == repeats);
     }
     menu.addSubMenu(tr(mm::core::text::kRollRatchet), ratchets, !selection_.empty());
+    bool lockPitch = !selection_.empty();
+    bool lockRhythm = !selection_.empty();
+    bool lockVelocity = !selection_.empty();
+    for (const uint32_t id : selection_) {
+        if (const auto* note = find(id)) {
+            lockPitch = lockPitch && note->lock.pitch;
+            lockRhythm = lockRhythm && note->lock.rhythm;
+            lockVelocity = lockVelocity && note->lock.velocity;
+        }
+    }
+    juce::PopupMenu locks;
+    locks.addItem(kMenuLockBase + 1, tr(mm::core::text::kLockPitch), !selection_.empty(), lockPitch);
+    locks.addItem(kMenuLockBase + 2, tr(mm::core::text::kLockRhythm), !selection_.empty(), lockRhythm);
+    locks.addItem(kMenuLockBase + 3, tr(mm::core::text::kLockVelocity), !selection_.empty(), lockVelocity);
+    menu.addSubMenu(tr(mm::core::text::kLockMenu), locks, !selection_.empty());
     menu.addSeparator();
     menu.addItem(kMenuDelete, tr(mm::core::text::kRollDelete), !selection_.empty());
     return menu;
@@ -416,6 +456,10 @@ void EditableRoll::runMenuAction(int id) {
         toggleAccent();
     } else if (id == kMenuSlide) {
         toggleSlide();
+    } else if (id > kMenuLockBase && id <= kMenuLockBase + 3) {
+        toggleNoteLock(id == kMenuLockBase + 1   ? mm::core::LockDimension::Pitch
+                       : id == kMenuLockBase + 2 ? mm::core::LockDimension::Rhythm
+                                                 : mm::core::LockDimension::Velocity);
     } else if (id > kMenuRatchetBase && id <= kMenuRatchetBase + 4) {
         setRatchet(id - kMenuRatchetBase);
     } else if (id == kMenuDelete) {
@@ -792,6 +836,11 @@ void EditableRoll::paint(juce::Graphics& g) {
                 triangle.addTriangle(box.getX(), top, box.getX() + 7.0f, top, box.getX() + 3.5f, top + 6.0f);
                 g.setColour(juce::Colours::white.withAlpha(alpha * 0.95f));
                 g.fillPath(triangle);
+            }
+            if (note.lock.pitch || note.lock.rhythm || note.lock.velocity) {
+                // A small square at the lower left corner: the note has a lock in some dimension.
+                g.setColour(juce::Colours::white.withAlpha(alpha * 0.9f));
+                g.fillRect(box.getX() + 1.0f, box.getBottom() - 4.0f, 3.0f, 3.0f);
             }
             if (note.ratchet > 1) {
                 // Thin dividers inside the box show the repeats.

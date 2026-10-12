@@ -59,4 +59,13 @@ size_t setAccent(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, 
 /// the note (the two never combine). Returns the number of notes that changed.
 size_t setRatchet(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int repeats);
 
+/// The dimensions a lock can cover (SPEC 3.5, D-231).
+enum class LockDimension { Pitch, Rhythm, Velocity };
+
+/// Sets the lock of one dimension for the whole voice (`setVoiceLocked` sets all three). Returns 1 if it changed.
+size_t setVoiceLock(Pattern& pattern, size_t voice, LockDimension dimension, bool locked);
+
+/// Sets the lock of one dimension on the notes. Returns the number of notes that changed.
+size_t setNoteLock(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, LockDimension dimension, bool locked);
+
 } // namespace mm::core

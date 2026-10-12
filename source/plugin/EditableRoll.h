@@ -64,6 +64,8 @@ public:
     void toggleSlide();
     /// Ratchet of the selection: `repeats` 1 (off) to 4 (`core/PatternEdit::setRatchet`), one undo step.
     void setRatchet(int repeats);
+    /// Locks one dimension of the selected notes, or takes the lock away when all of them have it (one undo step, v1.1, D-231).
+    void toggleNoteLock(mm::core::LockDimension dimension);
     /// Adds `delta` to the velocity of the selection (cut to 1-127), one undo step.
     void changeVelocity(int delta);
     /// The menu of a right click on a note and what its items do (`kMenu...`).
@@ -99,6 +101,7 @@ public:
     static constexpr int kMenuAccent = 1;
     static constexpr int kMenuSlide = 2;
     static constexpr int kMenuDelete = 3;
+    static constexpr int kMenuLockBase = 20; ///< + 1 pitch, 2 rhythm, 3 velocity: lock of the selected notes
     static constexpr int kMenuRatchetBase = 10; ///< + the repeats: 11 = off, 12 to 14 = 2 to 4 repeats
 
 private:

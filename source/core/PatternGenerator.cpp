@@ -2,6 +2,7 @@
 
 #include "core/FormPlan.h"
 #include "core/Groove.h"
+#include "core/LockRestore.h"
 #include "core/Progression.h"
 #include "core/Ratchet.h"
 #include "core/Turnaround.h"
@@ -140,6 +141,15 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
             track.notes.clear();
         }
     }
+    // a voice with locks in some dimensions is generated again and takes its locked dimensions back (D-231)
+    const auto restorePartialLocks = [&] {
+        for (size_t i = 0; i < pattern.voices.size() && i < current.voices.size(); ++i) {
+            if (!keep[i] && hasAnyLock(current.voices[i])) {
+                pattern.voices[i].notes =
+                    restoreLocks(current.voices[i].notes, pattern.voices[i].notes, pattern.voices[i].lock);
+            }
+        }
+    };
     const auto failed = [&] { return makeEmptyPattern(current.lengthBars, style.id); };
     if (pattern.phrases.size() <= 1) {
         for (const size_t index : generationOrder(pattern)) {
@@ -180,6 +190,7 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
             }
         }
     }
+    restorePartialLocks();
     addRatchets(pattern, style, request.settings.energyPct, seed, 0, pattern.lengthBars, keep);
     applyConstraints(pattern, constraintSettingsFor(pattern, style));
     pattern.info.source = "algorithm";
@@ -352,6 +363,10 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& ba
     if (!fillVoice(next, voiceIndex, style, request.settings, rng)) {
         return false;
     }
+    if (hasAnyLock(pattern.voices[voiceIndex])) { // the locked dimensions come back (D-231)
+        next.voices[voiceIndex].notes = restoreLocks(pattern.voices[voiceIndex].notes, next.voices[voiceIndex].notes,
+                                                     next.voices[voiceIndex].lock);
+    }
     applyRatchets(next, voiceIndex, style.id, request.settings.energyPct, seed, 0, next.lengthBars);
     applyConstraints(next, constraintSettingsFor(next, style));
     next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));
@@ -387,10 +402,20 @@ bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& 
             continue;
         }
         auto& all = next.voices[i].notes;
+        std::vector<Note> fresh = (*notes)[i];
+        if (hasAnyLock(pattern.voices[i])) { // the locked dimensions of the phrase come back (D-231)
+            std::vector<Note> before;
+            for (const Note& note : all) {
+                if (note.startTick >= from && note.startTick < to) {
+                    before.push_back(note);
+                }
+            }
+            fresh = restoreLocks(before, fresh, next.voices[i].lock);
+        }
         all.erase(std::remove_if(all.begin(), all.end(),
                                  [&](const Note& note) { return note.startTick >= from && note.startTick < to; }),
                   all.end());
-        appendNotes(next, i, (*notes)[i]);
+        appendNotes(next, i, fresh);
         std::stable_sort(all.begin(), all.end(),
                          [](const Note& a, const Note& b) { return a.startTick < b.startTick; });
     }

@@ -77,7 +77,7 @@ und wechseln zugleich mit ihm (zum Beginn des nächsten Durchlaufs). Die Host-Pa
 **Polymeter-Sequenz:** Der Melodie-Archetyp *polymeter_seq* (bei Peak Time) spielt eine kurze Zelle von 3, 5, 6, 7, 9, 10 oder 14 Sechzehnteln, die sich über die Taktgrenzen hinweg wiederholt, mit 2 bis 5 Tönen. Sie beginnt mit jedem Durchlauf des Patterns wieder am Anfang, so dass der Loop stabil bleibt.
 
 **Sperren:** Der Knopf *Sperren* an einer Stimme hält sie fest, bis du sie wieder freigibst. Erzeugen, Variation und
-Verfeinern lassen sie in Ruhe.
+Verfeinern lassen sie in Ruhe. Ein **Rechtsklick auf *Sperren*** öffnet ein Menü, mit dem du nur eine **Dimension** sperrst: *Tonhöhe*, *Rhythmus* (Position und Länge) oder *Velocity* (mit Akzent). So behältst du die Tonfolge und würfelst einen neuen Rhythmus (oder umgekehrt). Dasselbe gilt für einzelne Noten: Noten wählen, Rechtsklick → *Sperren*; gesperrte Noten tragen ein kleines Quadrat. Sobald etwas gesperrt ist, bleiben beim Erzeugen auch Tonart, Skala, Akkordfolge und Länge. Die KI-Erzeugung beachtet nur ganz gesperrte Stimmen.
 
 ## 5. Mit der KI arbeiten (optional)
 

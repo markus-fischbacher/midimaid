@@ -73,6 +73,35 @@ size_t setVoiceLocked(Pattern& pattern, size_t voice, bool locked) {
     return 1;
 }
 
+namespace {
+
+bool& flagOf(LockFlags& lock, LockDimension dimension) {
+    return dimension == LockDimension::Pitch ? lock.pitch : dimension == LockDimension::Rhythm ? lock.rhythm : lock.velocity;
+}
+
+} // namespace
+
+size_t setVoiceLock(Pattern& pattern, size_t voice, LockDimension dimension, bool locked) {
+    if (voice >= pattern.voices.size()) {
+        return 0;
+    }
+    bool& flag = flagOf(pattern.voices[voice].lock, dimension);
+    if (flag == locked) {
+        return 0;
+    }
+    flag = locked;
+    return 1;
+}
+
+size_t setNoteLock(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, LockDimension dimension, bool locked) {
+    return forNotes(pattern, voice, ids, [&](Note& note) {
+        bool& flag = flagOf(note.lock, dimension);
+        const bool differs = flag != locked;
+        flag = locked;
+        return differs;
+    });
+}
+
 size_t removeNotes(Pattern& pattern, size_t voice, std::span<const uint32_t> ids) {
     if (voice >= pattern.voices.size()) {
         return 0;
