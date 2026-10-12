@@ -38,6 +38,7 @@ mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atom
     request.root = job.settings.root;
     request.scaleId = job.settings.scaleId;
     request.referenceSet = job.references.entries;
+    request.history = job.history;
     request.personalProgressions = job.references.progressions;
     request.referenceSetId = job.references.setId;
     request.cancel = cancel;

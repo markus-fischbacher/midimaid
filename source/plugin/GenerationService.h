@@ -43,6 +43,8 @@ struct GenerationJob {
     std::string model;
     int timeoutSeconds = 30;
     int maxTokens = 4096;
+    /// The last results of the target slot for the repetition protection of the offline generator (v1.1, D-225).
+    std::vector<mm::core::ReferenceEntry> history;
     /// The reference set of the style as it was when the musician asked (SPEC 3.20): the entries for the copy
     /// protection and the progressions for the offline generator, the id for the pattern, and the examples for the AI
     /// (only with the consent of the provider, D-86; empty otherwise).

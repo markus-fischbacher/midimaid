@@ -251,7 +251,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [ ] Chord-Memory (STYLES.md §1.10)
 - [x] Groove-Vorlagen-Sammlung (SPEC §3.9, D-220; eigene Vorlagen speichern bleibt offen)
 - [x] Chromatik-Regler (SPEC §3.8, D-219)
-- [ ] Wiederholungsschutz mit Gewinner-Seed (SPEC §4.3)
+- [x] Wiederholungsschutz mit Gewinner-Seed (SPEC §4.3, D-225)
 
 **Bearbeitung**
 - [ ] Sperren pro Dimension und Note (SPEC §3.5)

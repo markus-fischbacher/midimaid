@@ -235,6 +235,37 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     return pattern;
 }
 
+/// The selection with the copy protection against the reference set and the repetition protection against the history
+/// (D-225). `voiceComplete` says whether a voice of a candidate counts as generated. When the history leaves no valid
+/// candidate the selection runs again without it, so the repetition protection never blocks a generation.
+static SelectionResult selectProtected(const GenerationRequest& request, const StyleProfile& style,
+                                const CandidateGenerator& generate, const ContextFor& contextFor,
+                                const std::function<bool(const Track&)>& voiceComplete) {
+    const auto select = [&](const std::vector<ReferenceEntry>& history) {
+        HardCheck copyCheck;
+        if (!request.referenceSet.empty()) {
+            copyCheck = copyProtectionCheck(request.referenceSet);
+        }
+        HardCheck repeatCheck;
+        if (!history.empty()) {
+            repeatCheck = copyProtectionCheck(history);
+        }
+        const HardCheck hardCheck = [copyCheck, repeatCheck, &voiceComplete](const Pattern& pattern) {
+            const bool complete = std::all_of(pattern.voices.begin(), pattern.voices.end(), voiceComplete);
+            return complete && (!copyCheck || copyCheck(pattern)) && (!repeatCheck || repeatCheck(pattern));
+        };
+        return selectBest(generate, request.seed, style.quality, contextFor, hardCheck);
+    };
+    SelectionResult result = select(request.history);
+    if (!result.success && !request.history.empty() && !(request.cancel != nullptr && request.cancel->load())) {
+        result = select({});
+    }
+    if (result.success) {
+        applyResult(result.pattern, result);
+    }
+    return result;
+}
+
 SelectionResult generatePatternAroundLocks(const StyleProfile& baseStyle, const GenerationRequest& request,
                                            const Pattern& current) {
     const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
@@ -245,44 +276,19 @@ SelectionResult generatePatternAroundLocks(const StyleProfile& baseStyle, const 
     }
     const auto generate = [&](uint64_t seed) { return generateAroundLocks(style, request, current, seed); };
     const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
-    HardCheck copyCheck;
-    if (!request.referenceSet.empty()) {
-        copyCheck = copyProtectionCheck(request.referenceSet);
-    }
     // the voices that are generated have an archetype; a locked one may have none (an imported or drawn line); the copy
-    // protection leaves locked voices alone
-    const HardCheck hardCheck = [copyCheck](const Pattern& pattern) {
-        const bool complete =
-            std::all_of(pattern.voices.begin(), pattern.voices.end(),
-                        [](const Track& track) { return isVoiceLocked(track) || !track.archetypeId.empty(); });
-        return complete && (!copyCheck || copyCheck(pattern));
-    };
-    SelectionResult result = selectBest(generate, request.seed, style.quality, contextFor, hardCheck);
-    if (result.success) {
-        applyResult(result.pattern, result);
-    }
-    return result;
+    // and repetition protection leave locked voices alone
+    return selectProtected(
+        request, style, generate, contextFor, [](const Track& track) { return isVoiceLocked(track) || !track.archetypeId.empty(); });
 }
 
 SelectionResult generatePattern(const StyleProfile& baseStyle, const GenerationRequest& request) {
     const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
     const auto generate = [&](uint64_t seed) { return generateCandidate(style, request, seed); };
     const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
-    HardCheck copyCheck;
-    if (!request.referenceSet.empty()) {
-        copyCheck = copyProtectionCheck(request.referenceSet);
-    }
     // a candidate with a voice that could not be generated (it has no archetype) is never valid
-    const HardCheck hardCheck = [copyCheck](const Pattern& pattern) {
-        const bool complete = std::all_of(pattern.voices.begin(), pattern.voices.end(),
-                                          [](const Track& track) { return !track.archetypeId.empty(); });
-        return complete && (!copyCheck || copyCheck(pattern));
-    };
-    SelectionResult result = selectBest(generate, request.seed, style.quality, contextFor, hardCheck);
-    if (result.success) {
-        applyResult(result.pattern, result);
-    }
-    return result;
+    return selectProtected(request, style, generate, contextFor,
+                           [](const Track& track) { return !track.archetypeId.empty(); });
 }
 
 Pattern replayWinner(const StyleProfile& baseStyle, const GenerationRequest& request, uint64_t winnerSeed) {

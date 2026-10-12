@@ -689,7 +689,7 @@ Der Algorithmus erzeugt bei gleichem Seed und gleichen Eingaben **bitgenau** das
   Wiedergabe eines gespeicherten Seeds erzeugt genau diesen Kandidaten, ohne Auswahl. Das ist schon in
   v1.0 nötig, weil der Kopierschutz die Auswahl vom Inhalt des Referenz-Sets abhängig macht, und der
   kann sich unter derselben Set-ID ändern.
-- **[v1.1] Wiederholungsschutz und Determinismus:** Der Wiederholungsschutz hängt zusätzlich vom Verlauf
+- **[v1.1] Wiederholungsschutz und Determinismus (umgesetzt, D-225):** Der Wiederholungsschutz hängt zusätzlich vom Verlauf
   ab; auch hier sichert der Gewinner-Seed „gleicher Seed → gleiches Ergebnis“.
 
 ### 4.4 Qualitätsbewertung
