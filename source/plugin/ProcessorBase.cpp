@@ -19,6 +19,7 @@
 #include "core/OutputStage.h"
 #include "plugin/EmbeddedGrooves.h"
 #include "plugin/GlobalSettingsStore.h"
+#include "plugin/HostDetection.h"
 #include "plugin/LibraryStore.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ReferenceStore.h"
@@ -142,6 +143,17 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
       generator_(styles_, [this](const GenerationJob& job, std::optional<mm::core::Pattern> pattern) {
           onGenerated(job, std::move(pattern));
       }) {
+    switch (detectHostCapabilities(*this).format) {
+    case PluginFormat::Vst3:
+        formatTag_ = "vst3";
+        break;
+    case PluginFormat::Au:
+        formatTag_ = "au";
+        break;
+    default:
+        break; // other formats are not counted: the warning is about the two that cannot share a registry
+    }
+    setFormatTag(formatTag_);
     AiConnection::instance().start(); // applies the provider of the settings once they are read
     generator_.setReportHandler([this](const GenerationJob&, const GenerationReport& report) { lastReport_ = report; });
     slotValue_ = parameters_.getRawParameterValue("slot");
@@ -201,6 +213,16 @@ ProcessorBase::~ProcessorBase() {
     *libraryAlive_ = false;
     groupLink_->detach();                              // first: from here on no registry callback reaches this instance
     onGroupStatusChanged(mm::core::GroupStatus::Solo); // gives the channel slot back
+}
+
+void ProcessorBase::setFormatTag(std::string tag) {
+    formatRegistration_.reset(); // first: gives the old tag back
+    formatTag_ = std::move(tag);
+    formatRegistration_ = std::make_unique<mm::platform::InstanceRegistration>(formatTag_);
+}
+
+bool ProcessorBase::otherFormatInProcess() const {
+    return !formatTag_.empty() && mm::platform::otherFormatsPresent(formatTag_);
 }
 
 void ProcessorBase::onGroupStatusChanged(mm::core::GroupStatus status) {

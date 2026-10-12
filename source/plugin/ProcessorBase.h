@@ -21,6 +21,8 @@
 #include "plugin/MidiExporter.h"
 #include "plugin/MidiImportService.h"
 
+#include "platform/ProcessInstances.h"
+
 #include <array>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -412,6 +414,10 @@ public:
     /// lost hub. Safe to read from any thread; `acceptHubOffer` is for the message thread.
     mm::core::GroupStatus groupStatus() const;
     size_t groupVoices() const;
+    /// Instances of another plug-in format (AU and VST3) run in this process: a group cannot span them (D-222).
+    bool otherFormatInProcess() const;
+    /// Counts this instance under another format tag (tests: a test host has no wrapper type).
+    void setFormatTag(std::string tag);
     void acceptHubOffer();
     /// Called by the group link on the message thread when the group status changes: takes or gives back the slot in
     /// the group channel and recomputes the slot mode.
@@ -595,6 +601,8 @@ private:
     std::optional<PendingImport> pendingImport_;
     std::optional<mm::core::RhythmReference> drumReference_; ///< the last one dropped (message thread)
     std::optional<mm::core::SlotContent> slotClipboard_; // message thread
+    std::unique_ptr<mm::platform::InstanceRegistration> formatRegistration_; ///< counts this instance for its format
+    std::string formatTag_;
     std::shared_ptr<bool> libraryAlive_ = std::make_shared<bool>(true); ///< callbacks of the library check it
     bool importCut_ = false; ///< the import that started the running generation was cut to 16 bars
     MidiImportService importer_;  // before the generator: both are destroyed before the members they call into

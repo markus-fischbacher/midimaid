@@ -26,7 +26,7 @@ target_compile_definitions(mm_plugin_glue_tests PRIVATE JUCE_MODAL_LOOPS_PERMITT
 target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catch2WithMain)
 target_compile_definitions(mm_plugin_glue_tests PRIVATE MIDIMAID_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
 
-add_executable(mm_platform_secret_tests test_secret_store.cpp)
+add_executable(mm_platform_secret_tests test_secret_store.cpp test_process_instances.cpp)
 target_link_libraries(mm_platform_secret_tests PRIVATE mm_platform Threads::Threads Catch2::Catch2WithMain mm_warnings)
 
 add_executable(mm_net_tests test_http_client.cpp)
