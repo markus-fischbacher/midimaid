@@ -4,6 +4,7 @@
 #include "core/EvolveLayer.h"
 #include "core/InstanceSettings.h"
 #include "core/ParameterRegister.h"
+#include "core/PatternEdit.h"
 #include "core/RollEdit.h"
 #include "core/Transpose.h"
 #include "core/SlotBank.h"
@@ -129,7 +130,8 @@ public:
         juce::String voiceName;   ///< Bass, Melody or Voice n: the names of the export files, never translated
         juce::String displayName; ///< the same in the language of the UI
         bool melody = false;      ///< the voice has the melody role (accent colour)
-        bool locked = false;      ///< the voice is locked (SPEC 3.5)
+        bool locked = false;      ///< the voice is locked in every dimension (SPEC 3.5)
+        mm::core::LockFlags lockFlags; ///< the locks of the voice per dimension (D-231)
         /// What the piano roll edits: the source notes of the pattern (with ids, no groove, no instance octave).
         std::vector<mm::core::RollNote> source;
         mm::core::PitchClass root = 9;
@@ -291,6 +293,8 @@ public:
     /// Message thread: locks or unlocks a voice of the slot (0-based indices, SPEC 3.5). An undo step like a note edit.
     /// False in a voice, for an empty slot or when the lock is already as asked.
     bool setVoiceLocked(size_t slotIndex, size_t voice, bool locked);
+    /// Message thread: locks or unlocks one dimension of a voice (v1.1, D-231). Same rules as `setVoiceLocked`.
+    bool setVoiceLock(size_t slotIndex, size_t voice, mm::core::LockDimension dimension, bool locked);
     bool redo();
     bool canUndo() const;
     bool canRedo() const;

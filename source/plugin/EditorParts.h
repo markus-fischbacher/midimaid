@@ -114,6 +114,12 @@ public:
     void setFocused(bool focused);
     /// Enables the action buttons: Neu and Variation need a pattern and an unlocked voice, Duplizieren a selection.
     void updateButtons();
+    /// The menu of a right click on "Sperren" (v1.1, D-231): the locks of the voice per dimension, ticked where set, and
+    /// "Alles". `runLockAction` runs an item (`kLockMenuBase` + 1 pitch, 2 rhythm, 3 velocity, 4 all).
+    juce::PopupMenu lockMenu() const;
+    void runLockAction(int id);
+    static constexpr int kLockMenuBase = 30;
+    void mouseDown(const juce::MouseEvent& event) override;
     /// The slot the row shows (0-based), -1 while there is none.
     int slotIndex() const { return slotIndex_; }
     /// Called with the voice number (1 to 8) when the focus switch is clicked.
@@ -140,6 +146,7 @@ private:
     juce::Label nameLabel_;
     juce::ToggleButton muteButton_;
     juce::ToggleButton lockButton_;
+    mm::core::LockFlags lockFlags_; ///< what the view showed last: the menu ticks follow it
     juce::ToggleButton focusButton_;
     juce::TextButton renewButton_;
     juce::TextButton varyButton_;

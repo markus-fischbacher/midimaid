@@ -742,3 +742,36 @@ TEST_CASE("the hat mode moves the melody when a clip is dropped and in later gen
     CHECK(droppedWith > droppedBefore);
     CHECK(generatedWith > generatedFree);
 }
+
+TEST_CASE("generating with a locked rhythm keeps the rhythm of the voice and draws new tones", "[midi-import-plugin][lock]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    for (const uint64_t seed : {5ull, 6ull, 7ull}) {
+        InstrumentProcessor processor("Test");
+        auto settings = processor.instanceSettings();
+        settings.generation.seed = seed;
+        processor.setInstanceSettings(settings);
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+        const auto before = *processor.slotsSnapshot().slot(0)->pattern;
+        REQUIRE(processor.setVoiceLock(0, 1, mm::core::LockDimension::Rhythm, true));
+        settings.generation.seed = seed + 100;
+        processor.setInstanceSettings(settings);
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::DoneLocked; }));
+        const auto after = *processor.slotsSnapshot().slot(0)->pattern;
+        std::vector<uint32_t> a;
+        std::vector<uint32_t> b;
+        for (const auto& n : before.voices[1].notes) {
+            a.push_back(n.startTick);
+        }
+        for (const auto& n : after.voices[1].notes) {
+            b.push_back(n.startTick);
+        }
+        CHECK(a == b);
+        CHECK(after.voices[1].lock.rhythm);
+        // key, scale and length stay with the locks (SPEC 3.5), the unlocked bass is new
+        CHECK(after.context.root == before.context.root);
+        CHECK(after.lengthBars == before.lengthBars);
+        CHECK(after.voices[0].notes != before.voices[0].notes);
+    }
+}

@@ -233,7 +233,7 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
 - **[v1.1] Hilfen:** Velocity-Spur umschaltbar auf Wahrscheinlichkeit und Bedingung (§3.19), Scale-Fold
   (nur Skalentöne als Zeilen, wie in Ableton), Phrasengrenzen und Kick-Raster als Hintergrund, eigene
   Zeile für Slide- und Akzent-Markierungen
-- **[v1.1] Sperren pro Dimension:** Tonhöhe, Rhythmus (Position und Länge) und Velocity pro Note und pro
+- **[v1.1] Sperren pro Dimension (umgesetzt, D-231):** Tonhöhe, Rhythmus (Position und Länge) und Velocity pro Note und pro
   Stimme getrennt sperren. Beispiel: Tonfolge behalten, neuen Rhythmus würfeln.
 
 ### 3.6 Variationen per Knopfdruck

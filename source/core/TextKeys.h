@@ -271,6 +271,12 @@ namespace mm::core::text {
     X(kRollAccent, "roll.accent")                                                                                      \
     X(kRollSlide, "roll.slide")                                                                                        \
     X(kRollRatchet, "roll.ratchet")                                                                                    \
+    X(kLockMenu, "lock.menu")                                                                                          \
+    X(kLockPitch, "lock.pitch")                                                                                        \
+    X(kLockRhythm, "lock.rhythm")                                                                                      \
+    X(kLockVelocity, "lock.velocity")                                                                                  \
+    X(kLockAll, "lock.all")                                                                                            \
+    X(kVoicePartialLockedSuffix, "voice.partialLockedSuffix")                                                          \
     X(kRollRatchetOff, "roll.ratchetOff")                                                                              \
     X(kRollRatchet2, "roll.ratchet2")                                                                                  \
     X(kRollRatchet3, "roll.ratchet3")                                                                                  \

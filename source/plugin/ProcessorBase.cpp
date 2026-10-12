@@ -2,6 +2,7 @@
 
 #include "core/Analysis.h"
 #include "core/DrumReference.h"
+#include "core/LockRestore.h"
 #include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
@@ -745,6 +746,12 @@ bool ProcessorBase::setVoiceLocked(size_t slotIndex, size_t voice, bool locked) 
                      [&](mm::core::Pattern& pattern) { return mm::core::setVoiceLocked(pattern, voice, locked); });
 }
 
+bool ProcessorBase::setVoiceLock(size_t slotIndex, size_t voice, mm::core::LockDimension dimension, bool locked) {
+    return editNotes(slotIndex, [&](mm::core::Pattern& pattern) {
+        return mm::core::setVoiceLock(pattern, voice, dimension, locked);
+    });
+}
+
 bool ProcessorBase::undo() {
     return stepUndo(true);
 }
@@ -880,7 +887,7 @@ void ProcessorBase::generate() {
     {
         const juce::ScopedLock lock(slotsLock_);
         const auto* slot = slots_.slot(static_cast<size_t>(job.slot));
-        if (slot != nullptr && slot->pattern && mm::core::hasLockedVoice(*slot->pattern)) {
+        if (slot != nullptr && slot->pattern && mm::core::hasAnyLock(*slot->pattern)) { // also locks of one dimension (D-231)
             job.lockedFrom = slot->pattern;
         }
         if (slot != nullptr && !job.settings.seed) { // a fixed seed asks for exactly that pattern: no protection (D-225)
@@ -1693,7 +1700,7 @@ void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern p
         }
         // Locked voices survive whatever happened while the job ran (SPEC 3.5): they are put back from the slot as it
         // is now. A result that no longer fits them (another length or number of voices) is dropped.
-        if (slot != nullptr && slot->pattern && mm::core::hasLockedVoice(*slot->pattern)) {
+        if (slot != nullptr && slot->pattern && mm::core::hasAnyLock(*slot->pattern)) { // also locks of one dimension (D-231)
             const auto& current = *slot->pattern;
             if (pattern.lengthBars != current.lengthBars || pattern.voices.size() != current.voices.size()) {
                 discarded = true;
@@ -2160,6 +2167,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
     view.melody = view.voiceName == "Melody";
     view.locked = voiceIndex < pattern.voices.size() && mm::core::isVoiceLocked(pattern.voices[voiceIndex]);
+    view.lockFlags = voiceIndex < pattern.voices.size() ? pattern.voices[voiceIndex].lock : mm::core::LockFlags{};
     view.root = pattern.context.root;
     view.scaleId = pattern.context.scaleId;
     view.transposeInfo = rendered.transpose;
@@ -2175,7 +2183,8 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     if (voiceIndex < pattern.voices.size()) {
         for (const auto& note : pattern.voices[voiceIndex].notes) {
             view.source.push_back(
-                {note.id, note.pitch, note.startTick, note.lengthTicks, note.velocity, note.accent, note.slide, note.ratchet});
+                {note.id, note.pitch, note.startTick, note.lengthTicks, note.velocity, note.accent, note.slide, note.ratchet,
+                 note.lock});
         }
     }
     view.displayName = view.melody ? tr(mm::core::text::kVoiceMelody)

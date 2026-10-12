@@ -24,6 +24,7 @@ struct RollNote {
     bool accent = false;
     bool slide = false;
     uint8_t ratchet = 1;
+    LockFlags lock{};
 
     bool operator==(const RollNote&) const = default;
 };

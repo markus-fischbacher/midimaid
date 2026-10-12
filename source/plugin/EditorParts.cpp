@@ -134,6 +134,7 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
         }
     };
     addAndMakeVisible(lockButton_);
+    lockButton_.addMouseListener(this, false); // a right click opens the menu of the dimensions
 
     focusButton_.setComponentID("focus_" + juce::String(voice));
     focusButton_.setButtonText(tr(mm::core::text::kRollFocus));
@@ -230,16 +231,59 @@ void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String&
         roll_.setContent(mm::core::layoutRoll({}, mm::core::kTicksPerQuarter * 4), {}, true);
     } else {
         roll_.setContent(mm::core::layoutRoll(view->notes, view->lengthTicks),
-                         view->locked ? name + tr(mm::core::text::kVoiceLockedSuffix) : name, false);
+                         view->locked ? name + tr(mm::core::text::kVoiceLockedSuffix)
+                         : (view->lockFlags.pitch || view->lockFlags.rhythm || view->lockFlags.velocity)
+                             ? name + tr(mm::core::text::kVoicePartialLockedSuffix)
+                             : name,
+                         false);
     }
     roll_.setSource(view);
     const bool filled = view != nullptr && view->hasPattern;
+    lockFlags_ = filled ? view->lockFlags : mm::core::LockFlags{};
     slotIndex_ = filled ? view->slot - 1 : -1;
     lockButton_.setEnabled(filled);
     lockButton_.setToggleState(filled && view->locked, juce::dontSendNotification);
     updateMuted();
     updateButtons();
     fillGroove(view);
+}
+
+juce::PopupMenu VoiceRow::lockMenu() const {
+    const bool filled = slotIndex_ >= 0;
+    juce::PopupMenu menu;
+    menu.addItem(kLockMenuBase + 1, tr(mm::core::text::kLockPitch), filled, lockFlags_.pitch);
+    menu.addItem(kLockMenuBase + 2, tr(mm::core::text::kLockRhythm), filled, lockFlags_.rhythm);
+    menu.addItem(kLockMenuBase + 3, tr(mm::core::text::kLockVelocity), filled, lockFlags_.velocity);
+    menu.addSeparator();
+    menu.addItem(kLockMenuBase + 4, tr(mm::core::text::kLockAll), filled,
+                 lockFlags_.pitch && lockFlags_.rhythm && lockFlags_.velocity);
+    return menu;
+}
+
+void VoiceRow::runLockAction(int id) {
+    if (slotIndex_ < 0 || id <= kLockMenuBase || id > kLockMenuBase + 4) {
+        return;
+    }
+    const auto slot = static_cast<size_t>(slotIndex_);
+    const auto voice = static_cast<size_t>(voice_ - 1);
+    if (id == kLockMenuBase + 4) {
+        const bool all = lockFlags_.pitch && lockFlags_.rhythm && lockFlags_.velocity;
+        processor_.setVoiceLocked(slot, voice, !all);
+        return;
+    }
+    const bool now = id == kLockMenuBase + 1 ? lockFlags_.pitch : id == kLockMenuBase + 2 ? lockFlags_.rhythm : lockFlags_.velocity;
+    processor_.setVoiceLock(slot, voice,
+                            id == kLockMenuBase + 1   ? mm::core::LockDimension::Pitch
+                            : id == kLockMenuBase + 2 ? mm::core::LockDimension::Rhythm
+                                                      : mm::core::LockDimension::Velocity,
+                            !now);
+}
+
+void VoiceRow::mouseDown(const juce::MouseEvent& event) {
+    if (event.originalComponent == &lockButton_ && event.mods.isPopupMenu() && lockButton_.isEnabled()) {
+        lockMenu().showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&lockButton_),
+                                 [this](int id) { runLockAction(id); });
+    }
 }
 
 void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {

@@ -254,7 +254,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Wiederholungsschutz mit Gewinner-Seed (SPEC §4.3, D-225)
 
 **Bearbeitung**
-- [ ] Sperren pro Dimension und Note (SPEC §3.5)
+- [x] Sperren pro Dimension und Note (SPEC §3.5, D-231; die KI-Erzeugung beachtet nur ganz gesperrte Stimmen)
 - [ ] Piano-Roll-Hilfen: Scale-Fold, Slide/Akzent-Zeile, Wahrscheinlichkeits-Spur, Hintergründe
 - [ ] Tastenkürzel nach SPEC §8.3: Aktionen frei belegbar in den Einstellungen, keine Voreinstellung (D-126)
 
