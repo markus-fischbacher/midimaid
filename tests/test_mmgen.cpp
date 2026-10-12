@@ -245,8 +245,8 @@ TEST_CASE("a series covers every archetype, energy and seed in a fixed order", "
     std::vector<Job> jobs;
     std::string error;
     REQUIRE(planSeries(options, styles, jobs, error));
-    // peak time: 3 bass + 4 melody archetypes, 3 energies, 20 seeds
-    REQUIRE(jobs.size() == 7u * 3u * 20u);
+    // peak time: 3 bass + 5 melody archetypes, 3 energies, 20 seeds
+    REQUIRE(jobs.size() == 8u * 3u * 20u);
     CHECK(jobs.front().styleId == "peak_time");
     CHECK(jobs.front().archetype == "rolling16");
     CHECK(jobs.front().archetypeRole == VoiceRole::Bass);
@@ -269,11 +269,11 @@ TEST_CASE("a series covers every archetype, energy and seed in a fixed order", "
         (job.archetypeRole == VoiceRole::Bass ? bass : melody).insert(job.archetype);
     }
     CHECK(bass == std::set<std::string>{"rolling16", "offbeat", "gallop"});
-    CHECK(melody == std::set<std::string>{"hypnotic_motif", "stabs", "arp", "acid_siren"});
+    CHECK(melody == std::set<std::string>{"hypnotic_motif", "stabs", "arp", "polymeter_seq", "acid_siren"});
 
     options.style = "all";
     REQUIRE(planSeries(options, styles, jobs, error));
-    CHECK(jobs.size() == 21u * 3u * 20u);
+    CHECK(jobs.size() == 22u * 3u * 20u);
     // the order of the styles is the one of the given profiles
     CHECK(jobs.front().styleId == "hard_industrial");
     CHECK(jobs.back().styleId == "peak_time");
@@ -874,5 +874,5 @@ TEST_CASE("a series uses only the bass archetypes of the bass list and the melod
     CHECK(count["arp"] == 1);       // only from the melody list
     CHECK(count["rolling16"] == 1); // only from the bass list
     CHECK(count.count("no_such_archetype") == 0);
-    CHECK(jobs.size() == 7);
+    CHECK(jobs.size() == 8);
 }

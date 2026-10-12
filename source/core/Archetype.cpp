@@ -19,7 +19,7 @@ constexpr uint32_t kMinNoteTicks = 60; ///< the constraint layer drops shorter n
 constexpr uint32_t kHalfBarTicks = kTicksPerBar / 2;
 constexpr int kSteps = 16; // 16th steps per bar
 
-constexpr std::array<Archetype, 20> kArchetypes{{
+constexpr std::array<Archetype, 21> kArchetypes{{
     {"rolling16", VoiceRole::Bass, false, ArchetypeDensity::Dense},
     {"offbeat", VoiceRole::Bass, false, ArchetypeDensity::Neutral},
     {"gallop", VoiceRole::Bass, false, ArchetypeDensity::Neutral},
@@ -40,6 +40,7 @@ constexpr std::array<Archetype, 20> kArchetypes{{
     {"aggro_stabs", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
     {"atonal_motif", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
     {"sparse_hits", VoiceRole::Melody, false, ArchetypeDensity::Calm},
+    {"polymeter_seq", VoiceRole::Melody, false, ArchetypeDensity::Neutral},
 }};
 
 enum class Shape { Sixteenth, Offbeat, Gallop, Rumble, LongTied };

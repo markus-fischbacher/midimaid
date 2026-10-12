@@ -57,6 +57,8 @@ public:
             ok = buildCallResponse();
         } else if (id == "pluck_seq") {
             buildPluck();
+        } else if (id == "polymeter_seq") {
+            buildPolymeter();
         } else if (id == "arp") {
             buildArp(false);
         } else if (id == "chord_arp") {
@@ -449,6 +451,52 @@ private:
                 const int step = chordRootStep(chordAt(start)) + degrees[index];
                 addNote(start, length, scaleStepToMidi(in_.scale, base, step), accents[index]);
             }
+        }
+    }
+
+    /// Polymeter sequence (STYLES.md 1.3, D-230): a cell of 3, 5, 6, 7, 9, 10 or 14 sixteenths (5 and 7 eighths are 10 and
+    /// 14) runs over the 4/4 bars without regard to the bar lines and starts again with every pass of the pattern
+    /// ("restart"). The hits of the cell are spread evenly (a Euclidean distribution, an internal rhythm source), 2 to 5
+    /// tones run through them in turn, so the tone cycle and the rhythm cycle have their own lengths as well.
+    void buildPolymeter() {
+        static constexpr std::array<int, 7> kCycles{3, 5, 6, 7, 9, 10, 14};
+        static constexpr std::array<uint32_t, 7> kCycleWeights{2, 3, 1, 3, 1, 1, 1};
+        const int cycle = kCycles[rng_.weightedIndex(kCycleWeights) % kCycles.size()];
+        const int tones = 2 + static_cast<int>(rng_.bounded(4));
+        const int hits = std::clamp(midCount() * cycle / kSteps + (energy_ >= 60 ? 1 : 0), 2, std::min(5, cycle - 1));
+        // hit positions inside the cell: evenly spread, the first one on the cell start
+        std::vector<bool> hit(static_cast<size_t>(cycle), false);
+        for (int i = 0; i < hits; ++i) {
+            hit[static_cast<size_t>(i * cycle / hits)] = true;
+        }
+        // the tones: scale steps relative to the chord root; the first is a chord tone, at least one is a passing tone
+        // (a second or fourth), the rest comes from the chord tones (STYLES.md 1.11)
+        static constexpr std::array<int, 3> kChordSteps{0, 2, 4};
+        static constexpr std::array<int, 3> kPassingSteps{1, 3, 5};
+        std::vector<int> degrees;
+        degrees.push_back(kChordSteps[rng_.bounded(3)]);
+        const int passing = std::max(1, tones * 3 / 10);
+        for (int i = 1; i < tones; ++i) {
+            const bool pass = i <= passing;
+            degrees.push_back(pass ? kPassingSteps[rng_.bounded(3)] : kChordSteps[rng_.bounded(3)]);
+        }
+        rng_.shuffle(degrees.begin() + 1, degrees.end());
+        const int base = baseFor(keyRoot());
+        const int steps = static_cast<int>(in_.pattern.lengthBars) * kSteps;
+        int counter = 0;
+        for (int s = 0; s < steps; ++s) {
+            const int position = s % cycle;
+            if (!hit[static_cast<size_t>(position)]) {
+                continue;
+            }
+            int gap = 1;
+            while (!hit[static_cast<size_t>((position + gap) % cycle)]) {
+                ++gap;
+            }
+            const uint32_t start = static_cast<uint32_t>(s) * kStepTicks;
+            const int step = chordRootStep(chordAt(start)) + degrees[static_cast<size_t>(counter) % degrees.size()];
+            addNote(start, gap == 1 ? 180u : 300u, scaleStepToMidi(in_.scale, base, step), position == 0);
+            ++counter;
         }
     }
 

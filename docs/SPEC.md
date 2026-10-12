@@ -1025,7 +1025,7 @@ Noten bei Position 0,5 / 1,5 / 2,5 / 3,5 PPQ, Länge 0,375 PPQ). Jedes Beispiel 
   ausstehende Patterns sowie die Rückgabe-Queue auf dem Message-Thread frei; der Audio-Thread läuft dann
   laut Host-Vertrag nicht mehr.
 
-### 6.4 [v1.1] Polymeter
+### 6.4 [v1.1] Polymeter (Neustart umgesetzt, D-230)
 - Phasenverhalten: Neustart am Pattern-Anfang ([Backlog]: frei laufend)
 - Frei laufend: Die Phase wird aus der absoluten PPQ-Position berechnet und nicht aus einem internen
   Zähler, damit das Ergebnis unabhängig vom Startpunkt der Wiedergabe immer identisch ist

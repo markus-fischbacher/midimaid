@@ -119,9 +119,10 @@ void collect(Stats& stats, const Pattern& p, const Track& track) {
 
 } // namespace
 
-const std::set<std::string> kLineArchetypes{"hypnotic_motif", "lead_phrase", "call_response", "pluck_seq"};
-// phrase-shaped lines have no bar-for-bar rhythm, all others repeat their cell
-const std::set<std::string> kNoCellArchetypes{"lead_phrase", "call_response", "sparse_hits"};
+const std::set<std::string> kLineArchetypes{"hypnotic_motif", "lead_phrase", "call_response", "pluck_seq", "polymeter_seq"};
+// phrase-shaped lines have no bar-for-bar rhythm, and neither has a polymeter cell (it runs across the bar lines);
+// all others repeat their cell
+const std::set<std::string> kNoCellArchetypes{"lead_phrase", "call_response", "sparse_hits", "polymeter_seq"};
 
 TEST_CASE("series: every archetype of every style keeps the rules on all pattern lengths", "[series]") {
     for (const SeriesCase& c : casesOf(kStyles)) {
