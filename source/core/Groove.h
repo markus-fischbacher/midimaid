@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/GrooveLibrary.h"
 #include "core/Pattern.h"
 #include "core/StyleProfile.h"
 
@@ -19,7 +20,10 @@ struct EffectiveGroove {
     bool controlActive = true;
 };
 
-EffectiveGroove effectiveGroove(const Pattern& pattern, const Track& track);
+///
+/// A groove template of the library (v1.1) with swing of its own does the same: the control is inactive and shows the
+/// swing of the template; a template without swing (Laid back, Pushed, Humanize) leaves the control working.
+EffectiveGroove effectiveGroove(const Pattern& pattern, const Track& track, const GrooveLibrary* library = nullptr);
 
 /// True if the UI should warn that the swung bass may flam with the straight kick: bass with a swing above 56 %.
 bool bassSwingMayFlam(VoiceRole role, float swing);

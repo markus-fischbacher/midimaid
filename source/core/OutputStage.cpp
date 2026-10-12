@@ -40,15 +40,19 @@ struct Work {
     bool dropped = false;
 };
 
-struct GrooveTemplate {
-    bool drumReference = false;
-    int32_t swingTicks = 0;              // straight: delay of every odd 16th
-    std::vector<int64_t> offsets;        // drum reference: per 16th of the reference
-    std::vector<int64_t> velocityFactor; // permille, per 16th of the reference
+struct GrooveTable {
+    bool table = false;                  // a drum reference or a template: offsets and factors per 16th
+    int32_t swingTicks = 0;              // straight, or a template without swing of its own: delay of every odd 16th
+    std::vector<int64_t> offsets;        // per 16th of the reference or template
+    std::vector<int64_t> velocityFactor; // permille, per 16th of the reference or template
+    std::string templateId;              // a template with `humanize`: the deviation of every note
+    int32_t humanizeTicks = 0;
+    int32_t humanizeVelocity = 0;
 };
 
-GrooveTemplate buildGroove(const Pattern& pattern, const GrooveSettings& groove, bool includeGroove) {
-    GrooveTemplate result;
+GrooveTable buildGroove(const Pattern& pattern, const GrooveSettings& groove, bool includeGroove,
+                        const GrooveLibrary* library) {
+    GrooveTable result;
     if (!includeGroove) {
         return result; // straight: no swing, no profile
     }
@@ -66,7 +70,7 @@ GrooveTemplate buildGroove(const Pattern& pattern, const GrooveSettings& groove,
             }
         }
         const int64_t mean = count > 0 ? std::max<int64_t>(sum / count, 1) : 0;
-        result.drumReference = true;
+        result.table = true;
         for (size_t i = 0; i < steps; ++i) {
             result.offsets.push_back(scaleByPermille(ref.timingOffsetTicks[i], amount));
             int64_t factor = 1000;
@@ -75,6 +79,18 @@ GrooveTemplate buildGroove(const Pattern& pattern, const GrooveSettings& groove,
             }
             result.velocityFactor.push_back(1000 + scaleByPermille(factor - 1000, amount));
         }
+    } else if (library != nullptr && !wantsReference && library->find(groove.templateId) != nullptr) {
+        const GrooveTemplate& source = *library->find(groove.templateId);
+        result.table = true;
+        for (size_t i = 0; i < source.steps(); ++i) {
+            result.offsets.push_back(scaleByPermille(source.offsetTicks[i], amount));
+            result.velocityFactor.push_back(1000 + scaleByPermille(source.velocityPermille[i] - 1000, amount));
+        }
+        // a template without swing of its own takes the swing control on top (a template with swing replaces it)
+        result.swingTicks = source.swing ? 0 : swingOffsetTicks(groove.swing, groove.amount);
+        result.templateId = source.id;
+        result.humanizeTicks = static_cast<int32_t>(scaleByPermille(source.humanizeTicks, amount));
+        result.humanizeVelocity = static_cast<int32_t>(scaleByPermille(source.humanizeVelocityPermille, amount));
     } else {
         result.swingTicks = swingOffsetTicks(groove.swing, groove.amount);
     }
@@ -83,21 +99,29 @@ GrooveTemplate buildGroove(const Pattern& pattern, const GrooveSettings& groove,
 
 /// Stage 2: timing offset and velocity profile. Only notes that start exactly on a 16th are touched (triplets and
 /// freely placed notes stay, SPEC 3.9). Starts are kept inside [0, pattern end) (D-104).
-void applyGroove(const Pattern& pattern, const Track& track, bool includeGroove, std::vector<Work>& notes,
-                 int64_t patternEnd) {
-    const GrooveTemplate groove = buildGroove(pattern, track.groove, includeGroove);
+void applyGroove(const Pattern& pattern, const Track& track, bool includeGroove, const GrooveLibrary* library,
+                 std::vector<Work>& notes, int64_t patternEnd) {
+    const GrooveTable groove = buildGroove(pattern, track.groove, includeGroove, library);
     for (Work& work : notes) {
         const Note& note = *work.source;
         int64_t offset = 0;
         int64_t factor = 1000;
         if (note.startTick % kStepTicks == 0) {
             const int64_t step = note.startTick / kStepTicks;
-            if (groove.drumReference && !groove.offsets.empty()) {
+            if (groove.table && !groove.offsets.empty()) {
                 const size_t index = static_cast<size_t>(step) % groove.offsets.size();
-                offset = groove.offsets[index];
+                offset = groove.offsets[index] + (step % 2 == 1 ? groove.swingTicks : 0);
                 factor = groove.velocityFactor[index];
             } else if (step % 2 == 1) {
                 offset = groove.swingTicks;
+            }
+            if (groove.humanizeTicks > 0) { // Humanize: a small, deterministic deviation of every note (SPEC 3.9)
+                offset += humanizeOffset(pattern.info.seed, note.id, groove.templateId, groove.humanizeTicks);
+            }
+            if (groove.humanizeVelocity > 0) {
+                factor = factor * (1000 + humanizeVelocity(pattern.info.seed, note.id, groove.templateId,
+                                                           groove.humanizeVelocity)) /
+                         1000;
             }
         }
         work.start = clampTo(static_cast<int64_t>(note.startTick) + offset, 0, patternEnd - 1);
@@ -254,7 +278,7 @@ OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& setting
         for (size_t i = 0; i < notes.size(); ++i) {
             notes[i].source = &track.notes[i];
         }
-        applyGroove(pattern, track, settings.includeGroove, notes, patternEnd); // stage 2
+        applyGroove(pattern, track, settings.includeGroove, settings.grooves, notes, patternEnd); // stage 2
         applySlides(track, notes, settings, patternEnd);                        // stage 3
         const bool ignoresKick = v < settings.ignoresKick.size() && settings.ignoresKick[v];
         if (track.role == VoiceRole::Bass && !ignoresKick) {

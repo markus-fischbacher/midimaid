@@ -50,6 +50,11 @@ file(GLOB MIDIMAID_STYLE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/resources
 juce_add_binary_data(mm_styles_data HEADER_NAME "MidiMaidStyles.h" NAMESPACE MidiMaidStyles SOURCES ${MIDIMAID_STYLE_FILES})
 set_target_properties(mm_styles_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# The groove templates, too (SPEC 3.9).
+file(GLOB MIDIMAID_GROOVE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/resources/grooves/*.json)
+juce_add_binary_data(mm_grooves_data HEADER_NAME "MidiMaidGrooves.h" NAMESPACE MidiMaidGrooves SOURCES ${MIDIMAID_GROOVE_FILES})
+set_target_properties(mm_grooves_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # The prompt templates, too (SPEC 7.4).
 file(GLOB MIDIMAID_PROMPT_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/resources/prompts/v1/*.md)
 juce_add_binary_data(mm_prompts_data HEADER_NAME "MidiMaidPrompts.h" NAMESPACE MidiMaidPrompts SOURCES ${MIDIMAID_PROMPT_FILES})
@@ -65,12 +70,12 @@ file(GLOB MIDIMAID_I18N_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/resources/
 juce_add_binary_data(mm_i18n_data HEADER_NAME "MidiMaidI18n.h" NAMESPACE MidiMaidI18n SOURCES ${MIDIMAID_I18N_FILES})
 set_target_properties(mm_i18n_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(mm_plugin_common STATIC ProcessorBase.cpp EmbeddedStyles.cpp EmbeddedPrompts.cpp AiBackend.cpp JuceHttpClient.cpp AppLog.cpp AiConnection.cpp AiText.cpp SettingsDialog.cpp EmbeddedTranslation.cpp GenerationService.cpp StateMigration.cpp AtomicFile.cpp LibraryStore.cpp
+add_library(mm_plugin_common STATIC ProcessorBase.cpp EmbeddedStyles.cpp EmbeddedGrooves.cpp EmbeddedPrompts.cpp AiBackend.cpp JuceHttpClient.cpp AppLog.cpp AiConnection.cpp AiText.cpp SettingsDialog.cpp EmbeddedTranslation.cpp GenerationService.cpp StateMigration.cpp AtomicFile.cpp LibraryStore.cpp
     MidiImportService.cpp ReferenceStore.cpp ReferencesDialog.cpp LibraryDialog.cpp HelpDialog.cpp GroupLink.cpp GroupText.cpp RollView.cpp EditableRoll.cpp EditorParts.cpp MidiMaidLookAndFeel.cpp PlaceholderEditor.cpp HostDetection.cpp MidiExporter.cpp GlobalSettingsStore.cpp)
 target_include_directories(mm_plugin_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(
     mm_plugin_common
-    PUBLIC mm_core mm_ai mm_platform mm_engine mm_host_capabilities mm_juce_config juce::juce_audio_processors mm_styles_data mm_prompts_data mm_config_data mm_i18n_data)
+    PUBLIC mm_core mm_ai mm_platform mm_engine mm_host_capabilities mm_juce_config juce::juce_audio_processors mm_styles_data mm_grooves_data mm_prompts_data mm_config_data mm_i18n_data)
 
 # Instrument variant: VST3, AU (aumu), Standalone.
 juce_add_plugin(

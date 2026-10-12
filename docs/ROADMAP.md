@@ -249,7 +249,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [ ] Polymeter-Sequenzen mit Neustart, Archetyp `polymeter_seq` (STYLES.md §1.3)
 - [ ] Turnaround (STYLES.md §1.12)
 - [ ] Chord-Memory (STYLES.md §1.10)
-- [ ] Groove-Vorlagen-Sammlung (SPEC §3.9)
+- [x] Groove-Vorlagen-Sammlung (SPEC §3.9, D-220; eigene Vorlagen speichern bleibt offen)
 - [x] Chromatik-Regler (SPEC §3.8, D-219)
 - [ ] Wiederholungsschutz mit Gewinner-Seed (SPEC §4.3)
 
