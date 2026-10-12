@@ -5,6 +5,7 @@
 #include "core/InstanceSettings.h"
 #include "core/ParameterRegister.h"
 #include "core/RollEdit.h"
+#include "core/Transpose.h"
 #include "core/SlotBank.h"
 #include "core/StyleLibrary.h"
 #include "core/UndoStack.h"
@@ -192,6 +193,18 @@ public:
     void editPattern(std::unique_ptr<mm::engine::OwnedPattern> pattern);
     /// Message thread: result for `slot` (1 to 16); it plays at the next grid point once that slot is selected.
     void submitResult(int slot, std::unique_ptr<mm::engine::OwnedPattern> pattern, double gridPpq = 4.0);
+    /// Live transposition (SPEC 3.16, v1.1). The effective transposition is the host parameter `transpose` plus the
+    /// offset the keyboard set, limited to +-12 (the keyboard offset is never written back into the parameter). The
+    /// keyboard acts on hub and solo instances only and is off during an offline render; it is not passed on.
+    /// `setTransposeSettings` is for the message thread, the audio thread reads it at each block.
+    void setTransposeSettings(const mm::core::TransposeSettings& settings);
+    mm::core::TransposeSettings transposeSettings() const;
+    /// The transposition this instance applies to its notes now (parameter + keyboard, 0 when the target is another
+    /// voice). Any thread.
+    int effectiveTranspose() const { return effectiveTranspose_.load(std::memory_order_relaxed); }
+    /// The offset the keyboard set (without the parameter). Any thread.
+    int keyboardTranspose() const { return keyboardTranspose_.load(std::memory_order_relaxed); }
+
     /// The Evolve layer (SPEC 6.7, v1.1), message thread, hub and solo only (a voice says "use the hub"). While it is on,
     /// a stage (a variation of the slot or of the stage before) is made every `EvolveSettings::everyPasses` passes
     /// of the pattern and plays from the pass after; the slot itself stays as it is. Without a playing transport
@@ -409,6 +422,9 @@ private:
     bool stepUndo(bool back);
     bool browseHistory(bool back, std::optional<size_t> slot);
     void writeEvents(juce::MidiBuffer& midi) const;
+    /// Audio thread: reads the keyboard events of the block (live transposition) and hands the transposition of this
+    /// block to the player.
+    void applyTransposition(const juce::MidiBuffer& input, const mm::engine::TransportInfo& transport, int numSamples);
     // Under `slotsLock_`: the playing slot (also fills slot, origin and revision of `view`), and one voice of a
     // pattern.
     const mm::core::Slot* playingSlotLocked(VoiceView& view) const;
@@ -456,6 +472,7 @@ private:
 
     juce::String name_;
     juce::AudioProcessorValueTreeState parameters_;
+    std::atomic<float>* transposeValue_ = nullptr;                       // the `transpose` parameter, raw
     std::atomic<float>* slotValue_ = nullptr;                            // raw values, read in the audio thread
     std::array<std::atomic<float>*, mm::core::kMaxVoices> muteValues_{}; // raw values, read in the audio thread
     std::atomic<int> outputVoice_{1};                                    // the voice this instance plays (1 = first)
@@ -519,6 +536,19 @@ private:
     std::atomic<uint32_t> frontRequests_{0};
 
     mm::engine::GroupSync groupSync_{mm::engine::processGroupChannel(), mm::engine::GroupChannel::kNone};
+    // Live transposition: the settings packed in one word (message thread writes, audio thread reads), the state of
+    // the keyboard (audio thread only) and what it came to (read by the UI).
+    std::atomic<uint32_t> transposeConfig_{0};
+    struct KeyboardTranspose {
+        int current = 0;    // offset in effect
+        bool pending = false;
+        int pendingValue = 0;
+        double pendingAtPpq = 0.0;
+        int heldKey = -1;   // the key that set the offset (momentary: its release resets it)
+    };
+    KeyboardTranspose keyboard_;
+    std::atomic<int> effectiveTranspose_{0};
+    std::atomic<int> keyboardTranspose_{0};
     std::atomic<int> slotMode_{static_cast<int>(mm::engine::SlotMode::Own)}; // read in the audio thread
     std::atomic<bool> silent_{false};    // a hub with output mode "none" plays nothing (audio thread reads)
     std::atomic<bool> voiceRole_{false}; // a voice also obeys the hub's mute switches (audio thread reads)

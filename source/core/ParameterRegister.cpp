@@ -18,7 +18,7 @@ constexpr std::array<ParamSpec, kParameterCount> kRegister{{
     {"mute_6", "Mute 6", Bool, 0, 1, 0, V1_0},
     {"mute_7", "Mute 7", Bool, 0, 1, 0, V1_0},
     {"mute_8", "Mute 8", Bool, 0, 1, 0, V1_0},
-    {"transpose", "Transpose", Int, -12, 12, 0, V1_1},
+    {"transpose", "Transpose", Int, -12, 12, 0, V1_1Live},
     {"generate", "Generate", Bool, 0, 1, 0, V1_1},
     {"variation_1", "Variation 1", Bool, 0, 1, 0, V1_1},
     {"variation_2", "Variation 2", Bool, 0, 1, 0, V1_1},

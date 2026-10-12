@@ -137,6 +137,8 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     AiConnection::instance().start(); // applies the provider of the settings once they are read
     generator_.setReportHandler([this](const GenerationJob&, const GenerationReport& report) { lastReport_ = report; });
     slotValue_ = parameters_.getRawParameterValue("slot");
+    transposeValue_ = parameters_.getRawParameterValue("transpose");
+    setTransposeSettings(mm::core::TransposeSettings{});
     for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
         muteValues_[static_cast<size_t>(voice - 1)] =
             parameters_.getRawParameterValue(mm::core::muteParameterId(voice));
@@ -1650,10 +1652,6 @@ void ProcessorBase::releaseResources() {}
 void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi) {
     juce::ScopedNoDenormals noDenormals;
     audio.clear();
-    midi.clear(); // incoming MIDI is not evaluated in v1.0 and not passed through
-    // The host owns the buffer, so it cannot be reserved in prepareToPlay (O-23, D-134). Reserving the bound once
-    // keeps addEvent from growing it; this allocates at most once per host buffer, in the first blocks.
-    midi.ensureSize(kMidiBufferBytes);
 
     mm::engine::TransportInfo transport;
     if (auto* host = getPlayHead()) {
@@ -1676,6 +1674,13 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
     }
 
     playhead_.publish(transport.hasPosition && transport.isPlaying, transport.ppq, transport.bpm, playheadSeconds());
+
+    // The keyboard of the live transposition is read from the incoming buffer; nothing of it is passed on (SPEC 3.17).
+    applyTransposition(midi, transport, audio.getNumSamples());
+    midi.clear();
+    // The host owns the buffer, so it cannot be reserved in prepareToPlay (O-23, D-134). Reserving the bound once
+    // keeps addEvent from growing it; this allocates at most once per host buffer, in the first blocks.
+    midi.ensureSize(kMidiBufferBytes);
 
     // Host parameters are read once per block and never written here (SPEC 3.13, 6.1a rule 1).
     const auto decision = groupSync_.beginBlock(
@@ -1714,6 +1719,108 @@ void ProcessorBase::processBlockBypassed(juce::AudioBuffer<float>& audio, juce::
     player_.releaseAll(events_, 0);
     player_.invalidateTransport();
     writeEvents(midi);
+}
+
+namespace {
+
+constexpr uint32_t packTranspose(const mm::core::TransposeSettings& t) {
+    return static_cast<uint32_t>(t.mode == mm::core::TransposeMode::Diatonic ? 1 : 0) |
+           (static_cast<uint32_t>(t.behavior == mm::core::TransposeBehavior::Momentary ? 1 : 0) << 1) |
+           (static_cast<uint32_t>(t.timing) << 2) | (static_cast<uint32_t>(t.target) << 4) |
+           (static_cast<uint32_t>(std::clamp(t.channel, 0, 16)) << 6) |
+           (static_cast<uint32_t>(t.referenceNote < 0 ? 0 : std::min(t.referenceNote, 127) + 1) << 11);
+}
+
+mm::core::TransposeSettings unpackTranspose(uint32_t word) {
+    mm::core::TransposeSettings t;
+    t.mode = (word & 1u) != 0 ? mm::core::TransposeMode::Diatonic : mm::core::TransposeMode::Chromatic;
+    t.behavior = ((word >> 1) & 1u) != 0 ? mm::core::TransposeBehavior::Momentary : mm::core::TransposeBehavior::Hold;
+    t.timing = static_cast<mm::core::TransposeTiming>(std::min<uint32_t>((word >> 2) & 3u, 2u));
+    t.target = static_cast<mm::core::TransposeTarget>(std::min<uint32_t>((word >> 4) & 3u, 2u));
+    t.channel = static_cast<int>((word >> 6) & 31u);
+    const auto reference = static_cast<int>((word >> 11) & 255u);
+    t.referenceNote = reference == 0 ? -1 : reference - 1;
+    return t;
+}
+
+} // namespace
+
+void ProcessorBase::setTransposeSettings(const mm::core::TransposeSettings& settings) {
+    transposeConfig_.store(packTranspose(settings), std::memory_order_release);
+}
+
+mm::core::TransposeSettings ProcessorBase::transposeSettings() const {
+    return unpackTranspose(transposeConfig_.load(std::memory_order_acquire));
+}
+
+void ProcessorBase::applyTransposition(const juce::MidiBuffer& input, const mm::engine::TransportInfo& transport,
+                                       int numSamples) {
+    using namespace mm::core;
+    const TransposeSettings config = unpackTranspose(transposeConfig_.load(std::memory_order_acquire));
+    const TransposeInfo info = player_.transposeInfo();
+    player_.setTransposeMode(config.mode);
+
+    // A voice follows the group (E2); a render that is not real-time plays the saved slots and the parameter only.
+    const bool keyboardAllowed = !voiceRole_.load(std::memory_order_acquire) && !isNonRealtime();
+    const bool running = transport.hasPosition && transport.isPlaying && transport.bpm > 0.0 && getSampleRate() > 0.0;
+    const double ppqPerSample = running ? transport.bpm / 60.0 / getSampleRate() : 0.0;
+    const double blockEnd = transport.ppq + numSamples * ppqPerSample;
+
+    const auto schedule = [&](int value, int sampleOffset) {
+        if (config.timing == TransposeTiming::NextNote || !running) {
+            keyboard_.current = value;
+            keyboard_.pending = false;
+            return;
+        }
+        const double grid = config.timing == TransposeTiming::NextBeat ? 1.0 : 4.0;
+        const double at = transport.ppq + sampleOffset * ppqPerSample;
+        keyboard_.pending = true;
+        keyboard_.pendingValue = value;
+        keyboard_.pendingAtPpq = std::ceil(at / grid - 1e-9) * grid;
+    };
+
+    if (keyboardAllowed) {
+        for (const auto metadata : input) {
+            const auto message = metadata.getMessage();
+            if (config.channel != 0 && message.getChannel() != config.channel) {
+                continue;
+            }
+            const bool on = message.isNoteOn();
+            const bool off = message.isNoteOff() || (message.isNoteOn() && message.getVelocity() == 0);
+            if (on && message.getVelocity() > 0) {
+                const int key = message.getNoteNumber();
+                keyboard_.heldKey = key;
+                schedule(offsetForKey(key, referenceNoteFor(config, info.root), config.mode, info),
+                         metadata.samplePosition);
+            } else if (off && config.behavior == TransposeBehavior::Momentary &&
+                       message.getNoteNumber() == keyboard_.heldKey) {
+                keyboard_.heldKey = -1;
+                schedule(0, metadata.samplePosition);
+            }
+        }
+    } else if (keyboard_.current != 0 || keyboard_.pending) {
+        keyboard_ = KeyboardTranspose{}; // an offline render or a voice: nothing of the keyboard stays
+    }
+
+    // A planned change whose point lies behind the block (or the transport stands) is in effect now.
+    if (keyboard_.pending && (!running || keyboard_.pendingAtPpq <= transport.ppq + 1e-9)) {
+        keyboard_.current = keyboard_.pendingValue;
+        keyboard_.pending = false;
+    }
+
+    const bool targeted = !voiceRole_.load(std::memory_order_acquire) && targetsVoice(config.target, info);
+    const int parameter = static_cast<int>(std::lround(transposeValue_->load()));
+    const auto effective = [&](int keyboard) { return targeted ? clampTranspose(parameter + keyboard) : 0; };
+    player_.setTranspose(effective(keyboard_.current));
+    int shown = effective(keyboard_.current);
+    if (keyboard_.pending && keyboard_.pendingAtPpq < blockEnd) {
+        player_.setTransposeAt(effective(keyboard_.pendingValue), keyboard_.pendingAtPpq);
+        keyboard_.current = keyboard_.pendingValue;
+        keyboard_.pending = false;
+        shown = effective(keyboard_.current);
+    }
+    effectiveTranspose_.store(shown, std::memory_order_relaxed);
+    keyboardTranspose_.store(keyboard_.current, std::memory_order_relaxed);
 }
 
 void ProcessorBase::writeEvents(juce::MidiBuffer& midi) const {

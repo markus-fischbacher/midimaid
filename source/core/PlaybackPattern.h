@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Transpose.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -22,6 +24,7 @@ struct PatternView {
     const PatternNote* notes = nullptr;
     size_t count = 0;
     uint32_t lengthTicks = 0;
+    TransposeInfo transpose{}; ///< what the live transposition needs to know about the voice (SPEC 3.16)
 };
 
 /// Hard-coded Phase 0 pattern: one bar of offbeat bass (steps 2, 6, 10, 14), MIDI 45 (A1 with C3 = 60), accent on the last offbeat.

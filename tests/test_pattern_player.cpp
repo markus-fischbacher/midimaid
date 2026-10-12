@@ -1407,3 +1407,193 @@ TEST_CASE("a slot change still happens while muted and plays after un-muting", "
     }
     CHECK(ofPitch(sim.events(), 50, true).size() >= 1); // the new pattern plays
 }
+
+// --- live transposition (SPEC 3.16) ---------------------------------------------------------------------------
+
+namespace {
+
+// A one-bar bass: four quarter notes on 36, 38, 40 and 43 (a minor, range 28 to 52)
+const PatternNote kTransposeNotes[] = {
+    {0, 480, 1, 36, 100}, {960, 480, 1, 38, 100}, {1920, 480, 1, 40, 100}, {2880, 480, 1, 43, 100}};
+
+PatternView transposePattern() {
+    PatternView view = viewOf(kTransposeNotes, 4);
+    view.transpose.root = 9;
+    view.transpose.scaleMask = 0b10110101101; // natural minor above the root: 0 2 3 5 7 8 10
+    view.transpose.rangeLow = 28;
+    view.transpose.rangeHigh = 52;
+    view.transpose.lowest = 36;
+    view.transpose.highest = 43;
+    return view;
+}
+
+std::vector<int> noteOns(const std::vector<Event>& events, double fromPpq, double toPpq) {
+    std::vector<int> pitches;
+    for (const auto& e : events) {
+        if (e.noteOn && e.ppq >= fromPpq - 1e-6 && e.ppq < toPpq - 1e-6) {
+            pitches.push_back(e.pitch);
+        }
+    }
+    return pitches;
+}
+
+} // namespace
+
+TEST_CASE("transposition: the notes that start from now on are shifted, those sounding keep their pitch", "[engine][transpose]") {
+    Simulation sim(transposePattern());
+    sim.player().setTranspose(0);
+    while (sim.clock() < samplesAtPpq(2.1)) { // 36 and 38 played, 40 is sounding from 2.0
+        sim.block(240);
+    }
+    sim.player().setTranspose(5);
+    while (sim.clock() < samplesAtPpq(8.0)) {
+        sim.block(240);
+    }
+    // the 40 that was sounding ends as 40 (a note-off for another pitch would have been rejected by the simulation)
+    CHECK(noteOns(sim.events(), 0.0, 4.0) == std::vector<int>{36, 38, 40, 48});
+    CHECK(noteOns(sim.events(), 4.0, 8.0) == std::vector<int>{41, 43, 45, 48});
+    CHECK(sim.soundingCount() <= 1);
+    // negative and zero
+    sim.player().setTranspose(-3);
+    while (sim.clock() < samplesAtPpq(12.0)) {
+        sim.block(240);
+    }
+    CHECK(noteOns(sim.events(), 8.0, 12.0) == std::vector<int>{33, 35, 37, 40});
+    sim.player().setTranspose(0);
+    while (sim.clock() < samplesAtPpq(16.0)) {
+        sim.block(240);
+    }
+    CHECK(noteOns(sim.events(), 12.0, 16.0) == std::vector<int>{36, 38, 40, 43});
+}
+
+TEST_CASE("transposition: the offset is limited to an octave either way", "[engine][transpose]") {
+    Simulation sim(transposePattern());
+    sim.player().setTranspose(40);
+    CHECK(sim.player().transposeOffset() == 12);
+    sim.player().setTranspose(-40);
+    CHECK(sim.player().transposeOffset() == -12);
+}
+
+TEST_CASE("transposition: a planned change takes the sample where it is planned, inside a block", "[engine][transpose]") {
+    Simulation sim(transposePattern());
+    sim.block(240); // the start: a planned change would be taken at once there
+    sim.player().setTranspose(0);
+    sim.player().setTransposeAt(7, 2.0); // exactly at the third note
+    while (sim.clock() < samplesAtPpq(4.0)) {
+        sim.block(256);
+    }
+    // the third note starts at 2.0: it is already shifted; the two before are not
+    CHECK(noteOns(sim.events(), 0.0, 4.0) == std::vector<int>{36, 38, 47, 50});
+    // and the note-on of the third note is at the sample of 2.0, not a block later
+    bool found = false;
+    for (const auto& e : sim.events()) {
+        if (e.noteOn && e.pitch == 47) {
+            CHECK(std::llabs(e.sample - samplesAtPpq(2.0)) <= 1);
+            found = true;
+        }
+    }
+    CHECK(found);
+}
+
+TEST_CASE("transposition: a planned change whose point is behind the block applies at once, a later call replaces it",
+          "[engine][transpose]") {
+    Simulation sim(transposePattern());
+    sim.block(240);
+    sim.player().setTransposeAt(2, 0.01); // behind the next block
+    sim.block(240);
+    CHECK(sim.player().transposeOffset() == 2);
+    sim.player().setTransposeAt(4, 100.0);
+    sim.player().setTransposeAt(5, 200.0); // replaces the one before
+    sim.player().setTranspose(1);          // an immediate change drops what was planned
+    for (int i = 0; i < 100; ++i) {
+        sim.block(240);
+    }
+    CHECK(sim.player().transposeOffset() == 1);
+}
+
+TEST_CASE("transposition: a start or a jump takes a planned change at once", "[engine][transpose]") {
+    Simulation sim(transposePattern());
+    sim.block(240);
+    sim.player().setTransposeAt(6, 50.0);
+    sim.blockAt(20.0, 240); // a jump
+    CHECK(sim.player().transposeOffset() == 6);
+}
+
+TEST_CASE("transposition: the voice moves an octave when it would leave its range", "[engine][transpose]") {
+    PatternView view = transposePattern();
+    view.transpose.rangeHigh = 45; // +5 would put 43 at 48
+    Simulation sim(view);
+    sim.player().setTranspose(5);
+    while (sim.clock() < samplesAtPpq(4.0)) {
+        sim.block(240);
+    }
+    // all notes by 5 - 12 = -7 (28 is the floor: 36 - 7 = 29 and so on)
+    CHECK(noteOns(sim.events(), 0.0, 4.0) == std::vector<int>{29, 31, 33, 36});
+}
+
+TEST_CASE("transposition: the diatonic mode moves by degrees of the key", "[engine][transpose]") {
+    Simulation sim(transposePattern());
+    sim.player().setTransposeMode(mm::core::TransposeMode::Diatonic);
+    sim.player().setTranspose(2); // two degrees: A -> C ... 36 (C) -> E (40), 38 (D) -> F (41), 40 (E) -> G (43), 43 (G) -> B (47)
+    while (sim.clock() < samplesAtPpq(4.0)) {
+        sim.block(240);
+    }
+    CHECK(noteOns(sim.events(), 0.0, 4.0) == std::vector<int>{40, 41, 43, 47});
+}
+
+TEST_CASE("transposition: the octave shift of the voice is worked out again for the pattern that plays", "[engine][transpose]") {
+    // pattern B spans 40 to 52 in a range of 28 to 52: +5 puts its top at 57, so the whole voice goes down an octave
+    // (33 and 45); with the shift of pattern A (none) the top would be octaved alone and the contour would be lost
+    static const PatternNote kWide[] = {{0, 480, 1, 40, 100}, {960, 480, 1, 52, 100}};
+    PatternView wide = viewOf(kWide, 2);
+    wide.transpose.rangeLow = 28;
+    wide.transpose.rangeHigh = 52;
+    wide.transpose.lowest = 40;
+    wide.transpose.highest = 52;
+    Simulation sim(transposePattern());
+    sim.player().setTranspose(5);
+    sim.player().requestSwitch(wide, 4.0);
+    while (sim.clock() < samplesAtPpq(8.0)) {
+        sim.block(240);
+    }
+    CHECK(noteOns(sim.events(), 4.0, 8.0) == std::vector<int>{33, 45});
+}
+
+TEST_CASE("transposition: the other pattern of a switch brings its own voice", "[engine][transpose]") {
+    // the info of the pattern that plays counts: after the switch the range of the new pattern
+    static const PatternNote kHigh[] = {{0, 480, 1, 50, 100}};
+    PatternView high = viewOf(kHigh, 1);
+    high.transpose.rangeLow = 40;
+    high.transpose.rangeHigh = 52;
+    high.transpose.lowest = 50;
+    high.transpose.highest = 50;
+    Simulation sim(transposePattern());
+    sim.player().setTranspose(5);
+    sim.player().requestSwitch(high, 4.0);
+    while (sim.clock() < samplesAtPpq(8.0)) {
+        sim.block(240);
+    }
+    CHECK(noteOns(sim.events(), 4.0, 8.0) == std::vector<int>{43}); // 55 > 52: the whole voice (one note) down an octave
+}
+
+TEST_CASE("transposition does not allocate while processing", "[engine][transpose][realtime]") {
+    PatternPlayer player(transposePattern());
+    MidiEventList out;
+    TransportInfo info;
+    info.hasPosition = true;
+    info.isPlaying = true;
+    info.bpm = 120.0;
+    player.process(info, 128, kSampleRate, out);
+    info.ppq += 128 * 120.0 / 60.0 / kSampleRate;
+    gAllocations = 0;
+    tCounting = true;
+    for (int i = 0; i < 400; ++i) {
+        player.setTranspose((i % 25) - 12);
+        player.setTransposeAt((i % 7) - 3, info.ppq + 0.01);
+        player.setTransposeMode((i % 2) != 0 ? mm::core::TransposeMode::Diatonic : mm::core::TransposeMode::Chromatic);
+        player.process(info, 128, kSampleRate, out);
+        info.ppq += 128 * 120.0 / 60.0 / kSampleRate;
+    }
+    tCounting = false;
+    CHECK(gAllocations.load() == 0);
+}

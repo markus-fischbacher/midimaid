@@ -97,6 +97,18 @@ public:
     void setMuted(bool muted) { muted_ = muted; }
     bool muted() const { return muted_; }
 
+    /// Live transposition (SPEC 3.16, v1.1), read by the audio thread before `process`: the notes that start from now
+    /// on are transposed by `offset` (semitones, or scale degrees in the diatonic mode, limited to +-12) with the
+    /// octave rule of the voice; notes that are sounding keep their pitch and end with it. `setTransposeAt` does it from
+    /// the PPQ position on (inside the block it cuts the block there, sample-accurate; a position before the block is
+    /// taken at once); a later call replaces a waiting one.
+    void setTransposeMode(core::TransposeMode mode);
+    void setTranspose(int offset);
+    void setTransposeAt(int offset, double atPpq);
+    int transposeOffset() const { return transposeOffset_; }
+    /// The key, range and extremes of the voice that plays now.
+    const core::TransposeInfo& transposeInfo() const { return pattern_.transpose; }
+
     /// Puts `next` into the selected slot like a result from the handover (no owner): it plays at the next grid
     /// point (SPEC 6.1a, D-131). The point is the first multiple of `gridPpq` (rounded up to a bar line, v1.0
     /// restarts on bars only) not before the start of the block that first sees the change; it is never in the
@@ -123,7 +135,8 @@ private:
         double endPpq = 0.0;
         uint32_t startedInCall = 0;
         int32_t startOffset = 0;
-        uint32_t startTick = 0; // position of the note in its pattern, to recognise it after an edit
+        uint8_t patternPitch = 0; // the pitch in the pattern (the table is indexed by the pitch that was sent)
+        uint32_t startTick = 0;   // position of the note in its pattern, to recognise it after an edit
         uint32_t lengthTicks = 0;
     };
 
@@ -133,6 +146,9 @@ private:
     void processSegment(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
                         MidiEventList& out);
     /// Plays [scanFrom, to), cutting at the pending switch point when it lies inside.
+    void playRangeSwitch(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
+                         MidiEventList& out);
+    /// The same, also cutting at a planned transposition.
     void playRange(double scanFrom, double origin, double to, int sampleBase, int numSamples, double ppqPerSample,
                    MidiEventList& out);
     void pollHandover(MidiEventList& out);
@@ -176,6 +192,17 @@ private:
     double slotGridPpq_ = 4.0;
     PatternHandover* handover_ = nullptr;
     SwitchTiming timing_;
+    int mapPitch(int pitch) const;
+    void refreshTranspose();
+    struct PendingTranspose {
+        bool has = false;
+        int offset = 0;
+        double atPpq = 0.0;
+    };
+    int transposeOffset_ = 0;
+    core::TransposeMode transposeMode_ = core::TransposeMode::Chromatic;
+    int voiceShift_ = 0; // octave shift of the whole voice for the current offset and pattern
+    PendingTranspose pendingTranspose_;
     std::array<std::array<ActiveNote, 128>, 16> active_{};
     size_t activeCount_ = 0;
     bool playing_ = false;
