@@ -29,6 +29,7 @@ namespace mm::plugin {
 namespace {
 
 constexpr int kReturnCollectIntervalMs = 250;
+constexpr unsigned kTransposeThruBit = 20; ///< `midiThru` in the packed transposition settings (see `packTranspose`)
 constexpr int kEvolveTickMs = 40; ///< how often the Evolve layer looks at the playhead
 /// Upper bound of the bytes one block can write: the engine's event capacity, with room for the event header.
 constexpr size_t kMidiBufferBytes = mm::engine::MidiEventList::kCapacity * 12;
@@ -150,6 +151,8 @@ ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     groupLink_ = GroupLink::create(*this);
     groupLink_->setRole(settings_.role, settings_.outputVoice);
     applyStartKey();
+    syncTransposeSettings();
+    transposeSyncTimer_ = std::make_unique<ParkTimer>([this] { syncTransposeSettings(); });
 }
 
 void ProcessorBase::applyStartKey() {
@@ -182,6 +185,7 @@ void ProcessorBase::applyStartKey() {
 }
 
 ProcessorBase::~ProcessorBase() {
+    transposeSyncTimer_.reset();
     parameters_.removeParameterListener("evolve", evolveListener_.get());
     parameters_.removeParameterListener("evolve_keep", evolveListener_.get());
     evolveTimer_.reset();
@@ -1677,7 +1681,9 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
 
     // The keyboard of the live transposition is read from the incoming buffer; nothing of it is passed on (SPEC 3.17).
     applyTransposition(midi, transport, audio.getNumSamples());
-    midi.clear();
+    if (((transposeConfig_.load(std::memory_order_acquire) >> kTransposeThruBit) & 1u) == 0) {
+        midi.clear(); // "MIDI Thru" passes the incoming MIDI on; without it nothing of it goes out (SPEC 3.17)
+    }
     // The host owns the buffer, so it cannot be reserved in prepareToPlay (O-23, D-134). Reserving the bound once
     // keeps addEvent from growing it; this allocates at most once per host buffer, in the first blocks.
     midi.ensureSize(kMidiBufferBytes);
@@ -1729,7 +1735,7 @@ constexpr uint32_t packTranspose(const mm::core::TransposeSettings& t) {
            (static_cast<uint32_t>(t.timing) << 2) | (static_cast<uint32_t>(t.target) << 4) |
            (static_cast<uint32_t>(std::clamp(t.channel, 0, 16)) << 6) |
            (static_cast<uint32_t>(t.referenceNote < 0 ? 0 : std::min(t.referenceNote, 127) + 1) << 11) |
-           (static_cast<uint32_t>(t.exportTransposed ? 0 : 1) << 19);
+           (static_cast<uint32_t>(t.exportTransposed ? 0 : 1) << 19) | (static_cast<uint32_t>(t.midiThru ? 1 : 0) << kTransposeThruBit);
 }
 
 mm::core::TransposeSettings unpackTranspose(uint32_t word) {
@@ -1742,13 +1748,23 @@ mm::core::TransposeSettings unpackTranspose(uint32_t word) {
     const auto reference = static_cast<int>((word >> 11) & 255u);
     t.referenceNote = reference == 0 ? -1 : reference - 1;
     t.exportTransposed = ((word >> 19) & 1u) == 0;
+    t.midiThru = ((word >> kTransposeThruBit) & 1u) != 0;
     return t;
 }
 
 } // namespace
 
 void ProcessorBase::setTransposeSettings(const mm::core::TransposeSettings& settings) {
-    transposeConfig_.store(packTranspose(settings), std::memory_order_release);
+    transposeConfig_.store(packTranspose(mm::core::sanitize(settings)), std::memory_order_release);
+}
+
+void ProcessorBase::syncTransposeSettings() {
+    auto& store = globalSettings();
+    if (!store.enabled() || !store.ready() || store.revision() == transposeRevision_) {
+        return; // a store without file leaves what was set directly (the tests do that)
+    }
+    transposeRevision_ = store.revision();
+    setTransposeSettings(store.get().transpose);
 }
 
 mm::core::TransposeSettings ProcessorBase::transposeSettings() const {

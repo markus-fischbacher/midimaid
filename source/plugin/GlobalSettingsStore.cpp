@@ -46,7 +46,7 @@ GlobalSettingsStore::~GlobalSettingsStore() {
 }
 
 bool GlobalSettingsStore::Pending::any() const {
-    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || ai;
+    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || transpose || ai;
 }
 
 void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) const {
@@ -68,6 +68,35 @@ void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) con
     if (snapChromatic) {
         settings.snapChromatic = *snapChromatic;
     }
+    if (transpose) {
+        const auto& was = transpose->before;
+        const auto& now = transpose->now;
+        auto& out = settings.transpose;
+        if (was.mode != now.mode) {
+            out.mode = now.mode;
+        }
+        if (was.behavior != now.behavior) {
+            out.behavior = now.behavior;
+        }
+        if (was.timing != now.timing) {
+            out.timing = now.timing;
+        }
+        if (was.target != now.target) {
+            out.target = now.target;
+        }
+        if (was.referenceNote != now.referenceNote) {
+            out.referenceNote = now.referenceNote;
+        }
+        if (was.channel != now.channel) {
+            out.channel = now.channel;
+        }
+        if (was.exportTransposed != now.exportTransposed) {
+            out.exportTransposed = now.exportTransposed;
+        }
+        if (was.midiThru != now.midiThru) {
+            out.midiThru = now.midiThru;
+        }
+    }
     if (ai) {
         settings.ai = *ai;
     }
@@ -85,6 +114,7 @@ void GlobalSettingsStore::read() {
         pending_.apply(loaded);
         settings_ = mm::core::sanitize(loaded);
         pending_ = {};
+        ++revision_;
         ready_ = true;
     }
     if (changedMeanwhile) {
@@ -111,6 +141,7 @@ void GlobalSettingsStore::update(const std::function<void(mm::core::GlobalSettin
             return;
         }
         settings_ = next;
+        ++revision_;
         if (!ready_) {
             // Not read yet: remember what changed; the file is written once it was read.
             const auto note = [](auto& slot, const auto& was, const auto& now) {
@@ -124,6 +155,10 @@ void GlobalSettingsStore::update(const std::function<void(mm::core::GlobalSettin
             note(pending_.variationStrength, before.variationStrength, next.variationStrength);
             note(pending_.grid, before.grid, next.grid);
             note(pending_.snapChromatic, before.snapChromatic, next.snapChromatic);
+            if (!(before.transpose == next.transpose)) {
+                pending_.transpose = Pending::TransposeChange{
+                    pending_.transpose ? pending_.transpose->before : before.transpose, next.transpose};
+            }
             note(pending_.ai, before.ai, next.ai);
             return;
         }

@@ -152,6 +152,7 @@ GlobalSettings sanitize(GlobalSettings settings) {
         settings.grid.division = defaults.grid.division;
     }
     settings.drumMap = drumMappingToText(drumMappingFromText(settings.drumMap)); // only what can be read stays
+    settings.transpose = sanitize(settings.transpose);
     settings.ai = sanitize(std::move(settings.ai));
     return settings;
 }
@@ -198,6 +199,29 @@ GlobalSettings parseGlobalSettings(std::string_view text) {
     if (const auto it = root.find("drumMap"); it != root.end() && it->is_string()) {
         settings.drumMap = it->get<std::string>();
     }
+    if (const auto it = root.find("transpose"); it != root.end() && it->is_object()) {
+        const auto text = [&](const char* key) -> std::string {
+            const auto field = it->find(key);
+            return field != it->end() && field->is_string() ? field->get<std::string>() : std::string();
+        };
+        TransposeSettings& t = settings.transpose;
+        t.mode = parseTransposeMode(text("mode").c_str());
+        t.behavior = parseTransposeBehavior(text("behavior").c_str());
+        t.timing = parseTransposeTiming(text("timing").c_str());
+        t.target = parseTransposeTarget(text("target").c_str());
+        if (const auto field = it->find("referenceNote"); field != it->end() && field->is_number_integer()) {
+            t.referenceNote = static_cast<int>(std::clamp<long long>(field->get<long long>(), -1, 127));
+        }
+        if (const auto field = it->find("channel"); field != it->end() && field->is_number_integer()) {
+            t.channel = static_cast<int>(std::clamp<long long>(field->get<long long>(), 0, 16));
+        }
+        if (const auto field = it->find("export"); field != it->end() && field->is_boolean()) {
+            t.exportTransposed = field->get<bool>();
+        }
+        if (const auto field = it->find("midiThru"); field != it->end() && field->is_boolean()) {
+            t.midiThru = field->get<bool>();
+        }
+    }
     if (const auto it = root.find("ai"); it != root.end()) {
         settings.ai = parseAi(*it);
     }
@@ -216,6 +240,14 @@ std::string toJson(const GlobalSettings& input) {
     root["gridTriplet"] = settings.grid.triplet;
     root["snapChromatic"] = settings.snapChromatic;
     root["drumMap"] = settings.drumMap;
+    root["transpose"] = {{"mode", toString(settings.transpose.mode)},
+                         {"behavior", toString(settings.transpose.behavior)},
+                         {"timing", toString(settings.transpose.timing)},
+                         {"target", toString(settings.transpose.target)},
+                         {"referenceNote", settings.transpose.referenceNote},
+                         {"channel", settings.transpose.channel},
+                         {"export", settings.transpose.exportTransposed},
+                         {"midiThru", settings.transpose.midiThru}};
     root["ai"] = aiToJson(settings.ai);
     return root.dump(2) + "\n";
 }

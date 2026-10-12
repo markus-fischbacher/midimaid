@@ -314,6 +314,83 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     };
     addAndMakeVisible(logPromptsToggle_);
 
+    // The keyboard transposition (SPEC 3.16, 8.4): saved at once like the rest, taken by every instance from the file.
+    makeLabel(transposeLabel_, keys::kLabelTranspose);
+    transposeHint_.setText(tr(keys::kTransposeHint), juce::dontSendNotification);
+    transposeHint_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
+    transposeHint_.setComponentID("transposeHint");
+    addAndMakeVisible(transposeHint_);
+    const auto fill = [&](juce::ComboBox& box, const char* id, std::initializer_list<std::string_view> items) {
+        box.setComponentID(id);
+        int itemId = 1;
+        for (const auto item : items) {
+            box.addItem(tr(item), itemId++);
+        }
+        addAndMakeVisible(box);
+    };
+    fill(transposeModeBox_, "transposeMode", {keys::kTransposeModeChromatic, keys::kTransposeModeDiatonic});
+    fill(transposeBehaviorBox_, "transposeBehavior", {keys::kTransposeBehaviorHold, keys::kTransposeBehaviorMomentary});
+    fill(transposeTimingBox_, "transposeTiming",
+         {keys::kTransposeTimingNote, keys::kTransposeTimingBeat, keys::kTransposeTimingBar});
+    fill(transposeTargetBox_, "transposeTarget",
+         {keys::kTransposeTargetBoth, keys::kTransposeTargetBass, keys::kTransposeTargetMelody});
+    fill(transposeReferenceBox_, "transposeReference", {keys::kTransposeReferenceAuto});
+    {
+        // Item id = note + 2 (id 1 is "automatic"); the names follow the convention of Live and Logic (C3 = 60).
+        constexpr const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        for (int note = 24; note <= 96; ++note) {
+            transposeReferenceBox_.addItem(
+                tr(keys::kTransposeReferenceNote,
+                   {{"note", std::string(names[note % 12]) + std::to_string(note / 12 - 2) + " (" + std::to_string(note) + ")"}}),
+                note + 2);
+        }
+    }
+    fill(transposeChannelBox_, "transposeChannel", {keys::kTransposeChannelAll});
+    for (int channel = 1; channel <= 16; ++channel) {
+        transposeChannelBox_.addItem(tr(keys::kTransposeChannelN, {{"n", std::to_string(channel)}}), channel + 1);
+    }
+    transposeModeBox_.onChange = [this] {
+        const auto mode = transposeModeBox_.getSelectedId() == 2 ? mm::core::TransposeMode::Diatonic
+                                                                  : mm::core::TransposeMode::Chromatic;
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.mode = mode; });
+    };
+    transposeBehaviorBox_.onChange = [this] {
+        const auto behavior = transposeBehaviorBox_.getSelectedId() == 2 ? mm::core::TransposeBehavior::Momentary
+                                                                          : mm::core::TransposeBehavior::Hold;
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.behavior = behavior; });
+    };
+    transposeTimingBox_.onChange = [this] {
+        const auto timing = static_cast<mm::core::TransposeTiming>(std::clamp(transposeTimingBox_.getSelectedId() - 1, 0, 2));
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.timing = timing; });
+    };
+    transposeTargetBox_.onChange = [this] {
+        const auto target = static_cast<mm::core::TransposeTarget>(std::clamp(transposeTargetBox_.getSelectedId() - 1, 0, 2));
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.target = target; });
+    };
+    transposeReferenceBox_.onChange = [this] {
+        const int id = transposeReferenceBox_.getSelectedId();
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.referenceNote = id <= 1 ? -1 : id - 2; });
+    };
+    transposeChannelBox_.onChange = [this] {
+        const int id = transposeChannelBox_.getSelectedId();
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.channel = std::max(id - 1, 0); });
+    };
+    transposeExportToggle_.setComponentID("transposeExport");
+    transposeExportToggle_.setButtonText(tr(keys::kToggleTransposeExport));
+    transposeExportToggle_.onClick = [this] {
+        const bool on = transposeExportToggle_.getToggleState();
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.exportTransposed = on; });
+    };
+    addAndMakeVisible(transposeExportToggle_);
+    midiThruToggle_.setComponentID("midiThru");
+    midiThruToggle_.setButtonText(tr(keys::kToggleMidiThru));
+    midiThruToggle_.onClick = [this] {
+        const bool on = midiThruToggle_.getToggleState();
+        changeTranspose([&](mm::core::TransposeSettings& t) { t.midiThru = on; });
+    };
+    addAndMakeVisible(midiThruToggle_);
+    updateTranspose();
+
     logHint_.setText(tr(keys::kLogHint), juce::dontSendNotification);
     logHint_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
     addAndMakeVisible(logHint_);
@@ -342,6 +419,11 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {nullptr, {&consentList_}, {}, kHint, true},
              {&logLabel_, {&logPromptsToggle_}, {}, kControl},
              {nullptr, {&logHint_}, {}, kHint, true},
+             {&transposeLabel_, {&transposeModeBox_, &transposeBehaviorBox_}, {250}, kControl, false, true},
+             {nullptr, {&transposeTimingBox_, &transposeTargetBox_}, {250}, kControl, true},
+             {nullptr, {&transposeReferenceBox_, &transposeChannelBox_}, {250}, kControl, true},
+             {nullptr, {&transposeExportToggle_, &midiThruToggle_}, {250}, kControl, true},
+             {nullptr, {&transposeHint_}, {}, kHint, true},
              {&drumMapLabel_, {&drumMapEditor_}, {}, kControl, false, true},
              {nullptr, {&drumMapHint_}, {}, 40, true},
              {nullptr, {&closeButton_}, {}, kControl, false, true}};
@@ -449,6 +531,28 @@ void SettingsDialog::updateKeyStatus() {
         text = tr(current->keyRequired ? keys::kKeyMissing : keys::kKeyNotRequired);
     }
     keyStatus_.setText(text, juce::dontSendNotification);
+}
+
+void SettingsDialog::changeTranspose(const std::function<void(mm::core::TransposeSettings&)>& change) {
+    if (updating_) {
+        return;
+    }
+    settings_().update([&](mm::core::GlobalSettings& settings) { change(settings.transpose); });
+}
+
+void SettingsDialog::updateTranspose() {
+    updating_ = true;
+    const auto t = settings_().get().transpose;
+    transposeModeBox_.setSelectedId(t.mode == mm::core::TransposeMode::Diatonic ? 2 : 1, juce::dontSendNotification);
+    transposeBehaviorBox_.setSelectedId(t.behavior == mm::core::TransposeBehavior::Momentary ? 2 : 1,
+                                        juce::dontSendNotification);
+    transposeTimingBox_.setSelectedId(static_cast<int>(t.timing) + 1, juce::dontSendNotification);
+    transposeTargetBox_.setSelectedId(static_cast<int>(t.target) + 1, juce::dontSendNotification);
+    transposeReferenceBox_.setSelectedId(t.referenceNote < 0 ? 1 : t.referenceNote + 2, juce::dontSendNotification);
+    transposeChannelBox_.setSelectedId(t.channel + 1, juce::dontSendNotification);
+    transposeExportToggle_.setToggleState(t.exportTransposed, juce::dontSendNotification);
+    midiThruToggle_.setToggleState(t.midiThru, juce::dontSendNotification);
+    updating_ = false;
 }
 
 void SettingsDialog::updateConsent() {

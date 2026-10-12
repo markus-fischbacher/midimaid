@@ -581,3 +581,104 @@ TEST_CASE("the dialog sits on one grid: wide key field, small buttons, one contr
         }
     }
 }
+
+// --- the keyboard transposition (SPEC 3.16, 8.4) ----------------------------------------------------------------
+
+namespace {
+
+void choose(juce::ComboBox& box, int id) {
+    box.setSelectedId(id, juce::sendNotificationSync);
+}
+
+} // namespace
+
+TEST_CASE("the transposition settings are in the dialog, show the saved values and are saved at once", "[settings-dialog][transpose]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    {
+        const auto dialog = env.dialog();
+        // the defaults
+        CHECK(part<juce::ComboBox>(*dialog, "transposeMode").getSelectedId() == 1);
+        CHECK(part<juce::ComboBox>(*dialog, "transposeBehavior").getSelectedId() == 1);
+        CHECK(part<juce::ComboBox>(*dialog, "transposeTiming").getSelectedId() == 1);
+        CHECK(part<juce::ComboBox>(*dialog, "transposeTarget").getSelectedId() == 1);
+        CHECK(part<juce::ComboBox>(*dialog, "transposeReference").getSelectedId() == 1);
+        CHECK(part<juce::ComboBox>(*dialog, "transposeChannel").getSelectedId() == 1);
+        CHECK(part<juce::ToggleButton>(*dialog, "transposeExport").getToggleState());
+        CHECK_FALSE(part<juce::ToggleButton>(*dialog, "midiThru").getToggleState());
+        CHECK(part<juce::ComboBox>(*dialog, "transposeMode").isVisible());
+        CHECK(part<juce::ComboBox>(*dialog, "transposeMode").getText() == tr(keys::kTransposeModeChromatic));
+
+        choose(part<juce::ComboBox>(*dialog, "transposeMode"), 2);
+        choose(part<juce::ComboBox>(*dialog, "transposeBehavior"), 2);
+        choose(part<juce::ComboBox>(*dialog, "transposeTiming"), 3);
+        choose(part<juce::ComboBox>(*dialog, "transposeTarget"), 3);
+        choose(part<juce::ComboBox>(*dialog, "transposeReference"), 45 + 2); // note 45
+        choose(part<juce::ComboBox>(*dialog, "transposeChannel"), 4);        // channel 3
+        part<juce::ToggleButton>(*dialog, "transposeExport").setToggleState(false, juce::sendNotificationSync);
+        part<juce::ToggleButton>(*dialog, "midiThru").setToggleState(true, juce::sendNotificationSync);
+        const auto saved = env.store.get().transpose;
+        CHECK(saved.mode == mm::core::TransposeMode::Diatonic);
+        CHECK(saved.behavior == mm::core::TransposeBehavior::Momentary);
+        CHECK(saved.timing == mm::core::TransposeTiming::NextBar);
+        CHECK(saved.target == mm::core::TransposeTarget::Melody);
+        CHECK(saved.referenceNote == 45);
+        CHECK(saved.channel == 3);
+        CHECK_FALSE(saved.exportTransposed);
+        CHECK(saved.midiThru);
+        // back to automatic and all channels
+        choose(part<juce::ComboBox>(*dialog, "transposeReference"), 1);
+        choose(part<juce::ComboBox>(*dialog, "transposeChannel"), 1);
+        CHECK(env.store.get().transpose.referenceNote == -1);
+        CHECK(env.store.get().transpose.channel == 0);
+        choose(part<juce::ComboBox>(*dialog, "transposeReference"), 45 + 2);
+        choose(part<juce::ComboBox>(*dialog, "transposeChannel"), 4);
+    }
+    env.store.waitForWrites();
+    // a dialog that opens later shows what was saved
+    const auto again = env.dialog();
+    CHECK(part<juce::ComboBox>(*again, "transposeMode").getSelectedId() == 2);
+    CHECK(part<juce::ComboBox>(*again, "transposeBehavior").getSelectedId() == 2);
+    CHECK(part<juce::ComboBox>(*again, "transposeTiming").getSelectedId() == 3);
+    CHECK(part<juce::ComboBox>(*again, "transposeTarget").getSelectedId() == 3);
+    CHECK(part<juce::ComboBox>(*again, "transposeReference").getSelectedId() == 47);
+    CHECK(part<juce::ComboBox>(*again, "transposeReference").getText().contains("A1 (45)"));
+    CHECK(part<juce::ComboBox>(*again, "transposeChannel").getSelectedId() == 4);
+    CHECK_FALSE(part<juce::ToggleButton>(*again, "transposeExport").getToggleState());
+    CHECK(part<juce::ToggleButton>(*again, "midiThru").getToggleState());
+}
+
+TEST_CASE("the reference note box lists the notes by the convention of Live and Logic", "[settings-dialog][transpose]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    auto& box = part<juce::ComboBox>(*dialog, "transposeReference");
+    CHECK(box.getNumItems() == 1 + (96 - 24 + 1));
+    CHECK(box.getItemText(0) == tr(keys::kTransposeReferenceAuto));
+    CHECK(box.getItemText(box.indexOfItemId(60 + 2)).contains("C3 (60)")); // middle C is C3
+    CHECK(box.getItemText(box.indexOfItemId(36 + 2)).contains("C1 (36)"));
+}
+
+TEST_CASE("the dialog with the transposition stays within a screen and nothing overlaps", "[settings-dialog][transpose][layout]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    CHECK(dialog->getHeight() < 1000);
+    juce::Array<juce::Component*> parts;
+    for (const char* id : {"transposeMode", "transposeBehavior", "transposeTiming", "transposeTarget",
+                           "transposeReference", "transposeChannel", "transposeExport", "midiThru", "transposeHint"}) {
+        parts.add(&part<juce::Component>(*dialog, id));
+    }
+    for (auto* one : parts) {
+        INFO(one->getComponentID().toStdString());
+        CHECK(one->isVisible());
+        CHECK(one->getWidth() > 60);
+        CHECK(dialog->getLocalBounds().contains(one->getBounds()));
+        for (auto* other : dialog->getChildren()) {
+            if (other != one && other->isVisible() && other->getWidth() > 0) {
+                INFO(other->getComponentID().toStdString());
+                CHECK_FALSE(one->getBounds().intersects(other->getBounds()));
+            }
+        }
+    }
+}

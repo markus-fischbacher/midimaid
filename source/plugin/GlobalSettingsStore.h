@@ -25,6 +25,9 @@ public:
     /// True once the file was read (at once for a disabled store). A file that does not exist or is bad counts as read.
     bool ready() const { return ready_.load(); }
     mm::core::GlobalSettings get() const;
+    /// Counts every change of the values (a read of the file, an `update` that changed something): who keeps a copy
+    /// asks whether it is still current without copying the settings.
+    uint64_t revision() const { return revision_.load(); }
     /// Changes the settings (sanitized afterwards) and writes the file in the background when something changed. A
     /// change made before the file was read wins over the file, field by field; the other fields of the file stay as
     /// they are (nothing is written before the file was read).
@@ -53,12 +56,20 @@ private:
         std::optional<int> variationStrength;
         std::optional<mm::core::EditGrid> grid;
         std::optional<bool> snapChromatic;
+        /// The transposition settings are several fields: what was changed is applied field by field, so a change of one
+        /// of them before the read leaves the others of the file alone.
+        struct TransposeChange {
+            mm::core::TransposeSettings before;
+            mm::core::TransposeSettings now;
+        };
+        std::optional<TransposeChange> transpose;
         std::optional<mm::core::AiSettings> ai;
         bool any() const;
         void apply(mm::core::GlobalSettings& settings) const;
     };
     Pending pending_;
     std::atomic<bool> ready_{false};
+    std::atomic<uint64_t> revision_{0};
     juce::ThreadPool pool_{1};
 };
 

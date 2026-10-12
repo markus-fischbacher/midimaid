@@ -159,6 +159,24 @@ namespace mm::core::text {
     X(kToggleLogPrompts, "settings.logPrompts")                                                                        \
     X(kLogHint, "settings.logHint")                                                                                    \
     X(kLabelDrumMap, "settings.drumMap")                                                                               \
+    X(kLabelTranspose, "settings.transpose")                                                                           \
+    X(kTransposeHint, "settings.transposeHint")                                                                        \
+    X(kTransposeModeChromatic, "settings.transpose.mode.chromatic")                                                    \
+    X(kTransposeModeDiatonic, "settings.transpose.mode.diatonic")                                                      \
+    X(kTransposeBehaviorHold, "settings.transpose.behavior.hold")                                                      \
+    X(kTransposeBehaviorMomentary, "settings.transpose.behavior.momentary")                                            \
+    X(kTransposeTimingNote, "settings.transpose.timing.note")                                                          \
+    X(kTransposeTimingBeat, "settings.transpose.timing.beat")                                                          \
+    X(kTransposeTimingBar, "settings.transpose.timing.bar")                                                            \
+    X(kTransposeTargetBoth, "settings.transpose.target.both")                                                          \
+    X(kTransposeTargetBass, "settings.transpose.target.bass")                                                          \
+    X(kTransposeTargetMelody, "settings.transpose.target.melody")                                                      \
+    X(kTransposeReferenceAuto, "settings.transpose.reference.auto")                                                    \
+    X(kTransposeReferenceNote, "settings.transpose.reference.note")                                                    \
+    X(kTransposeChannelAll, "settings.transpose.channel.all")                                                          \
+    X(kTransposeChannelN, "settings.transpose.channel.n")                                                              \
+    X(kToggleTransposeExport, "settings.transpose.export")                                                             \
+    X(kToggleMidiThru, "settings.transpose.thru")                                                                      \
     X(kLabelLog, "settings.log")                                                                                       \
     X(kDrumMapHint, "settings.drumMapHint")                                                                            \
     X(kButtonReferences, "button.references")                                                                      \
