@@ -596,6 +596,11 @@ void PlaceholderEditor::updateStatus() {
     if (isVoice && processor_.lateSwitches() > 0) {
         group += tr(keys::kStatusLate, {{"n", std::to_string(processor_.lateSwitches())}});
     }
+    if (isVoice && processor_.effectiveTranspose() != 0) { // a voice shows the transposition of the group (SPEC 3.16)
+        const int transposed = processor_.effectiveTranspose();
+        group += "  |  " +
+                 tr(keys::kSlotTransposed, {{"n", (transposed > 0 ? "+" : "") + std::to_string(transposed)}});
+    }
     groupText_ = group;
 
     switch (processor_.generationStatus()) {

@@ -10,13 +10,14 @@ namespace {
 constexpr double kBarPpq = 4.0;
 constexpr double kEpsilon = 1e-9;
 
-double ceilToBar(double ppq) {
-    return std::ceil((ppq - kEpsilon) / kBarPpq) * kBarPpq;
+double ceilToGrid(double ppq, double grid) {
+    return std::ceil((ppq - kEpsilon) / grid) * grid;
 }
 
 } // namespace
 
-std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std::optional<double> ownEndPpq) {
+std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std::optional<double> ownEndPpq,
+                                   double gridPpq) {
     double furthest = 0.0;
     const bool anyPlaying = channel.furthestPlaying(furthest);
     if (ownEndPpq) {
@@ -25,7 +26,7 @@ std::optional<double> plannedStamp(const GroupChannel& channel, double bpm, std:
         return std::nullopt;
     }
     const double leadPpq = channel.minLeadMs() / 1000.0 * bpm / 60.0;
-    return ceilToBar(furthest + leadPpq);
+    return ceilToGrid(furthest + leadPpq, gridPpq > 0.0 ? gridPpq : kBarPpq);
 }
 
 bool GroupSync::mutedByHub(int voice) const {

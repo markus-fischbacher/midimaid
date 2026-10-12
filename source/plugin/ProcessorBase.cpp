@@ -1728,7 +1728,8 @@ constexpr uint32_t packTranspose(const mm::core::TransposeSettings& t) {
            (static_cast<uint32_t>(t.behavior == mm::core::TransposeBehavior::Momentary ? 1 : 0) << 1) |
            (static_cast<uint32_t>(t.timing) << 2) | (static_cast<uint32_t>(t.target) << 4) |
            (static_cast<uint32_t>(std::clamp(t.channel, 0, 16)) << 6) |
-           (static_cast<uint32_t>(t.referenceNote < 0 ? 0 : std::min(t.referenceNote, 127) + 1) << 11);
+           (static_cast<uint32_t>(t.referenceNote < 0 ? 0 : std::min(t.referenceNote, 127) + 1) << 11) |
+           (static_cast<uint32_t>(t.exportTransposed ? 0 : 1) << 19);
 }
 
 mm::core::TransposeSettings unpackTranspose(uint32_t word) {
@@ -1740,6 +1741,7 @@ mm::core::TransposeSettings unpackTranspose(uint32_t word) {
     t.channel = static_cast<int>((word >> 6) & 31u);
     const auto reference = static_cast<int>((word >> 11) & 255u);
     t.referenceNote = reference == 0 ? -1 : reference - 1;
+    t.exportTransposed = ((word >> 19) & 1u) == 0;
     return t;
 }
 
@@ -1760,14 +1762,108 @@ void ProcessorBase::applyTransposition(const juce::MidiBuffer& input, const mm::
     const TransposeInfo info = player_.transposeInfo();
     player_.setTransposeMode(config.mode);
 
-    // A voice follows the group (E2); a render that is not real-time plays the saved slots and the parameter only.
-    const bool keyboardAllowed = !voiceRole_.load(std::memory_order_acquire) && !isNonRealtime();
+    const auto mode = static_cast<mm::engine::SlotMode>(slotMode_.load(std::memory_order_acquire));
+    const bool isVoice = voiceRole_.load(std::memory_order_acquire);
     const bool running = transport.hasPosition && transport.isPlaying && transport.bpm > 0.0 && getSampleRate() > 0.0;
     const double ppqPerSample = running ? transport.bpm / 60.0 / getSampleRate() : 0.0;
     const double blockEnd = transport.ppq + numSamples * ppqPerSample;
+    const bool targeted = targetsVoice(config.target, info);
+    const int parameter = static_cast<int>(std::lround(transposeValue_->load()));
+    auto& channel = mm::engine::processGroupChannel();
 
-    const auto schedule = [&](int value, int sampleOffset) {
-        if (config.timing == TransposeTiming::NextNote || !running) {
+    if (isVoice) {
+        // A voice does not play the keyboard: it follows the group's transposition (the hub plans it, SPEC 3.16) or, set
+        // to "own", its own host parameter (so that a bounce of the single track is reproducible, D-131).
+        keyboard_.current = 0;
+        keyboard_.pending = false;
+        const auto effective = [&](int total) { return targeted ? clampTranspose(total) : 0; };
+        int shown = effective(parameter);
+        if (mode == mm::engine::SlotMode::FollowHub) {
+            const int hub = channel.hub();
+            const int member = groupSync_.member();
+            if (hub != mm::engine::GroupChannel::kNone && hub != member) {
+                if (hub != keyboard_.knownHub) {
+                    keyboard_.knownHub = hub;
+                    keyboard_.seenPlan = channel.transposePlan().sequence; // plans of before do not concern us
+                    keyboard_.needSync = true;
+                    keyboard_.groupPending = false;
+                }
+                if (player_.startsOrJumps(transport, numSamples, getSampleRate())) {
+                    keyboard_.needSync = true;
+                    keyboard_.groupPending = false;
+                }
+                const auto plan = channel.transposePlan();
+                if (plan.sequence != keyboard_.seenPlan) {
+                    keyboard_.seenPlan = plan.sequence;
+                    keyboard_.needSync = false;
+                    if (running) {
+                        keyboard_.groupPending = true;
+                        keyboard_.groupPendingValue = plan.offset;
+                        keyboard_.groupPendingAtPpq = plan.stampPpq;
+                    } else {
+                        keyboard_.groupApplied = plan.offset;
+                        keyboard_.groupPending = false;
+                    }
+                } else if (keyboard_.needSync) {
+                    const auto state = channel.hubTranspose();
+                    if (state.valid) {
+                        keyboard_.groupApplied = state.offset;
+                        keyboard_.needSync = false;
+                    }
+                }
+            } else {
+                keyboard_.knownHub = -2; // without a hub the voice keeps the transposition it has
+            }
+            if (keyboard_.groupPending && (!running || keyboard_.groupPendingAtPpq <= transport.ppq + 1e-9)) {
+                keyboard_.groupApplied = keyboard_.groupPendingValue;
+                keyboard_.groupPending = false;
+            }
+            player_.setTranspose(effective(keyboard_.groupApplied));
+            shown = effective(keyboard_.groupApplied);
+            if (keyboard_.groupPending && keyboard_.groupPendingAtPpq < blockEnd) {
+                player_.setTransposeAt(effective(keyboard_.groupPendingValue), keyboard_.groupPendingAtPpq);
+                keyboard_.groupApplied = keyboard_.groupPendingValue;
+                keyboard_.groupPending = false;
+                shown = effective(keyboard_.groupApplied);
+            }
+        } else {
+            player_.setTranspose(shown);
+        }
+        effectiveTranspose_.store(shown, std::memory_order_relaxed);
+        keyboardTranspose_.store(0, std::memory_order_relaxed);
+        transposeTotal_.store(mode == mm::engine::SlotMode::FollowHub ? clampTranspose(keyboard_.groupApplied)
+                                                                      : clampTranspose(parameter),
+                              std::memory_order_relaxed);
+        return;
+    }
+
+    // Hub and solo: the keyboard and the host parameter. A render that is not real-time plays the saved slots and the
+    // parameter only.
+    const bool keyboardAllowed = !isNonRealtime();
+    const bool company = mode == mm::engine::SlotMode::Hub && channel.memberCount() > 1;
+
+    // `value` is the keyboard offset to come, `param` the host parameter that goes with it.
+    const auto schedule = [&](int value, int param, int sampleOffset) {
+        if (!running) {
+            keyboard_.current = value;
+            keyboard_.appliedParam = param;
+            keyboard_.pending = false;
+            return;
+        }
+        if (company) {
+            // With voices around, the change is planned for the whole group on a beat (or bar) line at least the lead
+            // ahead, so that hub and voices transpose at the same position (SPEC 3.16). "Next note" does not exist here.
+            const double grid = config.timing == TransposeTiming::NextBar ? 4.0 : 1.0;
+            const double stamp = mm::engine::plannedStamp(channel, transport.bpm, blockEnd, grid)
+                                     .value_or(std::ceil((blockEnd - 1e-9) / grid) * grid);
+            keyboard_.pending = true;
+            keyboard_.pendingValue = value;
+            keyboard_.pendingParam = param;
+            keyboard_.pendingAtPpq = stamp;
+            channel.publishTransposePlan(stamp, clampTranspose(param + value));
+            return;
+        }
+        if (config.timing == TransposeTiming::NextNote) {
             keyboard_.current = value;
             keyboard_.pending = false;
             return;
@@ -1776,8 +1872,14 @@ void ProcessorBase::applyTransposition(const juce::MidiBuffer& input, const mm::
         const double at = transport.ppq + sampleOffset * ppqPerSample;
         keyboard_.pending = true;
         keyboard_.pendingValue = value;
+        keyboard_.pendingParam = param;
         keyboard_.pendingAtPpq = std::ceil(at / grid - 1e-9) * grid;
     };
+
+    if (!company) {
+        keyboard_.appliedParam = parameter; // alone, the host parameter acts from the next note
+        keyboard_.paramSeen = parameter;
+    }
 
     if (keyboardAllowed) {
         for (const auto metadata : input) {
@@ -1790,37 +1892,51 @@ void ProcessorBase::applyTransposition(const juce::MidiBuffer& input, const mm::
             if (on && message.getVelocity() > 0) {
                 const int key = message.getNoteNumber();
                 keyboard_.heldKey = key;
-                schedule(offsetForKey(key, referenceNoteFor(config, info.root), config.mode, info),
+                schedule(offsetForKey(key, referenceNoteFor(config, info.root), config.mode, info), parameter,
                          metadata.samplePosition);
             } else if (off && config.behavior == TransposeBehavior::Momentary &&
                        message.getNoteNumber() == keyboard_.heldKey) {
                 keyboard_.heldKey = -1;
-                schedule(0, metadata.samplePosition);
+                schedule(0, parameter, metadata.samplePosition);
             }
         }
     } else if (keyboard_.current != 0 || keyboard_.pending) {
-        keyboard_ = KeyboardTranspose{}; // an offline render or a voice: nothing of the keyboard stays
+        keyboard_.current = 0;
+        keyboard_.pending = false; // an offline render: nothing of the keyboard stays
+        keyboard_.heldKey = -1;
+    }
+
+    if (company && parameter != keyboard_.paramSeen) {
+        // The host parameter changed (automation, a controller): in a group it is planned like a key
+        keyboard_.paramSeen = parameter;
+        schedule(keyboard_.pending ? keyboard_.pendingValue : keyboard_.current, parameter, 0);
     }
 
     // A planned change whose point lies behind the block (or the transport stands) is in effect now.
     if (keyboard_.pending && (!running || keyboard_.pendingAtPpq <= transport.ppq + 1e-9)) {
         keyboard_.current = keyboard_.pendingValue;
+        keyboard_.appliedParam = company ? keyboard_.pendingParam : parameter;
         keyboard_.pending = false;
     }
 
-    const bool targeted = !voiceRole_.load(std::memory_order_acquire) && targetsVoice(config.target, info);
-    const int parameter = static_cast<int>(std::lround(transposeValue_->load()));
-    const auto effective = [&](int keyboard) { return targeted ? clampTranspose(parameter + keyboard) : 0; };
-    player_.setTranspose(effective(keyboard_.current));
-    int shown = effective(keyboard_.current);
+    const auto effective = [&](int param, int keyboard) { return targeted ? clampTranspose(param + keyboard) : 0; };
+    player_.setTranspose(effective(keyboard_.appliedParam, keyboard_.current));
+    int shown = effective(keyboard_.appliedParam, keyboard_.current);
     if (keyboard_.pending && keyboard_.pendingAtPpq < blockEnd) {
-        player_.setTransposeAt(effective(keyboard_.pendingValue), keyboard_.pendingAtPpq);
+        const int param = company ? keyboard_.pendingParam : parameter;
+        player_.setTransposeAt(effective(param, keyboard_.pendingValue), keyboard_.pendingAtPpq);
         keyboard_.current = keyboard_.pendingValue;
+        keyboard_.appliedParam = param;
         keyboard_.pending = false;
-        shown = effective(keyboard_.current);
+        shown = effective(param, keyboard_.current);
+    }
+    if (mode == mm::engine::SlotMode::Hub) {
+        // What is in force for the group (before the target), for a voice that starts, jumps or joins
+        channel.reportHubTranspose(clampTranspose(keyboard_.appliedParam + keyboard_.current));
     }
     effectiveTranspose_.store(shown, std::memory_order_relaxed);
     keyboardTranspose_.store(keyboard_.current, std::memory_order_relaxed);
+    transposeTotal_.store(clampTranspose(keyboard_.appliedParam + keyboard_.current), std::memory_order_relaxed);
 }
 
 void ProcessorBase::writeEvents(juce::MidiBuffer& midi) const {
@@ -1916,6 +2032,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.locked = voiceIndex < pattern.voices.size() && mm::core::isVoiceLocked(pattern.voices[voiceIndex]);
     view.root = pattern.context.root;
     view.scaleId = pattern.context.scaleId;
+    view.transposeInfo = rendered.transpose;
     view.source.clear();
     if (voiceIndex < pattern.voices.size()) {
         for (const auto& note : pattern.voices[voiceIndex].notes) {
@@ -2003,7 +2120,11 @@ void ProcessorBase::updateExport() {
     if (!all && own.hasPattern) {
         views.push_back(own);
     }
+    const auto transposeConfig = transposeSettings();
+    const int total = transposeConfig.exportTransposed ? transposeTotal() : 0;
     ExportKey key;
+    key.transpose = total;
+    key.mode = static_cast<int>(transposeConfig.mode) + 2 * static_cast<int>(transposeConfig.target);
     key.bpmCentis = std::llround(bpm * 100.0);
     key.origin = own.origin;
     key.revision = own.revision;
@@ -2025,6 +2146,14 @@ void ProcessorBase::updateExport() {
     batch.primaryVoice = own.voice;
     for (auto& view : views) {
         MidiExporter::Request request;
+        // A file holds the notes as they sound now, with the live transposition of the group (abschaltbar, SPEC 3.16)
+        if (total != 0 && mm::core::targetsVoice(transposeConfig.target, view.transposeInfo)) {
+            const int shift = mm::core::voiceOctaveShift(total, transposeConfig.mode, view.transposeInfo);
+            for (auto& note : view.notes) {
+                note.pitch = static_cast<uint8_t>(
+                    mm::core::transposedPitch(note.pitch, total, transposeConfig.mode, view.transposeInfo, shift));
+            }
+        }
         request.notes = std::move(view.notes);
         request.lengthTicks = view.lengthTicks;
         request.voice = view.voice;

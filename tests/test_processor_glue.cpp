@@ -1403,3 +1403,59 @@ TEST_CASE("a variation reaches the engine at the next bar line", "[plugin][varia
     rig.run(400); // past the next bar line
     CHECK(processor.activePatternVersion() != version);
 }
+
+TEST_CASE("the export carries the live transposition and follows it, and it can be switched off", "[plugin][export][transpose]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, offbeatBass(45));
+    FakePlayHead head;
+    setHostTempo(processor, head, 120.0);
+    processor.updateExport();
+    REQUIRE(waitForExport(processor.midiExporter(), 120.0));
+    CHECK(notePitches(processor.midiExporter().readyFile()).front() == 45);
+
+    auto* parameter = processor.parameters().getParameter("transpose");
+    REQUIRE(parameter != nullptr);
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(3.0f));
+    setHostTempo(processor, head, 120.0); // the audio thread works out the transposition
+    processor.updateExport();
+    for (int i = 0; i < 400 && notePitches(processor.midiExporter().readyFile()).front() != 48; ++i) {
+        juce::Thread::sleep(5);
+    }
+    CHECK(notePitches(processor.midiExporter().readyFile()).front() == 48); // the file holds what sounds now
+    const auto pitches = notePitches(processor.midiExporter().readyFile());
+    CHECK(pitches == std::vector<int>(pitches.size(), 48));
+
+    const auto waitFor = [&](int expected) {
+        for (int i = 0; i < 400 && notePitches(processor.midiExporter().readyFile()).front() != expected; ++i) {
+            juce::Thread::sleep(5);
+        }
+        return notePitches(processor.midiExporter().readyFile()).front();
+    };
+    auto settings = processor.transposeSettings();
+    settings.target = mm::core::TransposeTarget::Melody; // the bass is not a target: the file goes back to the plain notes
+    processor.setTransposeSettings(settings);
+    processor.updateExport();
+    CHECK(waitFor(45) == 45);
+
+    settings.target = mm::core::TransposeTarget::Both;
+    processor.setTransposeSettings(settings);
+    processor.updateExport();
+    CHECK(waitFor(48) == 48);
+
+    settings.exportTransposed = false; // abschaltbar
+    processor.setTransposeSettings(settings);
+    processor.updateExport();
+    CHECK(waitFor(45) == 45);
+
+    settings.exportTransposed = true;
+    processor.setTransposeSettings(settings);
+    processor.updateExport();
+    CHECK(waitFor(48) == 48);
+
+    // a transposition out of the range: 45 + 12 would leave the range of the bass, so the whole voice goes down an
+    // octave, as it sounds
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(12.0f));
+    setHostTempo(processor, head, 120.0);
+    processor.updateExport();
+    CHECK(waitFor(45) == 45);
+}

@@ -68,6 +68,7 @@ void GroupChannel::release(int member) {
 
 void GroupChannel::setHub(int member) {
     hubState_.store(kNoHubState, std::memory_order_release);
+    hubTranspose_.store(kNoTranspose, std::memory_order_release);
     hubMute_.store(0, std::memory_order_release);
     hub_.store(member, std::memory_order_release);
 }
@@ -138,6 +139,46 @@ GroupChannel::Plan GroupChannel::plan() const {
     plan.slot = static_cast<int>((value >> 16) & 0x1F) + 1;
     plan.stampPpq = toPpq(static_cast<int64_t>(value) >> 21);
     return plan;
+}
+
+namespace {
+
+int transposeBits(int offset) {
+    return std::clamp(offset, -12, 12) + 16; // 4 to 28, fits 5 bits
+}
+
+} // namespace
+
+void GroupChannel::publishTransposePlan(double stampPpq, int offset) {
+    const uint64_t previous = transposePlan_.load(std::memory_order_acquire);
+    const uint64_t sequence = ((previous & 0xFFFF) + 1) & 0xFFFF;
+    const int64_t ticks = toTicks(stampPpq, kMaxPlanTicks);
+    const uint64_t value = (static_cast<uint64_t>(ticks) << 21) |
+                           (static_cast<uint64_t>(transposeBits(offset)) << 16) | sequence;
+    transposePlan_.store(value, std::memory_order_release);
+}
+
+GroupChannel::TransposePlan GroupChannel::transposePlan() const {
+    const uint64_t value = transposePlan_.load(std::memory_order_acquire);
+    TransposePlan plan;
+    plan.sequence = static_cast<uint32_t>(value & 0xFFFF);
+    plan.offset = static_cast<int>((value >> 16) & 0x1F) - 16;
+    plan.stampPpq = toPpq(static_cast<int64_t>(value) >> 21);
+    return plan;
+}
+
+void GroupChannel::reportHubTranspose(int offset) {
+    hubTranspose_.store(transposeBits(offset), std::memory_order_release);
+}
+
+GroupChannel::HubTranspose GroupChannel::hubTranspose() const {
+    const int value = hubTranspose_.load(std::memory_order_acquire);
+    HubTranspose state;
+    if (value != kNoTranspose) {
+        state.valid = true;
+        state.offset = value - 16;
+    }
+    return state;
 }
 
 GroupChannel& processGroupChannel() {

@@ -132,6 +132,7 @@ public:
         std::vector<mm::core::RollNote> source;
         mm::core::PitchClass root = 9;
         std::string scaleId;
+        mm::core::TransposeInfo transposeInfo; ///< key, range and extremes of the voice (live transposition, SPEC 3.16)
         /// True when `other` shows the same thing (no need to redraw or export again).
         bool sameSource(const VoiceView& other) const {
             return hasPattern == other.hasPattern && slot == other.slot && voice == other.voice &&
@@ -202,6 +203,9 @@ public:
     /// The transposition this instance applies to its notes now (parameter + keyboard, 0 when the target is another
     /// voice). Any thread.
     int effectiveTranspose() const { return effectiveTranspose_.load(std::memory_order_relaxed); }
+    /// The transposition in force for the whole group before the target: parameter plus keyboard (hub, solo) or what the
+    /// voice follows. The export uses it. Any thread.
+    int transposeTotal() const { return transposeTotal_.load(std::memory_order_relaxed); }
     /// The offset the keyboard set (without the parameter). Any thread.
     int keyboardTranspose() const { return keyboardTranspose_.load(std::memory_order_relaxed); }
 
@@ -529,6 +533,8 @@ private:
         int octave = 0;
         long long bpmCentis = 0;
         bool all = false; ///< every voice is exported (Solo and Hub), not only the own one
+        int transpose = 0;       ///< the transposition the notes carry (0: none or not exported)
+        int mode = 0;
         bool empty = true;
         bool operator==(const ExportKey&) const = default;
     };
@@ -540,15 +546,27 @@ private:
     // the keyboard (audio thread only) and what it came to (read by the UI).
     std::atomic<uint32_t> transposeConfig_{0};
     struct KeyboardTranspose {
-        int current = 0;    // offset in effect
-        bool pending = false;
+        int current = 0;      // keyboard offset in effect
+        bool pending = false; // a change that waits for its point (beat, bar, or the group's planned stamp)
         int pendingValue = 0;
+        int pendingParam = 0; // the host parameter at the time it was planned (a group applies both at the stamp)
         double pendingAtPpq = 0.0;
-        int heldKey = -1;   // the key that set the offset (momentary: its release resets it)
+        int appliedParam = 0; // the host parameter in force (in a group it follows the plan, not the host at once)
+        int paramSeen = 0;
+        int heldKey = -1; // the key that set the offset (momentary: its release resets it)
+        // A voice that follows the hub: the hub's total in force, a change that waits for its stamp, what it has heard
+        int groupApplied = 0;
+        bool groupPending = false;
+        int groupPendingValue = 0;
+        double groupPendingAtPpq = 0.0;
+        uint32_t seenPlan = 0;
+        int knownHub = -2;
+        bool needSync = true;
     };
     KeyboardTranspose keyboard_;
     std::atomic<int> effectiveTranspose_{0};
     std::atomic<int> keyboardTranspose_{0};
+    std::atomic<int> transposeTotal_{0};
     std::atomic<int> slotMode_{static_cast<int>(mm::engine::SlotMode::Own)}; // read in the audio thread
     std::atomic<bool> silent_{false};    // a hub with output mode "none" plays nothing (audio thread reads)
     std::atomic<bool> voiceRole_{false}; // a voice also obeys the hub's mute switches (audio thread reads)

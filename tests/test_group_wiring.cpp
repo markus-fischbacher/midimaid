@@ -5197,3 +5197,217 @@ TEST_CASE("transpose: a change that waits for its bar line takes effect when the
     rig.solo.step();
     CHECK(rig.solo.processor.keyboardTranspose() == 3); // nothing is waiting for a stopped transport
 }
+
+// --- live transposition in a group (SPEC 3.16, D-216) ---------------------------------------------------------
+
+namespace {
+
+/// Hub (plays voice 1), a bass voice and a melody voice that follow it; the keyboard goes to the hub.
+struct TransposeGroup {
+    Quiet quiet;
+    Instance hub{"Hub"};
+    Instance bass{"Bass"};
+    Instance melody{"Melody"};
+    TransposeGroup() {
+        hub.setRole(InstanceRole::Hub);
+        bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+        melody.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+        hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, beatPattern(41, 60))); });
+        hub.setSlotParameter(1);
+        run(0.5);
+    }
+    void run(double ppq) { runTo({&hub, &bass, &melody}, ppq); }
+    void setAll(const std::function<void(mm::core::TransposeSettings&)>& change) {
+        for (auto* instance : {&hub, &bass, &melody}) {
+            auto settings = instance->processor.transposeSettings();
+            change(settings);
+            instance->processor.setTransposeSettings(settings);
+        }
+    }
+    static std::vector<int> pitches(const Instance& instance, double from, double to) {
+        std::vector<int> result;
+        for (const auto& note : instance.notes()) {
+            if (note.sample + 2 >= at(from) && note.sample + 2 < at(to)) {
+                result.push_back(note.pitch);
+            }
+        }
+        return result;
+    }
+    /// The sample of the first note-on of `pitch`, or -1.
+    static long long first(const Instance& instance, int pitch) { return instance.firstWith(pitch); }
+};
+
+} // namespace
+
+TEST_CASE("transpose in a group: the hub plans the change, hub and voices transpose at the same beat", "[group-wiring][transpose][group]") {
+    TransposeGroup group;
+    group.run(1.3);
+    group.hub.keyDown(48); // +3, the hub's block is at 1.3: with the lead the next beat that can be kept is 2
+    group.run(8.0);
+    // bass: notes on the beats +0.125: those from 2.125 on are shifted, nothing before
+    for (const Instance* instance : {&group.hub, &group.bass}) {
+        INFO(instance->processor.getName().toStdString());
+        CHECK(TransposeGroup::pitches(*instance, 1.0, 2.0) == std::vector<int>{41});
+        CHECK(TransposeGroup::pitches(*instance, 2.0, 4.0) == std::vector<int>{44, 44});
+        CHECK(TransposeGroup::pitches(*instance, 4.0, 8.0) == std::vector<int>{44, 44, 44, 44});
+    }
+    // the same sample for hub and voice
+    CHECK(near(TransposeGroup::first(group.hub, 44), TransposeGroup::first(group.bass, 44)));
+    // the melody voice has one note a bar: 60 in bar 1, 63 afterwards
+    CHECK(TransposeGroup::pitches(group.melody, 0.0, 4.0) == std::vector<int>{60}); // the first one is before the key
+    CHECK(TransposeGroup::pitches(group.melody, 4.0, 8.0) == std::vector<int>{63});
+    // what the windows show
+    CHECK(group.hub.processor.effectiveTranspose() == 3);
+    CHECK(group.bass.processor.effectiveTranspose() == 3);
+    CHECK(group.melody.processor.effectiveTranspose() == 3);
+    CHECK(group.bass.processor.keyboardTranspose() == 0); // a voice has no keyboard of its own
+}
+
+TEST_CASE("transpose in a group: the bar timing plans a bar line", "[group-wiring][transpose][group]") {
+    TransposeGroup group;
+    group.setAll([](auto& s) { s.timing = mm::core::TransposeTiming::NextBar; });
+    group.run(1.3);
+    group.hub.keyDown(50); // +5
+    group.run(8.0);
+    for (const Instance* instance : {&group.hub, &group.bass}) {
+        CHECK(TransposeGroup::pitches(*instance, 1.0, 4.0) == std::vector<int>{41, 41, 41});
+        CHECK(TransposeGroup::pitches(*instance, 4.0, 8.0) == std::vector<int>{46, 46, 46, 46});
+    }
+    CHECK(TransposeGroup::pitches(group.melody, 4.0, 8.0) == std::vector<int>{65});
+}
+
+TEST_CASE("transpose in a group: the target decides which voices move", "[group-wiring][transpose][group]") {
+    TransposeGroup group;
+    group.setAll([](auto& s) { s.target = mm::core::TransposeTarget::Melody; });
+    group.run(1.3);
+    group.hub.keyDown(48);
+    group.run(8.0);
+    CHECK(TransposeGroup::pitches(group.hub, 4.0, 8.0) == std::vector<int>{41, 41, 41, 41}); // the hub plays the bass
+    CHECK(TransposeGroup::pitches(group.bass, 4.0, 8.0) == std::vector<int>{41, 41, 41, 41});
+    CHECK(TransposeGroup::pitches(group.melody, 4.0, 8.0) == std::vector<int>{63});
+    CHECK(group.hub.processor.effectiveTranspose() == 0);
+    CHECK(group.melody.processor.effectiveTranspose() == 3);
+    CHECK(group.hub.processor.transposeTotal() == 3); // the group's total is what the hub knows
+}
+
+TEST_CASE("transpose in a group: the host parameter of the hub is planned for the group, the voices' own is ignored",
+          "[group-wiring][transpose][group]") {
+    TransposeGroup group;
+    auto* voiceParameter = group.bass.processor.parameters().getParameter("transpose");
+    voiceParameter->setValueNotifyingHost(voiceParameter->convertTo0to1(7.0f)); // a voice follows the hub
+    group.run(1.3);
+    auto* hubParameter = group.hub.processor.parameters().getParameter("transpose");
+    hubParameter->setValueNotifyingHost(hubParameter->convertTo0to1(2.0f));
+    group.run(8.0);
+    for (const Instance* instance : {&group.hub, &group.bass}) {
+        INFO(instance->processor.getName().toStdString());
+        CHECK(TransposeGroup::pitches(*instance, 1.0, 2.0) == std::vector<int>{41});
+        CHECK(TransposeGroup::pitches(*instance, 4.0, 8.0) == std::vector<int>{43, 43, 43, 43});
+    }
+    CHECK(near(TransposeGroup::first(group.hub, 43), TransposeGroup::first(group.bass, 43)));
+    CHECK(group.bass.processor.effectiveTranspose() == 2);
+}
+
+TEST_CASE("transpose in a group: a voice set to own plays its own parameter", "[group-wiring][transpose][group]") {
+    TransposeGroup group;
+    group.bass.setRole(InstanceRole::Voice, SlotFollow::Own, 1);
+    auto* parameter = group.bass.processor.parameters().getParameter("transpose");
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(4.0f));
+    group.run(1.3);
+    group.hub.keyDown(48);
+    group.run(8.0);
+    CHECK(TransposeGroup::pitches(group.bass, 4.0, 8.0) == std::vector<int>{45, 45, 45, 45}); // 41 + its own 4, not the hub's 3
+    CHECK(TransposeGroup::pitches(group.hub, 4.0, 8.0) == std::vector<int>{44, 44, 44, 44});
+    CHECK(group.bass.processor.effectiveTranspose() == 4);
+}
+
+TEST_CASE("transpose in a group: a voice that joins takes what is in force, momentary releases the whole group",
+          "[group-wiring][transpose][group]") {
+    TransposeGroup group;
+    group.setAll([](auto& s) { s.behavior = mm::core::TransposeBehavior::Momentary; });
+    group.run(1.3);
+    group.hub.keyDown(48);
+    group.run(5.0);
+    CHECK(group.hub.processor.transposeTotal() == 3);
+    Instance late("Late");
+    late.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    {
+        auto settings = late.processor.transposeSettings();
+        settings.behavior = mm::core::TransposeBehavior::Momentary;
+        late.processor.setTransposeSettings(settings);
+    }
+    late.setPpq(group.hub.ppq());
+    runTo({&group.hub, &group.bass, &group.melody, &late}, 9.0);
+    for (const double from : {6.0, 7.0, 8.0}) {
+        CHECK(TransposeGroup::pitches(late, from, from + 1.0) == std::vector<int>{44}); // from the first note on
+    }
+    CHECK(late.processor.effectiveTranspose() == 3);
+    group.hub.keyUp(48);
+    runTo({&group.hub, &group.bass, &group.melody, &late}, 14.0);
+    for (const Instance* instance : {&group.hub, &group.bass, &late}) {
+        INFO(instance->processor.getName().toStdString());
+        CHECK(instance->processor.effectiveTranspose() == 0);
+        CHECK(TransposeGroup::pitches(*instance, 12.0, 14.0) == std::vector<int>{41, 41});
+    }
+}
+
+TEST_CASE("transpose in a group: a voice that runs behind the hub transposes at the same position on its own clock",
+          "[group-wiring][transpose][group]") {
+    for (const double lag : {0.1, 0.5}) {
+        TransposeGroup group;
+        group.hub.setPpq(group.hub.ppq() + lag); // the hub's block runs ahead of the voices'
+        group.run(group.hub.ppq() + 0.8);
+        group.hub.keyDown(48);
+        group.run(10.0);
+        INFO("lag " << lag);
+        // Each on its own clock: the notes of a beat window carry the same pitches in hub and voice
+        for (double from = 2.0; from < 8.0; from += 1.0) {
+            CHECK(TransposeGroup::pitches(group.bass, from, from + 1.0) == TransposeGroup::pitches(group.hub, from, from + 1.0));
+        }
+        CHECK(group.bass.processor.effectiveTranspose() == 3);
+    }
+}
+
+TEST_CASE("transpose in a group: an offline render of the hub ignores the keyboard", "[group-wiring][transpose][group]") {
+    TransposeGroup group;
+    group.run(1.3);
+    group.hub.keyDown(48);
+    group.run(5.0);
+    REQUIRE(group.bass.processor.effectiveTranspose() == 3);
+    group.hub.processor.setNonRealtime(true); // the hub's keyboard is off in a bounce: the total falls to the parameter
+    group.hub.keyDown(50);
+    group.run(8.0);
+    CHECK(group.hub.processor.keyboardTranspose() == 0);
+    group.hub.processor.setNonRealtime(false);
+}
+
+TEST_CASE("transpose in a group: a voice drags out its notes with the transposition of the group", "[group-wiring][transpose][group][export]") {
+    TransposeGroup group;
+    group.run(1.3);
+    group.hub.keyDown(48);
+    group.run(6.0);
+    REQUIRE(group.bass.processor.transposeTotal() == 3);
+    group.bass.processor.updateExport();
+    const auto pitchesOf = [](const juce::File& file) {
+        juce::MidiFile midi;
+        juce::FileInputStream stream(file);
+        REQUIRE(stream.openedOk());
+        REQUIRE(midi.readFrom(stream));
+        std::vector<int> pitches;
+        for (const auto* event : *midi.getTrack(0)) {
+            if (event->message.isNoteOn()) {
+                pitches.push_back(event->message.getNoteNumber());
+            }
+        }
+        return pitches;
+    };
+    const auto& exporter = group.bass.processor.midiExporter();
+    REQUIRE(waitFor([&] { return exporter.readyFile().existsAsFile() && pitchesOf(exporter.readyFile()).size() >= 3; }));
+    const auto pitches = pitchesOf(exporter.readyFile());
+    CHECK(pitches == std::vector<int>(pitches.size(), 44)); // 41 + 3
+    // the melody voice (target both): 60 + 3
+    group.melody.processor.updateExport();
+    const auto& melodyExporter = group.melody.processor.midiExporter();
+    REQUIRE(waitFor([&] { return melodyExporter.readyFile().existsAsFile() && !pitchesOf(melodyExporter.readyFile()).empty(); }));
+    CHECK(pitchesOf(melodyExporter.readyFile()).front() == 63);
+}
