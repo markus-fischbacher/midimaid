@@ -370,6 +370,22 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
         fillReferenceNotes();
     };
     addAndMakeVisible(noteNamingBox_);
+
+    makeLabel(rollViewLabel_, keys::kLabelRollView);
+    const auto rollToggle = [this](juce::ToggleButton& toggle, const char* id, std::string_view text,
+                                   bool mm::core::GlobalSettings::*field) {
+        toggle.setComponentID(id);
+        toggle.setButtonText(tr(text));
+        toggle.setToggleState(settings_().get().*field, juce::dontSendNotification);
+        toggle.onClick = [this, &toggle, field] {
+            const bool on = toggle.getToggleState();
+            settings_().update([&](mm::core::GlobalSettings& settings) { settings.*field = on; });
+        };
+        addAndMakeVisible(toggle);
+    };
+    rollToggle(rollFoldToggle_, "rollFold", keys::kToggleRollFold, &mm::core::GlobalSettings::rollFold);
+    rollToggle(rollGuidesToggle_, "rollGuides", keys::kToggleRollGuides, &mm::core::GlobalSettings::rollGuides);
+    rollToggle(rollMarkersToggle_, "rollMarkers", keys::kToggleRollMarkers, &mm::core::GlobalSettings::rollMarkers);
     fill(transposeChannelBox_, "transposeChannel", {keys::kTransposeChannelAll});
     for (int channel = 1; channel <= 16; ++channel) {
         transposeChannelBox_.addItem(tr(keys::kTransposeChannelN, {{"n", std::to_string(channel)}}), channel + 1);
@@ -452,6 +468,8 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {&languageLabel_, {&languageBox_}, {}, kControl, false, false, -1, 260},
              {nullptr, {&languageHint_}, {}, kHint, true},
              {&noteNamingLabel_, {&noteNamingBox_}, {}, kControl, false, false, -1, 260},
+             {&rollViewLabel_, {&rollFoldToggle_, &rollGuidesToggle_}, {230}, kControl},
+             {nullptr, {&rollMarkersToggle_}, {}, kControl, true},
              {&drumMapLabel_, {&drumMapEditor_}, {}, kControl, false, true},
              {nullptr, {&drumMapHint_}, {}, 40, true},
              {nullptr, {&closeButton_}, {}, kControl, false, true}};

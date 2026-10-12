@@ -230,7 +230,7 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
 - Stand der Umsetzung: Noten setzen (Doppelklick), löschen, verschieben, Länge, Auswahl, Zoom, Raster und Einrasten in der Roll der Hub-Zeilen (D-157); Velocity-Spur, Akzent (`A`) und Slide (`S`, Rechtsklick-Menü) (D-158)
 - **Stimme sperren:** Eine gesperrte Stimme bleibt bei Generieren und Variieren unverändert. Beim Generieren bleiben dann auch
   Tonart, Skala, Akkordfolge, Länge und Phrasenplan des Slots; die Felder dafür wirken nicht (D-154)
-- **[v1.1] Hilfen:** Velocity-Spur umschaltbar auf Wahrscheinlichkeit und Bedingung (§3.19), Scale-Fold
+- **[v1.1] Hilfen (Fold, Hintergründe, Akzent/Slide-Zeile umgesetzt, D-232; Wahrscheinlichkeits-Spur offen):** Velocity-Spur umschaltbar auf Wahrscheinlichkeit und Bedingung (§3.19), Scale-Fold
   (nur Skalentöne als Zeilen, wie in Ableton), Phrasengrenzen und Kick-Raster als Hintergrund, eigene
   Zeile für Slide- und Akzent-Markierungen
 - **[v1.1] Sperren pro Dimension (umgesetzt, D-231):** Tonhöhe, Rhythmus (Position und Länge) und Velocity pro Note und pro

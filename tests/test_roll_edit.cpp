@@ -422,3 +422,126 @@ TEST_CASE("a velocity moves by a delta and stays inside 1 to 127", "[roll-edit][
     CHECK(shiftVelocity(127, 1) == 127);
     CHECK(shiftVelocity(64, 0) == 64);
 }
+
+// -- scale fold (SPEC 3.5, v1.1, D-232) --------------------------------------------------------------------------
+
+namespace {
+
+RollFold aMinorFold(bool on = true) {
+    return foldFor(9, findScale("natural_minor"), on);
+}
+
+} // namespace
+
+TEST_CASE("a fold shows the tones of the scale as rows", "[roll-edit][fold]") {
+    const RollFold fold = aMinorFold();
+    REQUIRE(fold.active());
+    CHECK(fold.tonesPerOctave() == 7);
+    // A natural minor: A B C D E F G; every octave adds seven rows
+    CHECK(fold.rowOf(69) - fold.rowOf(57) == 7.0);
+    CHECK(fold.rowOf(71) - fold.rowOf(69) == 1.0); // A to B
+    CHECK(fold.rowOf(72) - fold.rowOf(71) == 1.0); // B to C
+    CHECK(fold.rowOf(74) - fold.rowOf(72) == 1.0); // C to D
+    // a pitch outside the scale stands half a row above the tone below
+    CHECK(fold.rowOf(70) == fold.rowOf(69) + 0.5); // A# between A and B
+    CHECK(fold.rowOf(73) == fold.rowOf(72) + 0.5); // C# between C and D
+    // the rows map back to the scale pitches
+    for (int pitch = 0; pitch <= 127; ++pitch) {
+        const double row = fold.rowOf(pitch);
+        if (row == std::floor(row)) {
+            CHECK(fold.pitchOfRow(static_cast<int>(row)) == pitch);
+        }
+    }
+    CHECK(fold.rowOf(0) >= 0.0); // the rows count from 0 upwards
+    CHECK(fold.pitchOfRow(-5) >= 0);
+    CHECK(fold.pitchOfRow(10000) <= 127);
+}
+
+TEST_CASE("an inactive fold leaves the rows as they are", "[roll-edit][fold]") {
+    const RollFold off = aMinorFold(false);
+    CHECK_FALSE(off.active());
+    CHECK(off.rowOf(70) == 70.0);
+    CHECK(off.pitchOfRow(70) == 70);
+    const RollFold none = foldFor(9, nullptr, true); // no scale known
+    CHECK_FALSE(none.active());
+    CHECK(none.rowOf(33) == 33.0);
+    RollFold empty;
+    empty.on = true; // no tones
+    CHECK_FALSE(empty.active());
+}
+
+TEST_CASE("pentatonic scales fold to five rows an octave", "[roll-edit][fold]") {
+    const RollFold fold = foldFor(9, findScale("minor_pentatonic"), true);
+    REQUIRE(fold.active());
+    CHECK(fold.tonesPerOctave() == 5);
+    CHECK(fold.rowOf(69 + 12) - fold.rowOf(69) == 5.0);
+}
+
+TEST_CASE("the geometry puts scale tones on consecutive rows when it folds", "[roll-edit][fold]") {
+    RollGeometry geometry = geometryOf(kTicksPerBar, 0, kTicksPerBar, 0, 16);
+    geometry.fold = aMinorFold();
+    const int low = static_cast<int>(std::ceil(geometry.fold.rowOf(57)));
+    geometry.viewport.lowPitch = low; // the lowest visible row: A3
+    const double rowHeight = geometry.rowHeight();
+    // A, B, C: neighbouring rows, one row height apart
+    CHECK(geometry.pitchToY(57) - geometry.pitchToY(59) == Catch::Approx(rowHeight));
+    CHECK(geometry.pitchToY(59) - geometry.pitchToY(60) == Catch::Approx(rowHeight));
+    // a pixel inside a row gives the pitch of that row
+    for (const int pitch : {57, 59, 60, 62, 64, 65, 67, 69}) {
+        const double y = geometry.pitchToY(pitch) + rowHeight / 2.0;
+        CHECK(geometry.yToPitch(y) == pitch);
+    }
+    // a chromatic note sits between its neighbours: half a row above the tone below
+    CHECK(geometry.pitchToY(58) == Catch::Approx(geometry.pitchToY(57) - rowHeight / 2.0));
+    // without the fold the rows are the semitones again
+    geometry.fold.on = false;
+    geometry.viewport.lowPitch = 57;
+    CHECK(geometry.pitchToY(57) - geometry.pitchToY(59) == Catch::Approx(2.0 * rowHeight));
+}
+
+TEST_CASE("a note box and a double click follow the fold", "[roll-edit][fold]") {
+    RollGeometry geometry = geometryOf(kTicksPerBar, 0, kTicksPerBar, 0, 16);
+    geometry.fold = aMinorFold();
+    geometry.viewport.lowPitch = static_cast<int>(std::ceil(geometry.fold.rowOf(57)));
+    const RollNote n = note(1, 62, 0, 480);
+    const RollBox box = noteBox(geometry, n);
+    CHECK(box.y == Catch::Approx(geometry.pitchToY(62)));
+    const auto added = newNoteAt(geometry, snapOf(PitchSnap::Scale), box.x + 5.0, box.y + box.height / 2.0);
+    CHECK(added.pitch == 62);
+    CHECK(hitTest(geometry, std::vector<RollNote>{n}, box.x + 5.0, box.y + box.height / 2.0).id == 1);
+}
+
+TEST_CASE("dragging a note by rows moves it by scale tones in a fold", "[roll-edit][fold]") {
+    RollGeometry geometry = geometryOf(kTicksPerBar, 0, kTicksPerBar, 0, 16);
+    geometry.fold = aMinorFold();
+    geometry.viewport.lowPitch = static_cast<int>(std::ceil(geometry.fold.rowOf(57)));
+    const RollNote anchor = note(1, 69, 0, 480); // A4
+    const double rowHeight = geometry.rowHeight();
+    const auto up2 = dragMoveDelta(geometry, snapOf(PitchSnap::Scale), anchor, 0.0, -2.0 * rowHeight);
+    CHECK(anchor.pitch + up2.pitch == 72); // A, B, C: two rows up is C
+    const auto down1 = dragMoveDelta(geometry, snapOf(PitchSnap::Scale), anchor, 0.0, rowHeight);
+    CHECK(anchor.pitch + down1.pitch == 67); // G
+    const auto octave = dragMoveDelta(geometry, snapOf(PitchSnap::Scale), anchor, 0.0, -7.0 * rowHeight);
+    CHECK(octave.pitch == 12);
+}
+
+TEST_CASE("the window moves between pitches and rows with the fold", "[roll-edit][fold]") {
+    const RollFold fold = aMinorFold();
+    RollViewport pitches{0, kTicksPerBar, 57, 14};
+    const RollViewport rows = foldViewport(pitches, fold);
+    CHECK(rows.lowPitch == static_cast<int>(std::ceil(fold.rowOf(57))));
+    CHECK(rows.rows == 14);
+    CHECK(rows.pitchOffset == 0.0);
+    CHECK(unfoldViewport(rows, fold).lowPitch == 57);
+    // a window between the tones starts at the next row up
+    pitches.lowPitch = 58;
+    CHECK(unfoldViewport(foldViewport(pitches, fold), fold).lowPitch == 59);
+    // inactive: unchanged
+    CHECK(foldViewport(pitches, aMinorFold(false)).lowPitch == 58);
+    CHECK(unfoldViewport(pitches, aMinorFold(false)).lowPitch == 58);
+    // always within the limits
+    RollViewport top{0, kTicksPerBar, 120, 8};
+    const RollViewport topRows = foldViewport(top, fold);
+    CHECK(topRows.lowPitch + topRows.rows <= 128);
+    CHECK(unfoldViewport(topRows, fold).lowPitch + 8 <= 128);
+}

@@ -1,7 +1,9 @@
 #include "core/RollEdit.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <vector>
 
 namespace mm::core {
 
@@ -117,13 +119,95 @@ uint32_t RollGeometry::xToTick(double x) const {
     return static_cast<uint32_t>(std::floor(std::clamp(tick, 0.0, last)));
 }
 
+int RollFold::tonesPerOctave() const {
+    return std::max(std::popcount(static_cast<unsigned>(mask & 0x0FFFu)), 1);
+}
+
+namespace {
+
+/// Semitone offsets of the scale tones above the root, ascending.
+std::vector<int> foldDegrees(const RollFold& fold) {
+    std::vector<int> degrees;
+    for (int n = 0; n < 12; ++n) {
+        if ((fold.mask >> n) & 1u) {
+            degrees.push_back(n);
+        }
+    }
+    return degrees;
+}
+
+} // namespace
+
+double RollFold::rowOf(int pitch) const {
+    if (!active()) {
+        return pitch;
+    }
+    const auto degrees = foldDegrees(*this);
+    const int shifted = pitch - root + 12; // never negative: the rows count from 0 upwards
+    const int octave = shifted / 12;
+    const int relative = shifted % 12;
+    int below = 0;
+    for (const int degree : degrees) {
+        if (degree < relative) {
+            ++below;
+        }
+    }
+    const bool inScale = std::find(degrees.begin(), degrees.end(), relative) != degrees.end();
+    return octave * static_cast<double>(degrees.size()) + below - (inScale ? 0.0 : 0.5);
+}
+
+int RollFold::pitchOfRow(int row) const {
+    if (!active()) {
+        return row;
+    }
+    const auto degrees = foldDegrees(*this);
+    const int count = static_cast<int>(degrees.size());
+    const int octave = row >= 0 ? row / count : -((-row + count - 1) / count);
+    const int index = row - octave * count;
+    return std::clamp(octave * 12 + degrees[static_cast<size_t>(index)] + root - 12, 0, 127);
+}
+
+RollFold foldFor(PitchClass root, const Scale* scale, bool on) {
+    RollFold fold;
+    if (scale == nullptr) {
+        return fold;
+    }
+    fold.on = on;
+    fold.root = static_cast<uint8_t>(root % 12);
+    for (const uint8_t interval : scale->intervals) {
+        fold.mask = static_cast<uint16_t>(fold.mask | (1u << (interval % 12)));
+    }
+    return fold;
+}
+
+RollViewport foldViewport(RollViewport viewport, const RollFold& fold) {
+    if (!fold.active()) {
+        return viewport;
+    }
+    viewport.lowPitch = static_cast<int>(std::ceil(fold.rowOf(viewport.lowPitch)));
+    viewport.pitchOffset = 0.0;
+    viewport.lowPitch = std::clamp(viewport.lowPitch, 0, 128 - viewport.rows);
+    return viewport;
+}
+
+RollViewport unfoldViewport(RollViewport viewport, const RollFold& fold) {
+    if (!fold.active()) {
+        return viewport;
+    }
+    viewport.lowPitch = std::clamp(fold.pitchOfRow(viewport.lowPitch), 0, 128 - viewport.rows);
+    viewport.pitchOffset = 0.0;
+    return viewport;
+}
+
 double RollGeometry::pitchToY(int pitch) const {
-    return (static_cast<double>(viewport.lowPitch + viewport.rows - 1 - pitch) + viewport.pitchOffset) * rowHeight();
+    return (static_cast<double>(viewport.lowPitch + viewport.rows - 1) - fold.rowOf(pitch) + viewport.pitchOffset) *
+           rowHeight();
 }
 
 int RollGeometry::yToPitch(double y) const {
     const double top = static_cast<double>(viewport.lowPitch + viewport.rows - 1) + viewport.pitchOffset;
-    return std::clamp(static_cast<int>(std::ceil(top - y / rowHeight())), 0, 127);
+    const int row = static_cast<int>(std::ceil(top - y / rowHeight()));
+    return std::clamp(fold.pitchOfRow(row), 0, 127);
 }
 
 RollBox noteBox(const RollGeometry& geometry, const RollNote& note) {
@@ -190,7 +274,10 @@ MoveDelta dragMoveDelta(const RollGeometry& geometry, const RollSnap& snap, cons
         std::llround(std::clamp(target, 0.0, static_cast<double>(std::max<uint32_t>(geometry.patternTicks, 1)))));
     delta.ticks = static_cast<int32_t>(static_cast<int64_t>(snapTick(clamped, snap.grid)) - anchor.startTick);
     const int rows = -static_cast<int>(std::lround(dy / geometry.rowHeight()));
-    const int wanted = std::clamp(static_cast<int>(anchor.pitch) + rows, 0, 127);
+    const int wanted =
+        geometry.fold.active()
+            ? geometry.fold.pitchOfRow(static_cast<int>(std::lround(geometry.fold.rowOf(anchor.pitch))) + rows)
+            : std::clamp(static_cast<int>(anchor.pitch) + rows, 0, 127);
     const int snapped = snap.scale != nullptr ? snapPitch(wanted, snap.pitch, snap.root, *snap.scale) : wanted;
     delta.pitch = snapped - anchor.pitch;
     return delta;

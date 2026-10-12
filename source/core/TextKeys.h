@@ -188,6 +188,10 @@ namespace mm::core::text {
     X(kTransposeChannelAll, "settings.transpose.channel.all")                                                          \
     X(kTransposeChannelN, "settings.transpose.channel.n")                                                              \
     X(kToggleTransposeExport, "settings.transpose.export")                                                             \
+    X(kLabelRollView, "settings.rollView")                                                                             \
+    X(kToggleRollFold, "settings.rollFold")                                                                            \
+    X(kToggleRollGuides, "settings.rollGuides")                                                                        \
+    X(kToggleRollMarkers, "settings.rollMarkers")                                                                      \
     X(kToggleMidiThru, "settings.transpose.thru")                                                                      \
     X(kLabelLanguage, "settings.language")                                                                             \
     X(kLanguageAuto, "settings.language.auto")                                                                         \
