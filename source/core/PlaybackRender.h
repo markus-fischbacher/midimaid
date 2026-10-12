@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/GrooveLibrary.h"
 #include "core/Pattern.h"
 #include "core/PlaybackPattern.h"
 #include "core/StyleProfile.h"
@@ -20,6 +21,6 @@ struct PlaybackNotes {
 };
 
 PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile& style, size_t voiceIndex,
-                                     int octaveShift = 0);
+                                     int octaveShift = 0, const GrooveLibrary* grooves = nullptr);
 
 } // namespace mm::core

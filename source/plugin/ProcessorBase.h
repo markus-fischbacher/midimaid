@@ -132,6 +132,10 @@ public:
         std::vector<mm::core::RollNote> source;
         mm::core::PitchClass root = 9;
         std::string scaleId;
+        std::string grooveId;       ///< the groove template of the voice: "straight", "drum_reference" or a library id (SPEC 3.9)
+        float swing = 0.5f;         ///< what the swing control shows (0.50 to 0.75)
+        bool swingActive = true;    ///< false: the template has swing of its own and the control is off
+        bool drumReference = false; ///< the pattern has a drum reference to choose
         mm::core::TransposeInfo transposeInfo; ///< key, range and extremes of the voice (live transposition, SPEC 3.16)
         /// True when `other` shows the same thing (no need to redraw or export again).
         bool sameSource(const VoiceView& other) const {
@@ -224,7 +228,8 @@ public:
         bool changed = false; ///< a stage other than the slot sounds: "keep" does something
         bool operator==(const EvolveInfo&) const = default;
     };
-    void setEvolve(bool on);
+    /// `fromHost`: the host parameter itself asked for it, so the parameter is not written back.
+    void setEvolve(bool on, bool fromHost = false);
     bool evolveOn() const { return evolveOn_; }
     EvolveInfo evolveInfo() const;
     /// Takes the stage that sounds into the slot (a history entry and an undo step, SPEC 6.7); Evolve goes on from there.
@@ -275,6 +280,12 @@ public:
     bool clearSlot(size_t index);
     bool swapSlots(size_t first, size_t second);
     bool hasSlotClipboard() const;
+    /// Message thread: the groove of a voice of the slot (0-based indices, SPEC 3.9): a template (`straight`,
+    /// `drum_reference` or an id of the library) and/or the swing (0.50 to 0.75). Like a note edit: it plays at once and
+    /// is an undo step (`mergeWithPrevious` continues the step of a slider that is dragged). False in a voice, for an
+    /// empty slot, an unknown template or when nothing changes.
+    bool setVoiceGroove(size_t slotIndex, size_t voice, const std::optional<std::string>& templateId,
+                        std::optional<float> swing, bool mergeWithPrevious = false);
     /// Message thread: locks or unlocks a voice of the slot (0-based indices, SPEC 3.5). An undo step like a note edit.
     /// False in a voice, for an empty slot or when the lock is already as asked.
     bool setVoiceLocked(size_t slotIndex, size_t voice, bool locked);

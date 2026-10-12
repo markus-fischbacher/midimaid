@@ -5775,3 +5775,242 @@ TEST_CASE("the chromatic slider is an expert control that follows the instance",
     child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
     child<juce::ToggleButton>(*editor, "expert")->onClick();
 }
+
+// --- groove templates (SPEC 3.9, D-220) -----------------------------------------------------------------------
+
+namespace {
+
+/// A hub with a one-bar pattern whose bass plays a 16th on every step (the voice of the hub is the bass).
+struct GrooveRig {
+    Quiet quiet;
+    Instance hub{"Hub"};
+    GrooveRig() {
+        hub.setRole(InstanceRole::Hub);
+        mm::core::Pattern pattern = mm::core::makeEmptyPattern(1, "peak_time");
+        for (uint32_t step = 0; step < 16; ++step) {
+            mm::core::Note note;
+            note.id = mm::core::allocateNoteId(pattern);
+            note.pitch = 40;
+            note.startTick = step * 240;
+            note.lengthTicks = 60;
+            pattern.voices[0].notes.push_back(note);
+        }
+        hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, pattern)); });
+        hub.setSlotParameter(1);
+    }
+    mm::core::Track track() { return hub.processor.slotsSnapshot().slot(0)->pattern->voices[0]; } // a copy
+    /// The sample of the first note-on at or after a position of the PPQ grid.
+    long long noteNear(double ppq) const {
+        long long best = -1;
+        for (const auto& note : hub.notes()) {
+            if (best < 0 || std::llabs(note.sample - at(ppq)) < std::llabs(best - at(ppq))) {
+                best = note.sample;
+            }
+        }
+        return best;
+    }
+};
+
+} // namespace
+
+TEST_CASE("a voice's groove is set like an edit: it plays at once and is an undo step", "[group-wiring][groove]") {
+    GrooveRig rig;
+    CHECK(rig.track().groove.templateId.empty()); // an empty id is straight
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("swing_62"), std::nullopt));
+    CHECK(rig.track().groove.templateId == "swing_62");
+    CHECK(rig.hub.processor.canUndo());
+    REQUIRE(rig.hub.processor.undo());
+    CHECK(rig.track().groove.templateId.empty());
+    // the swing alone, in range
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.58f));
+    CHECK(rig.track().groove.swing == 0.58f);
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.9f));
+    CHECK(rig.track().groove.swing == 0.75f); // limited
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.1f));
+    CHECK(rig.track().groove.swing == 0.5f);
+    // the drum reference is a template too (it needs the reference to do anything)
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("drum_reference"), std::nullopt));
+    CHECK(rig.track().groove.templateId == "drum_reference");
+    // what does not exist or changes nothing
+    CHECK_FALSE(rig.hub.processor.setVoiceGroove(0, 0, std::string("no_such_groove"), std::nullopt));
+    CHECK_FALSE(rig.hub.processor.setVoiceGroove(0, 0, std::string("drum_reference"), std::nullopt)); // already
+    CHECK_FALSE(rig.hub.processor.setVoiceGroove(0, 9, std::string("swing_62"), std::nullopt));        // no such voice
+    CHECK_FALSE(rig.hub.processor.setVoiceGroove(5, 0, std::string("swing_62"), std::nullopt));        // an empty slot
+}
+
+TEST_CASE("a voice instance does not change the groove, it shows the hub's", "[group-wiring][groove]") {
+    GrooveRig rig;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    CHECK_FALSE(voice.processor.setVoiceGroove(0, 0, std::string("swing_62"), std::nullopt));
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("shuffle"), std::nullopt));
+    CHECK(voice.processor.slotsSnapshot().slot(0)->pattern->voices[0].groove.templateId == "shuffle");
+}
+
+TEST_CASE("the view of a voice carries its groove: template, swing and whether the control works", "[group-wiring][groove]") {
+    GrooveRig rig;
+    auto views = rig.hub.processor.playingVoices();
+    REQUIRE(views.size() >= 2);
+    CHECK(views[0].grooveId == "straight");
+    CHECK(views[0].swingActive);
+    CHECK_FALSE(views[0].drumReference);
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("swing_66"), 0.54f));
+    views = rig.hub.processor.playingVoices();
+    CHECK(views[0].grooveId == "swing_66");
+    CHECK_FALSE(views[0].swingActive);
+    CHECK(views[0].swing == 0.66f); // what the template does
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("laid_back"), std::nullopt));
+    views = rig.hub.processor.playingVoices();
+    CHECK(views[0].swingActive);
+    CHECK(views[0].swing == 0.54f);
+}
+
+TEST_CASE("the engine plays a groove template: the notes are where the template puts them", "[group-wiring][groove]") {
+    GrooveRig rig;
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("swing_66"), std::nullopt));
+    rig.hub.setPpq(0.0);
+    runTo({&rig.hub}, 8.0);
+    // from the second bar on the template plays (a result waits for its bar line): the odd 16th at 4.25 is 77 ticks late
+    const double late = 4.0 + 0.25 + 77.0 / 960.0;
+    CHECK(std::llabs(rig.noteNear(late) - at(late)) <= 2);
+    // a straight 16th stays on its grid: 4.5
+    bool onGrid = false;
+    for (const auto& note : rig.hub.notes()) {
+        onGrid = onGrid || std::llabs(note.sample - at(4.5)) <= 2;
+    }
+    CHECK(onGrid);
+    // and not at the straight position of the odd 16th
+    bool straightOdd = false;
+    for (const auto& note : rig.hub.notes()) {
+        straightOdd = straightOdd || std::llabs(note.sample - at(4.25)) <= 2;
+    }
+    CHECK_FALSE(straightOdd);
+}
+
+TEST_CASE("the voice row has the groove box and the swing slider", "[group-wiring][groove][editor]") {
+    GrooveRig rig;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(rig.hub.processor.createEditor());
+    pumpMessages(80);
+    auto* box = child<juce::ComboBox>(*editor, "groove_1");
+    auto* slider = child<juce::Slider>(*editor, "swing_1");
+    REQUIRE((box != nullptr && slider != nullptr));
+    REQUIRE(waitFor([&] { return box->getNumItems() > 1 && box->isEnabled(); }));
+    CHECK(box->getItemText(0) == "Gerade");
+    CHECK(box->getNumItems() == 1 + 8); // straight and the eight templates (no drum reference in this pattern)
+    CHECK(box->getSelectedId() == 1);
+    CHECK(slider->isEnabled());
+    // choose a template with swing of its own: the pattern changes, the slider is off and shows the swing of the template
+    int id = 0;
+    for (int i = 0; i < box->getNumItems(); ++i) {
+        if (box->getItemText(i) == "Swing 62 %") {
+            id = box->getItemId(i);
+        }
+    }
+    REQUIRE(id > 0);
+    box->setSelectedId(id, juce::sendNotificationSync);
+    CHECK(rig.track().groove.templateId == "swing_62");
+    CHECK(waitFor([&] { return !slider->isEnabled() && slider->getValue() == 62.0; }));
+    // Laid back works with the slider
+    for (int i = 0; i < box->getNumItems(); ++i) {
+        if (box->getItemText(i) == "Laid back") {
+            id = box->getItemId(i);
+        }
+    }
+    box->setSelectedId(id, juce::sendNotificationSync);
+    CHECK(waitFor([&] { return slider->isEnabled(); }));
+    slider->setValue(57.0, juce::sendNotificationSync);
+    CHECK(std::abs(rig.track().groove.swing - 0.57f) < 1e-6f);
+    // back to straight
+    box->setSelectedId(1, juce::sendNotificationSync);
+    CHECK(rig.track().groove.templateId == "straight");
+}
+
+TEST_CASE("the drum reference is offered only when the pattern has one", "[group-wiring][groove][editor]") {
+    GrooveRig rig;
+    rig.hub.processor.editSlots([&](mm::core::SlotBank& bank) {
+        mm::core::Pattern pattern = *bank.slot(0)->pattern;
+        mm::core::RhythmReference ref;
+        ref.bars = 1;
+        pattern.rhythmRef = ref;
+        REQUIRE(bank.setResult(0, pattern));
+    });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(rig.hub.processor.createEditor());
+    pumpMessages(80);
+    auto* box = child<juce::ComboBox>(*editor, "groove_1");
+    REQUIRE(box != nullptr);
+    REQUIRE(waitFor([&] { return box->getNumItems() > 1; }));
+    CHECK(box->getNumItems() == 2 + 8);
+    CHECK(box->getItemText(1) == "Drum-Referenz");
+    box->setSelectedId(2, juce::sendNotificationSync);
+    CHECK(rig.track().groove.templateId == "drum_reference");
+}
+
+TEST_CASE("the groove controls fit in the voice rows and overlap nothing", "[group-wiring][groove][editor][layout]") {
+    GrooveRig rig;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(rig.hub.processor.createEditor());
+    pumpMessages(80);
+    for (const int voice : {1, 2}) {
+        auto* row = child<mm::plugin::VoiceRow>(*editor, "row_" + juce::String(voice));
+        REQUIRE(row != nullptr);
+        for (const char* prefix : {"groove_", "swing_"}) {
+            auto* one = child<juce::Component>(*row, prefix + juce::String(voice));
+            REQUIRE(one != nullptr);
+            INFO(prefix << voice);
+            CHECK(one->isVisible());
+            CHECK(one->getHeight() >= 16);
+            CHECK(one->getWidth() >= 100);
+            CHECK(row->getLocalBounds().contains(one->getBounds()));
+            // they sit in the title strip of the roll, over it, and over nothing else
+            auto* roll = child<mm::plugin::EditableRoll>(*row, "roll_" + juce::String(voice));
+            if (roll != nullptr) {
+                CHECK(one->getBottom() <= roll->getY() + mm::plugin::EditableRoll::kTitleHeight);
+                CHECK(one->getY() >= roll->getY());
+            }
+            for (auto* other : row->getChildren()) {
+                if (other != one && other != roll && other->isVisible() && other->getWidth() > 0) {
+                    INFO(other->getComponentID().toStdString());
+                    CHECK_FALSE(one->getBounds().intersects(other->getBounds()));
+                }
+            }
+        }
+        // the grip below the buttons is still a handle
+        auto* grip = child<mm::plugin::DragHandle>(*row, "drag_" + juce::String(voice));
+        if (grip != nullptr) {
+            CHECK(grip->getHeight() >= 24);
+        }
+    }
+}
+
+TEST_CASE("one drag of the swing slider is one undo step", "[group-wiring][groove]") {
+    GrooveRig rig;
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.52f)); // a step of its own
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.55f, false)); // the drag begins a step ...
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.60f, true)); // ... and goes on in it
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.65f, true));
+    CHECK(rig.track().groove.swing == 0.65f);
+    REQUIRE(rig.hub.processor.undo()); // the whole drag at once
+    CHECK(rig.track().groove.swing == 0.52f);
+    REQUIRE(rig.hub.processor.undo());
+    CHECK(rig.track().groove.swing == 0.5f);
+    CHECK_FALSE(rig.hub.processor.canUndo());
+}
+
+TEST_CASE("evolve parameters: what the host wrote is not written back, the toggle of the window is", "[group-wiring][evolve][parameters]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 41))); });
+    auto* evolve = hub.processor.parameters().getParameter("evolve");
+    evolve->setValueNotifyingHost(0.6f); // a host (pluginval, an automation lane) moves it to a value of its own
+    pumpMessages(40);
+    CHECK(hub.processor.evolveOn());
+    CHECK(evolve->getValue() == 0.6f); // the plug-in does not race with the host by writing 1.0 over it
+    evolve->setValueNotifyingHost(0.2f);
+    pumpMessages(40);
+    CHECK_FALSE(hub.processor.evolveOn());
+    CHECK(evolve->getValue() == 0.2f);
+    hub.processor.setEvolve(true); // the toggle of the window does write the parameter
+    CHECK(evolve->getValue() == 1.0f);
+    hub.processor.setEvolve(false);
+    CHECK(evolve->getValue() == 0.0f);
+}

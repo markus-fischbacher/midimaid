@@ -1,7 +1,9 @@
 #include "plugin/EditorParts.h"
 
+#include "core/OutputStage.h"
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
+#include "plugin/EmbeddedGrooves.h"
 #include "plugin/EmbeddedTranslation.h"
 
 namespace mm::plugin {
@@ -163,6 +165,45 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     };
     addAndMakeVisible(varyButton_);
 
+    // The groove of the voice: a template (SPEC 3.9, v1.1) and the swing control (off for a template with swing of its own)
+    grooveBox_.setComponentID("groove_" + juce::String(voice));
+    grooveBox_.onChange = [this] {
+        if (updatingGroove_ || slotIndex_ < 0) {
+            return;
+        }
+        const int id = grooveBox_.getSelectedId();
+        std::string choice = mm::core::kGrooveStraight;
+        if (id == 2) {
+            choice = mm::core::kGrooveDrumReference;
+        } else if (id >= 10) {
+            const auto& templates = embeddedGrooves().templates();
+            if (static_cast<size_t>(id - 10) < templates.size()) {
+                choice = templates[static_cast<size_t>(id - 10)].id;
+            }
+        }
+        processor_.setVoiceGroove(static_cast<size_t>(slotIndex_), static_cast<size_t>(voice_ - 1), choice, std::nullopt);
+        if (onAction) {
+            onAction();
+        }
+    };
+    addAndMakeVisible(grooveBox_);
+    swingSlider_.setComponentID("swing_" + juce::String(voice));
+    swingSlider_.setRange(50.0, 75.0, 1.0);
+    swingSlider_.setValue(50.0, juce::dontSendNotification);
+    swingSlider_.setTextValueSuffix(tr(mm::core::text::kSwingSuffix));
+    swingSlider_.onValueChange = [this] {
+        if (updatingGroove_ || slotIndex_ < 0) {
+            return;
+        }
+        // one drag of the slider is one undo step: the first change begins it, the others continue it
+        const bool continues = swingSlider_.isMouseButtonDown() && !swingDragStart_;
+        swingDragStart_ = false;
+        processor_.setVoiceGroove(static_cast<size_t>(slotIndex_), static_cast<size_t>(voice_ - 1), std::nullopt,
+                                  static_cast<float>(swingSlider_.getValue() / 100.0), continues);
+    };
+    swingSlider_.onDragStart = [this] { swingDragStart_ = true; };
+    addAndMakeVisible(swingSlider_);
+
     duplicateButton_.setComponentID("duplicate_" + juce::String(voice));
     duplicateButton_.setButtonText(tr(mm::core::text::kButtonDuplicate));
     duplicateButton_.onClick = [this] {
@@ -198,6 +239,40 @@ void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String&
     lockButton_.setToggleState(filled && view->locked, juce::dontSendNotification);
     updateMuted();
     updateButtons();
+    fillGroove(view);
+}
+
+void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {
+    updatingGroove_ = true;
+    const bool filled = view != nullptr && view->hasPattern;
+    grooveBox_.clear(juce::dontSendNotification);
+    grooveBox_.addItem(tr(mm::core::text::kGroovePickStraight), 1);
+    if (filled && view->drumReference) {
+        grooveBox_.addItem(tr(mm::core::text::kGroovePickDrumReference), 2);
+    }
+    int index = 0;
+    for (const auto& groove : embeddedGrooves().templates()) {
+        grooveBox_.addItem(juce::String::fromUTF8(groove.nameDe.c_str()), 10 + index++);
+    }
+    int selected = 1;
+    if (filled) {
+        if (view->grooveId == mm::core::kGrooveDrumReference && view->drumReference) {
+            selected = 2;
+        } else {
+            index = 0;
+            for (const auto& groove : embeddedGrooves().templates()) {
+                if (groove.id == view->grooveId) {
+                    selected = 10 + index;
+                }
+                ++index;
+            }
+        }
+    }
+    grooveBox_.setSelectedId(selected, juce::dontSendNotification);
+    grooveBox_.setEnabled(filled);
+    swingSlider_.setValue(filled ? std::round(view->swing * 100.0f) : 50.0, juce::dontSendNotification);
+    swingSlider_.setEnabled(filled && view->swingActive);
+    updatingGroove_ = false;
 }
 
 void VoiceRow::updateButtons() {
@@ -218,6 +293,8 @@ void VoiceRow::setCollapsed(bool collapsed) {
     }
     collapsed_ = collapsed;
     roll_.setVisible(!collapsed);
+    grooveBox_.setVisible(!collapsed);
+    swingSlider_.setVisible(!collapsed);
     resized();
 }
 
@@ -270,6 +347,8 @@ void VoiceRow::resized() {
         area.removeFromLeft(10);
         drag_.setBounds(area.removeFromLeft(60).withHeight(area.getHeight()));
         roll_.setBounds({});
+        grooveBox_.setBounds({});
+        swingSlider_.setBounds({});
         return;
     }
     auto left = area.removeFromLeft(160);
@@ -286,6 +365,12 @@ void VoiceRow::resized() {
     drag_.setBounds(left.removeFromBottom(40));
     area.removeFromLeft(8);
     roll_.setBounds(area);
+    // The groove controls sit in the title strip of the roll, at its right end (the name stands at the left): the left
+    // column has no room for two more lines in a window with two voices.
+    auto strip = area.removeFromTop(EditableRoll::kTitleHeight).reduced(4, 1);
+    swingSlider_.setBounds(strip.removeFromRight(130));
+    strip.removeFromRight(6);
+    grooveBox_.setBounds(strip.removeFromRight(150));
 }
 
 SlotButton::SlotButton(int slot) : slot_(slot) {}

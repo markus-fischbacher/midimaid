@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/GrooveLibrary.h"
 #include "core/Pattern.h"
 
 #include <cstdint>
@@ -7,8 +8,9 @@
 
 namespace mm::core {
 
-/// Groove template ids of `GrooveSettings::templateId` in v1.0 (SPEC 3.9): an empty id or "straight" uses the swing
-/// control; "drum_reference" takes timing and velocity from `Pattern::rhythmRef` (no double swing).
+/// Groove template ids of `GrooveSettings::templateId` (SPEC 3.9): an empty id or "straight" uses the swing control;
+/// "drum_reference" takes timing and velocity from `Pattern::rhythmRef` (no double swing); any other id names a template
+/// of `OutputSettings::grooves` (v1.1; an unknown one is straight).
 constexpr const char* kGrooveStraight = "straight";
 constexpr const char* kGrooveDrumReference = "drum_reference";
 
@@ -20,6 +22,7 @@ struct OutputSettings {
     bool includeGroove = true;         ///< false skips stage 2: the notes keep their grid (export without groove)
     std::vector<bool> ignoresKick;     ///< per voice (pattern order): the archetype may hold over kicks (`long_tied`)
     int octaveShift = 0;               ///< stage 1: octaves added to every pitch (an instance's own octave, D-147)
+    const GrooveLibrary* grooves = nullptr; ///< the groove templates a track may name (SPEC 3.9, v1.1); null: none
 };
 
 /// A sounding note. Positions are ticks from the pattern start; `endTick` of a slide on the last note lies behind the

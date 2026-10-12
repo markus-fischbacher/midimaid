@@ -10,8 +10,9 @@
 namespace mm::core {
 
 PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile& style, size_t voiceIndex,
-                                     int octaveShift) {
+                                     int octaveShift, const GrooveLibrary* grooves) {
     OutputSettings settings;
+    settings.grooves = grooves;
     settings.octaveShift = clampOctave(octaveShift);
     settings.kickClearanceTicks = style.bass.kickClearanceTicks;
     for (const Track& track : pattern.voices) {

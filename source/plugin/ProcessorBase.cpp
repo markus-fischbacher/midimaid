@@ -15,6 +15,9 @@
 #include "plugin/EmbeddedPrompts.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "core/Groove.h"
+#include "core/OutputStage.h"
+#include "plugin/EmbeddedGrooves.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/LibraryStore.h"
 #include "plugin/PlaceholderEditor.h"
@@ -132,7 +135,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ProcessorBase::createParamet
 ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     : juce::AudioProcessor(buses), name_(std::move(name)),
       parameters_(*this, nullptr, "MidiMaid", createParameterLayout()), styles_(embeddedStyles()),
-      publisher_(handover_, styles_), player_(mm::core::PatternView{nullptr, 0, mm::core::kTicksPerBar}),
+      publisher_(handover_, styles_, &embeddedGrooves()), player_(mm::core::PatternView{nullptr, 0, mm::core::kTicksPerBar}),
       returnCollector_(handover_), importer_([this](const ImportRequest& request, ImportOutcome outcome) {
           onImported(request, std::move(outcome));
       }),
@@ -256,7 +259,7 @@ void ProcessorBase::updateSlotMode() {
 void ProcessorBase::onEvolveParameter(const juce::String& id, bool on) {
     if (id == "evolve") {
         if (!isNonRealtime()) { // an offline render ignores it (SPEC 6.6)
-            setEvolve(on);
+            setEvolve(on, true);
         }
     } else if (!on) {
         return; // the fall of a trigger back to 0 is no edge
@@ -353,7 +356,7 @@ ProcessorBase::OverlayMessage ProcessorBase::evolveShow(size_t slot, const mm::c
     return message;
 }
 
-void ProcessorBase::setEvolve(bool on) {
+void ProcessorBase::setEvolve(bool on, bool fromHost) {
     if (on == evolveOn_) {
         if (!on) {
             evolveTimer_.reset(); // an idle timer from an offline render
@@ -376,7 +379,9 @@ void ProcessorBase::setEvolve(bool on) {
         evolveTimer_.reset();
         sendOverlay(evolveEnd(true));
     }
-    setEvolveParameter(on);
+    if (!fromHost) { // the host moved the parameter itself: writing it back would race with its own writes (pluginval)
+        setEvolveParameter(on);
+    }
 }
 
 ProcessorBase::EvolveInfo ProcessorBase::evolveInfo() const {
@@ -681,6 +686,36 @@ bool ProcessorBase::editNotes(size_t slotIndex, const std::function<size_t(mm::c
         groupLink_->publish(std::move(forVoices), std::nullopt); // outside the lock: the registry may call back
     }
     return true;
+}
+
+bool ProcessorBase::setVoiceGroove(size_t slotIndex, size_t voice, const std::optional<std::string>& templateId,
+                                   std::optional<float> swing, bool mergeWithPrevious) {
+    if (templateId && *templateId != mm::core::kGrooveStraight && *templateId != mm::core::kGrooveDrumReference &&
+        embeddedGrooves().find(*templateId) == nullptr) {
+        return false; // a template that does not exist
+    }
+    return editNotes(
+        slotIndex,
+        [&](mm::core::Pattern& pattern) -> size_t {
+            if (voice >= pattern.voices.size()) {
+                return 0;
+            }
+            auto& groove = pattern.voices[voice].groove;
+            size_t changed = 0;
+            if (templateId && groove.templateId != *templateId) {
+                groove.templateId = *templateId;
+                ++changed;
+            }
+            if (swing) {
+                const float clamped = std::clamp(*swing, 0.5f, 0.75f);
+                if (groove.swing != clamped) {
+                    groove.swing = clamped;
+                    ++changed;
+                }
+            }
+            return changed;
+        },
+        mergeWithPrevious);
 }
 
 bool ProcessorBase::setVoiceLocked(size_t slotIndex, size_t voice, bool locked) {
@@ -2088,7 +2123,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     if (style == nullptr) {
         return;
     }
-    auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave);
+    auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave, &embeddedGrooves());
     view.hasPattern = true;
     view.notes = std::move(rendered.notes);
     view.lengthTicks = rendered.lengthTicks;
@@ -2098,6 +2133,14 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.root = pattern.context.root;
     view.scaleId = pattern.context.scaleId;
     view.transposeInfo = rendered.transpose;
+    view.drumReference = pattern.rhythmRef.has_value();
+    if (voiceIndex < pattern.voices.size()) {
+        const auto& track = pattern.voices[voiceIndex];
+        const auto groove = mm::core::effectiveGroove(pattern, track, &embeddedGrooves());
+        view.grooveId = track.groove.templateId.empty() ? mm::core::kGrooveStraight : track.groove.templateId;
+        view.swing = groove.swing;
+        view.swingActive = groove.controlActive;
+    }
     view.source.clear();
     if (voiceIndex < pattern.voices.size()) {
         for (const auto& note : pattern.voices[voiceIndex].notes) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/SlotBank.h"
+#include "core/GrooveLibrary.h"
 #include "core/StyleLibrary.h"
 #include "engine/PatternHandover.h"
 
@@ -19,7 +20,8 @@ namespace mm::engine {
 /// one. A slot that was never published stays untouched (silent). Results are quantized to `gridPpq`.
 class SlotPublisher {
 public:
-    SlotPublisher(PatternHandover& handover, const core::StyleLibrary& styles) : handover_(handover), styles_(styles) {}
+    SlotPublisher(PatternHandover& handover, const core::StyleLibrary& styles, const core::GrooveLibrary* grooves = nullptr)
+        : handover_(handover), styles_(styles), grooves_(grooves) {}
 
     /// The voice to play, 1 to `kMaxVoices`. A change republishes every slot at the next `sync`.
     void setOutputVoice(int voice);
@@ -59,6 +61,7 @@ private:
 
     PatternHandover& handover_;
     const core::StyleLibrary& styles_;
+    const core::GrooveLibrary* grooves_ = nullptr; ///< the groove templates a track may name (SPEC 3.9)
     int outputVoice_ = 1;
     int octave_ = 0;
     uint64_t origin_ = 0;                                         ///< origin of the bank that was last synced
