@@ -338,12 +338,20 @@ TEST_CASE("generation around locks protects against the set for the generated vo
 
     // the melody that the generation made without a set is in the set now: it must not come again
     GenerationRequest guardedRequest = requestFor(4, 6);
-    const SelectionResult plain = generatePatternAroundLocks(style, guardedRequest, current);
-    REQUIRE(plain.success);
+    // a line that can be distinctive: a polymeter cell or a plain repeated line is never one, so the seed is searched
+    SelectionResult plain;
     ReferenceEntry melody;
     melody.role = VoiceRole::Melody;
-    melody.bars = plain.pattern.lengthBars;
-    melody.notes = plain.pattern.voices[1].notes;
+    for (uint64_t seed = 6; seed < 60; ++seed) {
+        guardedRequest.seed = seed;
+        plain = generatePatternAroundLocks(style, guardedRequest, current);
+        REQUIRE(plain.success);
+        melody.bars = plain.pattern.lengthBars;
+        melody.notes = plain.pattern.voices[1].notes;
+        if (isDistinctive(melody)) {
+            break;
+        }
+    }
     REQUIRE(isDistinctive(melody));
     guardedRequest.referenceSet = {melody};
     const SelectionResult guarded = generatePatternAroundLocks(style, guardedRequest, current);
@@ -447,6 +455,7 @@ TEST_CASE("the repetition protection never blocks a generation", "[generator][re
 TEST_CASE("generation around locks avoids the history for the generated voices", "[generator][repeat]") {
     const StyleProfile style = loadShipped("peak_time");
     GenerationRequest request = requestFor(4, 6);
+    request.melodyArchetype = "lead_phrase"; // a line that can be distinctive (a polymeter cell never is)
     Pattern current = generateCandidate(style, request, 3);
     current.voices[0].lock = LockFlags{true, true, true};
     const SelectionResult plain = generatePatternAroundLocks(style, request, current);

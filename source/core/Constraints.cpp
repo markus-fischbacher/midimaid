@@ -627,7 +627,8 @@ private:
                 continue;
             }
             const VoiceConstraints range = voiceConstraints(v, track);
-            if (isChordMemoryVoice(pattern_, track)) {
+            const bool memoryVoice = isChordMemoryVoice(pattern_, track);
+            if (memoryVoice) {
                 shiftClashingStabs(track, *bass, tensionAllowed);
             }
             std::vector<bool> remove(track.notes.size(), false);
@@ -648,8 +649,8 @@ private:
                         if (candidate < range.rangeLow || candidate > range.rangeHigh) {
                             continue;
                         }
-                        if (scale != nullptr && !isAllowed(*scale, pattern_.context.root, chord, candidate)) {
-                            continue;
+                        if (scale != nullptr && !memoryVoice && !isAllowed(*scale, pattern_.context.root, chord, candidate)) {
+                            continue; // a memory stab is exempt from the scale: its tone moves to the nearest clean pitch
                         }
                         if (breaksBassRules(*bass, note, candidate, tensionAllowed)) {
                             continue;

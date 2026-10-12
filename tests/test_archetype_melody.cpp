@@ -103,12 +103,12 @@ std::vector<std::string> melodyIds() {
 
 } // namespace
 
-TEST_CASE("the table lists the eleven melody archetypes", "[archetype-melody]") {
+TEST_CASE("the table lists the twelve melody archetypes", "[archetype-melody]") {
     const std::vector<std::string> expected{"hypnotic_motif", "stabs",        "arp",           "acid_siren",
                                             "chord_arp",      "lead_phrase",  "call_response", "pluck_seq",
-                                            "aggro_stabs",    "atonal_motif", "sparse_hits"};
+                                            "aggro_stabs",    "atonal_motif", "sparse_hits",
+                                            "polymeter_seq"};
     CHECK(melodyIds() == expected);
-    CHECK(findArchetype("polymeter_seq") == nullptr); // [v1.1]
     for (const std::string& id : expected) {
         const Archetype* archetype = findArchetype(id);
         REQUIRE(archetype != nullptr);
@@ -820,7 +820,7 @@ TEST_CASE("generateVoice refuses melody requests that do not fit", "[archetype-m
     const Pattern before = p;
     CHECK_FALSE(generateVoice(p, 0, "arp", style, {}, rng));    // voice 0 is the bass
     CHECK_FALSE(generateVoice(p, 1, "rumble", style, {}, rng)); // a bass archetype for the melody
-    CHECK_FALSE(generateVoice(p, 1, "polymeter_seq", style, {}, rng));
+    CHECK_FALSE(generateVoice(p, 1, "no_such_archetype", style, {}, rng));
     p.context.scaleId = "no_such_scale";
     CHECK_FALSE(generateVoice(p, 1, "arp", style, {}, rng));
     p.context.scaleId = before.context.scaleId;

@@ -575,3 +575,24 @@ TEST_CASE("at full strength the bass changes about a quarter and the melody most
     CHECK(bassChanged * 100 >= bassTotal * 20);
     CHECK(melodyChanged * 100 >= melodyTotal * 50);
 }
+
+TEST_CASE("a subtle variation never merges the tones of a chord", "[variation]") {
+    const StyleProfile style = loadShipped("peak_time");
+    for (uint64_t seed = 1; seed <= 150; ++seed) {
+        Pattern base = makeEmptyPattern(2, "peak_time");
+        base.voices[1].archetypeId = "stabs";
+        for (const uint32_t start : {480u, 1440u, 2400u, 3360u, 4320u, 5280u}) {
+            for (const int pitch : {64, 65, 67}) { // a cluster: neighbours one or two semitones apart
+                Note note;
+                note.id = allocateNoteId(base);
+                note.pitch = static_cast<uint8_t>(pitch);
+                note.startTick = start;
+                note.lengthTicks = 240;
+                base.voices[1].notes.push_back(note);
+            }
+        }
+        Pattern varied = base;
+        applyVariation(varied, style, {}, requestOf(seed, kLastSubtlePct, 1));
+        CHECK(varied.voices[1].notes.size() == base.voices[1].notes.size());
+    }
+}

@@ -11,6 +11,7 @@ Melody (MIDI 55 to 88):
 - hypnotic_motif (most common): one or two bars, three to six notes, at most seven semitones wide, repeated and varied every fourth pass in length, accent or velocity.
 - stabs: chords on the offbeats and syncopated, one or two steps short. Chord colours: minor triad, a fifth without third, minor seventh, sus2 or sus4.
 - arp: 16th notes through the chord tones, one or two octaves.
+- polymeter_seq: a short cell of 3, 5, 6, 7, 9 or 10 sixteenths that repeats across the bar lines and restarts with the pattern, two to five tones.
 - acid_siren: a rare monophonic 16th line with slides and accents.
 
 Energy raises the note density, the velocity, the accent share and the octave jumps and shortens the rests. Keep a calm pattern calm.

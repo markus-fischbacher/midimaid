@@ -43,7 +43,7 @@ Regel: Bassnoten beginnen nie auf einem Kick-Schritt. Ausnahme ist nur, wenn der
 erlaubt. Das Kick-Raster ist pro Pattern einstellbar und optional pro Phrase (z. B. `halftime` im Breakdown;
 Feld `Phrase::kickGridId`, SPEC §5).
 
-### 1.3 [v1.1] Polymeter-Sequenzen
+### 1.3 [v1.1] Polymeter-Sequenzen (Neustart umgesetzt, D-230)
 - Sequenzlänge ungleich Taktlänge: 3, 5, 6, 7, 9 oder 10 Sechzehntel bzw. 5 oder 7 Achtel
 - Einstellung **Phasenverhalten**:
   - *Neustart am Pattern-Anfang* (Standard): Die Sequenz beginnt bei jedem Pattern-Durchlauf neu

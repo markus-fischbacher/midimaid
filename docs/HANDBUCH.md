@@ -74,6 +74,8 @@ und wechseln zugleich mit ihm (zum Beginn des nächsten Durchlaufs). Die Host-Pa
 
 **Chord-Memory:** Bei Peak Time und Hard/Industrial spielen die Akkord-Stabs (*Stabs*, *Aggro-Stabs*) **eine Akkordform, die parallel mit den Akkorden wandert**, auch mit Tönen außerhalb der Skala (Detroit- und Dub-Farbe). Melodic Techno bleibt bei weicher Stimmführung. Kollidiert ein Stab auf der Eins mit dem Bass, rückt er als Ganzes um ein 16tel. Der Stil entscheidet; einen eigenen Schalter gibt es nicht.
 
+**Polymeter-Sequenz:** Der Melodie-Archetyp *polymeter_seq* (bei Peak Time) spielt eine kurze Zelle von 3, 5, 6, 7, 9, 10 oder 14 Sechzehnteln, die sich über die Taktgrenzen hinweg wiederholt, mit 2 bis 5 Tönen. Sie beginnt mit jedem Durchlauf des Patterns wieder am Anfang, so dass der Loop stabil bleibt.
+
 **Sperren:** Der Knopf *Sperren* an einer Stimme hält sie fest, bis du sie wieder freigibst. Erzeugen, Variation und
 Verfeinern lassen sie in Ruhe.
 

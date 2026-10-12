@@ -111,6 +111,16 @@ bool moveAccent(std::vector<Note>& notes, Pcg32& rng) {
     return true;
 }
 
+/// True if another note of the same start already has `pitch` (a chord tone): moving a tone there would merge the two.
+bool pitchTakenAtStart(const std::vector<Note>& notes, const Note& self, int pitch) {
+    for (const Note& other : notes) {
+        if (&other != &self && other.startTick == self.startTick && other.pitch == pitch) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool replaceNote(std::vector<Note>& notes, const VariationVoice& context, Pcg32& rng) {
     // Weak steps (off the beat) are chosen three times as often as notes on the beat.
     std::vector<uint32_t> weights;
@@ -131,7 +141,7 @@ bool replaceNote(std::vector<Note>& notes, const VariationVoice& context, Pcg32&
     for (const int offset : {-2, -1, 1, 2}) {
         const int pitch = static_cast<int>(note.pitch) + offset;
         if (pitch >= context.rangeLow && pitch <= context.rangeHigh &&
-            isAllowed(*context.scale, context.harmony->root, chord, pitch)) {
+            isAllowed(*context.scale, context.harmony->root, chord, pitch) && !pitchTakenAtStart(notes, note, pitch)) {
             candidates.push_back(pitch);
         }
     }
@@ -284,7 +294,7 @@ bool swapTones(std::vector<Note>& notes, const VariationVoice& context, Pcg32& r
     for (int offset = -9; offset <= 9; ++offset) {
         const int pitch = static_cast<int>(note.pitch) + offset;
         if (std::abs(offset) >= 3 && pitch >= context.rangeLow && pitch <= context.rangeHigh &&
-            isAllowed(*context.scale, context.harmony->root, chord, pitch)) {
+            isAllowed(*context.scale, context.harmony->root, chord, pitch) && !pitchTakenAtStart(notes, note, pitch)) {
             candidates.push_back(pitch);
         }
     }

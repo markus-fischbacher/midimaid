@@ -265,3 +265,16 @@ TEST_CASE("generated memory stabs keep every rule except the scale", "[chord-mem
         }
     }
 }
+
+TEST_CASE("the constraint layer is idempotent for memory stabs", "[chord-memory][constraints]") {
+    for (const std::string name : {"peak_time", "hard_industrial"}) {
+        const StyleProfile style = loadShipped(name);
+        for (uint64_t seed = 1; seed <= 80; ++seed) {
+            const Pattern p = generateCandidate(style, stabsRequest(seed), seed);
+            Pattern again = p;
+            applyConstraints(again, constraintSettingsFor(again, style));
+            INFO(name << " seed " << seed);
+            CHECK(again == p);
+        }
+    }
+}

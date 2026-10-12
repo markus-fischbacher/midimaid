@@ -115,7 +115,7 @@ TEST_CASE("the archetype table lists the nine bass archetypes", "[archetype]") {
         CHECK(findArchetype(archetype.id)->id == archetype.id);
     }
     CHECK(ids == expected);
-    CHECK(findArchetype("polymeter_seq") == nullptr);
+    CHECK(findArchetype("polymeter_seq") != nullptr); // [v1.1], D-230
     CHECK(findArchetype("") == nullptr);
     CHECK(archetypeContour("unknown") == VelocityContour{});
 }
@@ -1075,8 +1075,8 @@ TEST_CASE("the automatic choice skips unknown ids, other roles and zero weights"
     StyleProfile crossed = loadShipped("peak_time");
     crossed.melody.archetypes = {{"rumble", 5}};
     CHECK(chooseArchetype(crossed, VoiceRole::Melody, 50, rng).empty());
-    // Peak Time lists `polymeter_seq` ([v1.1], no implementation), which is skipped
-    const std::set<std::string> peakMelody{"hypnotic_motif", "stabs", "arp", "acid_siren"};
+    // Peak Time lists `polymeter_seq` too ([v1.1], D-230)
+    const std::set<std::string> peakMelody{"hypnotic_motif", "stabs", "arp", "polymeter_seq", "acid_siren"};
     for (int i = 0; i < 200; ++i) {
         CHECK(peakMelody.count(chooseArchetype(loadShipped("peak_time"), VoiceRole::Melody, 50, rng)) == 1);
     }
