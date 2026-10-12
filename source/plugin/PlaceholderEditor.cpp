@@ -1008,6 +1008,14 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     }
 }
 
+void PlaceholderEditor::applyRollHelpers() {
+    const auto settings = globalSettings().ready() ? globalSettings().get() : mm::core::GlobalSettings{};
+    for (auto& row : rows_) {
+        row->roll().setHelpers(settings.rollFold, settings.rollGuides, settings.rollMarkers);
+    }
+    resized(); // the marker row changes the height of the notes
+}
+
 void PlaceholderEditor::applyEditSettings() {
     const mm::core::EditGrid grid{static_cast<uint32_t>(std::max(gridBox_.getSelectedId(), 4)),
                                   tripletButton_.getToggleState()};
@@ -1017,6 +1025,7 @@ void PlaceholderEditor::applyEditSettings() {
         row->roll().setMiddleC(middleC);
         row->roll().setEditSettings(grid, snap);
     }
+    applyRollHelpers();
 }
 
 void PlaceholderEditor::setFocusedVoice(int voice) {
@@ -1301,6 +1310,7 @@ void PlaceholderEditor::timerCallback() {
         for (auto& row : rows_) {
             row->roll().setMiddleC(middleC);
         }
+        applyRollHelpers();
     }
     updateStatus();
     processor_.updateExport();

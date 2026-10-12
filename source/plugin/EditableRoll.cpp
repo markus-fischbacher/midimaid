@@ -53,11 +53,72 @@ juce::Point<double> EditableRoll::fieldPoint(const juce::MouseEvent& event) cons
 
 juce::Point<double> EditableRoll::lanePoint(const juce::MouseEvent& event) const {
     return {static_cast<double>(event.position.x) - kGutter,
-            static_cast<double>(event.position.y) - static_cast<double>(field().getBottom())};
+            static_cast<double>(event.position.y) - static_cast<double>(field().getBottom() + markerHeight())};
 }
 
 juce::Rectangle<int> EditableRoll::field() const {
-    return getLocalBounds().withTrimmedLeft(kGutter).withTrimmedTop(kTitleHeight).withTrimmedBottom(laneHeight());
+    return getLocalBounds()
+        .withTrimmedLeft(kGutter)
+        .withTrimmedTop(kTitleHeight)
+        .withTrimmedBottom(laneHeight() + markerHeight());
+}
+
+mm::core::RollFold EditableRoll::currentFold() const {
+    return mm::core::foldFor(root_, mm::core::findScale(scaleId_), fold_);
+}
+
+void EditableRoll::setHelpers(bool fold, bool guides, bool markers) {
+    const bool changedFold = fold != fold_;
+    const bool changedMarkers = markers != markers_;
+    if (changedFold && haveView_) {
+        // the window follows: pitches become rows or the other way round
+        if (fold) {
+            viewport_ = mm::core::foldViewport(viewport_, mm::core::foldFor(root_, mm::core::findScale(scaleId_), true));
+        } else {
+            viewport_ = mm::core::unfoldViewport(viewport_, currentFold());
+        }
+    }
+    fold_ = fold;
+    guides_ = guides;
+    markers_ = markers;
+    if (changedFold || changedMarkers) {
+        endGesture();
+        if (changedMarkers) {
+            resized(); // the field has another height: the window shows other rows
+        }
+        if (haveView_) {
+            viewport_ = mm::core::clampViewport(viewport_, patternTicks_);
+        }
+    }
+    repaint();
+}
+
+void EditableRoll::pressMarker(juce::Point<double> point) {
+    if (!haveView_ || !markers_) {
+        return;
+    }
+    const auto geo = geometry();
+    const mm::core::RollNote* hit = nullptr;
+    for (const auto& note : source_) {
+        const double x = geo.tickToX(note.startTick);
+        if (point.x >= x - 4.0 && point.x <= x + 5.0) {
+            hit = &note;
+            break;
+        }
+    }
+    if (hit == nullptr) {
+        return;
+    }
+    const std::vector<uint32_t> ids{hit->id};
+    const bool accent = point.y < kMarkerHeight / 2.0;
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    const bool now = accent ? hit->accent : hit->slide;
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        if (voice >= pattern.voices.size()) {
+            return 0;
+        }
+        return accent ? mm::core::setAccent(pattern, voice, ids, !now) : mm::core::setSlide(pattern, voice, ids, !now);
+    });
 }
 
 int EditableRoll::rowsForHeight() const {
@@ -71,6 +132,7 @@ mm::core::RollGeometry EditableRoll::geometry() const {
     geometry.width = std::max(field().getWidth(), 1);
     geometry.height = std::max(field().getHeight(), 1);
     geometry.patternTicks = std::max<uint32_t>(patternTicks_, 1);
+    geometry.fold = currentFold();
     return geometry;
 }
 
@@ -118,13 +180,23 @@ void EditableRoll::setSource(const ProcessorBase::VoiceView* view) {
         endGesture();
         selection_.clear();
     }
+    const auto oldFold = currentFold();
     source_ = view->source;
     patternTicks_ = view->lengthTicks;
     root_ = view->root;
     scaleId_ = view->scaleId;
+    phraseStarts_ = view->phraseStarts;
+    kicks_ = view->kickTicks;
     slotIndex_ = slot;
+    if (sameTarget && oldFold.active()) { // another key or scale gives other rows: the window keeps its pitches
+        const auto newFold = currentFold();
+        if (newFold.root != oldFold.root || newFold.mask != oldFold.mask) {
+            viewport_ = mm::core::foldViewport(mm::core::unfoldViewport(viewport_, oldFold), newFold);
+        }
+    }
     viewport_ = sameTarget ? mm::core::clampViewport(viewport_, patternTicks_)
-                           : mm::core::fitViewport(source_, patternTicks_, rowsForHeight());
+                           : mm::core::foldViewport(mm::core::fitViewport(source_, patternTicks_, rowsForHeight()),
+                                                    currentFold());
     haveView_ = true;
     for (auto it = selection_.begin(); it != selection_.end();) {
         it = find(*it) == nullptr ? selection_.erase(it) : std::next(it);
@@ -698,6 +770,11 @@ void EditableRoll::visibilityChanged() {
 void EditableRoll::mouseDown(const juce::MouseEvent& event) {
     const auto point = fieldPoint(event);
     if (event.position.y >= static_cast<float>(field().getBottom())) {
+        if (markers_ && event.position.y < static_cast<float>(field().getBottom() + markerHeight())) {
+            pressMarker({static_cast<double>(event.position.x) - kGutter,
+                         static_cast<double>(event.position.y) - static_cast<double>(field().getBottom())});
+            return;
+        }
         pressLane(lanePoint(event), event.mods);
         return;
     }
@@ -735,7 +812,7 @@ void EditableRoll::mouseUp(const juce::MouseEvent& event) {
 
 void EditableRoll::mouseMove(const juce::MouseEvent& event) {
     const auto point = fieldPoint(event);
-    if (event.position.y >= static_cast<float>(field().getBottom())) {
+    if (event.position.y >= static_cast<float>(field().getBottom() + markerHeight())) {
         const bool bar = haveView_ && mm::core::hitVelocityBar(geometry(), source_, point.x) != 0;
         setMouseCursor(bar ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
         return;
@@ -787,16 +864,18 @@ void EditableRoll::paint(juce::Graphics& g) {
         g.reduceClipRegion(area);
         // Pitch rows: the black keys a little darker, the C rows with a line.
         // (one row more than the window is high: a row peeks in at the top while the window is shifted by a part of a row)
-        for (int pitch = viewport_.lowPitch; pitch <= std::min(viewport_.lowPitch + viewport_.rows, 127); ++pitch) {
+        const auto fold = geo.fold;
+        for (int index = viewport_.lowPitch; index <= std::min(viewport_.lowPitch + viewport_.rows, 127); ++index) {
+            const int pitch = fold.pitchOfRow(index); // with the fold the rows are the tones of the scale
             const auto y = static_cast<float>(geo.pitchToY(pitch)) + static_cast<float>(origin.y);
             const auto row =
                 juce::Rectangle<float>(static_cast<float>(origin.x), y, static_cast<float>(area.getWidth()),
                                        static_cast<float>(geo.rowHeight()));
-            if (isBlackKey(pitch)) {
+            if (!fold.active() && isBlackKey(pitch)) {
                 g.setColour(juce::Colours::black.withAlpha(0.18f));
                 g.fillRect(row);
             }
-            if (pitch % 12 == 0) {
+            if (pitch % 12 == (fold.active() ? fold.root : 0)) { // the C rows, or the root rows in a fold
                 g.setColour(juce::Colours::white.withAlpha(0.10f));
                 g.drawHorizontalLine(juce::roundToInt(row.getBottom()), row.getX(), row.getRight());
             }
@@ -813,6 +892,23 @@ void EditableRoll::paint(juce::Graphics& g) {
             }
             g.setColour(juce::Colours::white.withAlpha(bar ? 0.22f : (beat ? 0.10f : 0.04f)));
             g.drawVerticalLine(juce::roundToInt(x), static_cast<float>(origin.y), bounds.getBottom());
+        }
+        if (guides_ && haveView_) {
+            // The kick steps (faint, red) and the borders of the phrases (strong, in the colour of the voice).
+            g.setColour(juce::Colour(0xffd05050).withAlpha(0.16f));
+            for (const uint32_t tick : kicks_) {
+                if (tick >= viewport_.startTick && tick <= viewport_.startTick + viewport_.spanTicks) {
+                    const auto x = static_cast<float>(geo.tickToX(tick)) + static_cast<float>(origin.x);
+                    g.fillRect(x - 0.5f, static_cast<float>(origin.y), 2.0f, static_cast<float>(area.getHeight()));
+                }
+            }
+            g.setColour(accent_.withAlpha(0.65f));
+            for (const uint32_t tick : phraseStarts_) {
+                if (tick >= viewport_.startTick && tick <= viewport_.startTick + viewport_.spanTicks) {
+                    const auto x = static_cast<float>(geo.tickToX(tick)) + static_cast<float>(origin.x);
+                    g.fillRect(x - 1.0f, static_cast<float>(origin.y), 2.5f, static_cast<float>(area.getHeight()));
+                }
+            }
         }
         // Notes.
         for (size_t index = 0; index < source_.size(); ++index) {
@@ -867,7 +963,7 @@ void EditableRoll::paint(juce::Graphics& g) {
         if (playheadTick_ && haveView_ && patternTicks_ > 0) {
             const auto x = static_cast<float>(geo.tickToX(*playheadTick_)) + static_cast<float>(origin.x);
             g.setColour(juce::Colours::white.withAlpha(alpha * 0.9f));
-            g.drawLine(x, static_cast<float>(origin.y), x, static_cast<float>(area.getBottom() + laneHeight()), 1.5f);
+            g.drawLine(x, static_cast<float>(origin.y), x, static_cast<float>(area.getBottom() + markerHeight() + laneHeight()), 1.5f);
         }
         if (mode_ == Mode::Rubber && dragged_) {
             const auto band = juce::Rectangle<float>(
@@ -880,9 +976,36 @@ void EditableRoll::paint(juce::Graphics& g) {
         }
     }
 
+    // The marker row: the accent (upper half) and slide (lower half) mark of every note, a click toggles it.
+    if (markers_ && haveView_) {
+        const auto strip = juce::Rectangle<int>(area.getX(), area.getBottom(), area.getWidth(), markerHeight());
+        juce::Graphics::ScopedSaveState state(g);
+        g.reduceClipRegion(strip);
+        g.setColour(juce::Colours::black.withAlpha(0.30f));
+        g.fillRect(strip);
+        g.setColour(juce::Colours::white.withAlpha(0.10f));
+        g.drawHorizontalLine(strip.getY(), static_cast<float>(strip.getX()), static_cast<float>(strip.getRight()));
+        for (const auto& note : source_) {
+            const auto x = static_cast<float>(geo.tickToX(note.startTick)) + static_cast<float>(origin.x);
+            if (x < static_cast<float>(strip.getX()) - 6.0f || x > static_cast<float>(strip.getRight()) + 6.0f) {
+                continue;
+            }
+            const auto top = static_cast<float>(strip.getY());
+            juce::Path triangle;
+            triangle.addTriangle(x - 3.5f, top + 2.0f, x + 3.5f, top + 2.0f, x, top + 7.5f);
+            g.setColour(juce::Colours::white.withAlpha(alpha * (note.accent ? 0.95f : 0.18f)));
+            g.fillPath(triangle);
+            juce::Path diamond;
+            const float y = top + 12.0f;
+            diamond.addQuadrilateral(x - 3.5f, y, x, y - 3.0f, x + 3.5f, y, x, y + 3.0f);
+            g.setColour(juce::Colours::white.withAlpha(alpha * (note.slide ? 0.95f : 0.18f)));
+            g.fillPath(diamond);
+        }
+    }
+
     // The velocity lane: one bar per note, the accent ones brighter with a cap.
     {
-        const auto lane = juce::Rectangle<int>(area.getX(), area.getBottom(), area.getWidth(), laneHeight());
+        const auto lane = juce::Rectangle<int>(area.getX(), area.getBottom() + markerHeight(), area.getWidth(), laneHeight());
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(lane);
         g.setColour(juce::Colours::black.withAlpha(0.22f));
@@ -923,14 +1046,15 @@ void EditableRoll::paint(juce::Graphics& g) {
     g.setFont(juce::FontOptions(10.0f));
     juce::Graphics::ScopedSaveState labelState(g);
     g.reduceClipRegion(juce::Rectangle<int>(0, area.getY(), kGutter, area.getHeight()));
-    for (int pitch = viewport_.lowPitch; pitch <= std::min(viewport_.lowPitch + viewport_.rows, 127); ++pitch) {
+    for (int index = viewport_.lowPitch; index <= std::min(viewport_.lowPitch + viewport_.rows, 127); ++index) {
+        const int pitch = geo.fold.pitchOfRow(index);
         const auto y = static_cast<float>(geo.pitchToY(pitch)) + static_cast<float>(origin.y);
-        if (isBlackKey(pitch)) {
+        if (!geo.fold.active() && isBlackKey(pitch)) {
             g.setColour(juce::Colours::black.withAlpha(0.25f));
             g.fillRect(juce::Rectangle<float>(2.0f, y, static_cast<float>(kGutter) - 6.0f,
                                               static_cast<float>(geo.rowHeight())));
         }
-        if (pitch % 12 == 0) {
+        if (pitch % 12 == (geo.fold.active() ? geo.fold.root : 0)) {
             g.setColour(juce::Colours::white.withAlpha(0.55f));
             g.drawText(juce::String(mm::core::pitchName(pitch, middleC_)), 2, juce::roundToInt(y) - 4, kGutter - 6, 10,
                        juce::Justification::centredRight);

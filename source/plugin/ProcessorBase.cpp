@@ -2,6 +2,7 @@
 
 #include "core/Analysis.h"
 #include "core/DrumReference.h"
+#include "core/KickGrid.h"
 #include "core/LockRestore.h"
 #include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
@@ -2167,6 +2168,11 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
     view.melody = view.voiceName == "Melody";
     view.locked = voiceIndex < pattern.voices.size() && mm::core::isVoiceLocked(pattern.voices[voiceIndex]);
+    view.phraseStarts.clear();
+    for (size_t i = 1; i < pattern.phrases.size(); ++i) {
+        view.phraseStarts.push_back(pattern.phrases[i].startBar * mm::core::kTicksPerBar);
+    }
+    view.kickTicks = mm::core::kickTicks(pattern);
     view.lockFlags = voiceIndex < pattern.voices.size() ? pattern.voices[voiceIndex].lock : mm::core::LockFlags{};
     view.root = pattern.context.root;
     view.scaleId = pattern.context.scaleId;

@@ -28,6 +28,19 @@ public:
     void setEditSettings(mm::core::EditGrid grid, mm::core::PitchSnap snap);
     /// The octave number of MIDI note 60 in the key labels: 3 (Live, Logic) or 4.
     void setMiddleC(int middleC);
+    /// The aids of the roll (SPEC 3.5, v1.1, D-232): `fold` shows only the tones of the scale as rows, `guides` draws
+    /// the phrase borders and the kick grid in the background, `markers` adds a row for the accent and slide marks of
+    /// the notes (a click toggles them).
+    void setHelpers(bool fold, bool guides, bool markers);
+    bool fold() const { return fold_; }
+    bool guides() const { return guides_; }
+    bool markers() const { return markers_; }
+    /// The fold in use for the key and scale of the shown pattern.
+    mm::core::RollFold currentFold() const;
+    /// A press in the marker row: `point.x` is the field x, `point.y` the height from the top of the row. The upper half
+    /// toggles the accent, the lower half the slide of the note that starts under `x` (one undo step each).
+    void pressMarker(juce::Point<double> point);
+    int markerHeight() const { return markers_ ? kMarkerHeight : 0; }
 
     const std::vector<mm::core::RollNote>& source() const { return source_; }
     /// The length of the shown pattern in ticks, 0 while the roll shows none.
@@ -98,6 +111,7 @@ public:
     static constexpr int kTitleHeight = 20; ///< the strip with the name of the voice above the notes
     static constexpr int kRowPixels = 7;
     static constexpr int kLaneHeight = 40; ///< the velocity lane under the notes
+    static constexpr int kMarkerHeight = 16; ///< the row of the accent and slide marks between the notes and the lane
     static constexpr int kMenuAccent = 1;
     static constexpr int kMenuSlide = 2;
     static constexpr int kMenuDelete = 3;
@@ -134,6 +148,11 @@ private:
     mm::core::EditGrid grid_;
     mm::core::PitchSnap pitchSnap_ = mm::core::PitchSnap::Scale;
     int middleC_ = 3;
+    bool fold_ = false;
+    bool guides_ = true;
+    bool markers_ = false;
+    std::vector<uint32_t> phraseStarts_;
+    std::vector<uint32_t> kicks_;
     void notifyTimeView(const mm::core::RollViewport& before);
     mm::core::RollViewport viewport_;
     bool haveView_ = false;

@@ -72,9 +72,36 @@ RollViewport scrollPitch(RollViewport viewport, double deltaRows, uint32_t patte
 /// again when the pattern loops). A pattern that fits into the window never moves. The pitch rows stay as they are.
 RollViewport followViewport(RollViewport viewport, double playheadTick, uint32_t patternTicks);
 
+/// Scale fold (SPEC 3.5, v1.1, D-232): the roll shows only the tones of the scale as rows, like Ableton's fold. A
+/// folded viewport counts rows of the scale (`lowPitch` is the lowest visible *row*); a pitch outside the scale (a
+/// chromatic note) stands half a row above the scale tone below it. Without a scale (mask 0) nothing folds.
+struct RollFold {
+    bool on = false;
+    uint8_t root = 0;    ///< pitch class of the key
+    uint16_t mask = 0;   ///< bit n: the pitch class root + n is in the scale
+
+    bool active() const { return on && mask != 0; }
+    /// Scale tones per octave.
+    int tonesPerOctave() const;
+    /// The row of a pitch (a half row for a pitch outside the scale); rows count from 0 upwards, every octave adds
+    /// `tonesPerOctave()`. The pitch itself when the fold is not active.
+    double rowOf(int pitch) const;
+    /// The scale pitch of a row, clamped to 0-127. The row itself when the fold is not active.
+    int pitchOfRow(int row) const;
+};
+
+/// A fold for the key and scale of a pattern (`scale` null: an inactive one).
+RollFold foldFor(PitchClass root, const Scale* scale, bool on);
+
+/// The window of pitches `viewport` as a window of rows and back (the lowest row at or above the lowest pitch, the same
+/// number of rows); both leave the time window alone and keep the result inside the limits.
+RollViewport foldViewport(RollViewport viewport, const RollFold& fold);
+RollViewport unfoldViewport(RollViewport viewport, const RollFold& fold);
+
 /// A viewport and the pixel area of the note field: converts between pixels and ticks or pitches.
 struct RollGeometry {
     RollViewport viewport;
+    RollFold fold;          ///< the rows are the pitches, or the tones of the scale when the fold is active
     double width = 1.0;  ///< pixels of the note field
     double height = 1.0; ///< pixels of the note field
     uint32_t patternTicks = kTicksPerBar;

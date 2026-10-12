@@ -59,6 +59,7 @@ private:
     void correctSlotKey(const mm::core::InstanceSettings& settings);
     /// Hands the grid and the pitch snapping to every roll of the hub UI.
     void applyEditSettings();
+    void applyRollHelpers();
     /// Track focus (D-159): the voice that has the whole height, 0 for all.
     void setFocusedVoice(int voice);
     void applyFocus();

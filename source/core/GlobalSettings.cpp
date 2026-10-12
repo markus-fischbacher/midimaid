@@ -202,6 +202,9 @@ GlobalSettings parseGlobalSettings(std::string_view text) {
     }
     boolean("gridTriplet", settings.grid.triplet);
     boolean("snapChromatic", settings.snapChromatic);
+    boolean("rollFold", settings.rollFold);
+    boolean("rollGuides", settings.rollGuides);
+    boolean("rollMarkers", settings.rollMarkers);
     integer("middleC", 3, 4, settings.middleC);
     if (const auto it = root.find("language"); it != root.end() && it->is_string()) {
         settings.language = it->get<std::string>(); // sanitised below
@@ -249,6 +252,9 @@ std::string toJson(const GlobalSettings& input) {
     root["gridDivision"] = settings.grid.division;
     root["gridTriplet"] = settings.grid.triplet;
     root["snapChromatic"] = settings.snapChromatic;
+    root["rollFold"] = settings.rollFold;
+    root["rollGuides"] = settings.rollGuides;
+    root["rollMarkers"] = settings.rollMarkers;
     root["middleC"] = settings.middleC;
     root["language"] = settings.language;
     root["drumMap"] = settings.drumMap;

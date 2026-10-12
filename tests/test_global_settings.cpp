@@ -14,6 +14,9 @@ TEST_CASE("the defaults are A minor, basic level, strength 30 and a 1/16 grid", 
     CHECK(defaults.grid == EditGrid{16, false});
     CHECK_FALSE(defaults.snapChromatic);
     CHECK(defaults.middleC == 3);
+    CHECK_FALSE(defaults.rollFold);
+    CHECK(defaults.rollGuides); // the guides are on, the fold and the marker row are off (D-232)
+    CHECK_FALSE(defaults.rollMarkers);
     CHECK(defaults.language == "auto");
     CHECK(sanitize(defaults) == defaults);
 }
@@ -27,6 +30,9 @@ TEST_CASE("settings survive writing and reading", "[global-settings]") {
     settings.grid = EditGrid{8, true};
     settings.snapChromatic = true;
     settings.middleC = 4;
+    settings.rollFold = true;
+    settings.rollGuides = false;
+    settings.rollMarkers = true;
     settings.language = "en";
     REQUIRE(findScale("phrygian") != nullptr);
     const auto text = toJson(settings);
@@ -52,7 +58,7 @@ TEST_CASE("a missing, unreadable or wrongly typed file gives the defaults", "[gl
 TEST_CASE("a bad field gives its default and leaves the others", "[global-settings]") {
     const auto settings = parseGlobalSettings(R"({
         "version": 1, "expert": "yes", "startRoot": 12, "startScale": "klingon", "variationStrength": 150,
-        "gridDivision": 7, "gridTriplet": true, "snapChromatic": 1})");
+        "gridDivision": 7, "gridTriplet": true, "snapChromatic": 1, "rollFold": 1, "rollGuides": "no", "rollMarkers": null})");
     const GlobalSettings defaults;
     CHECK(settings.expert == defaults.expert);
     CHECK(settings.startRoot == defaults.startRoot);
@@ -61,6 +67,9 @@ TEST_CASE("a bad field gives its default and leaves the others", "[global-settin
     CHECK(settings.grid.division == defaults.grid.division);
     CHECK(settings.grid.triplet); // the one good field
     CHECK(settings.snapChromatic == defaults.snapChromatic);
+    CHECK(settings.rollFold == defaults.rollFold);
+    CHECK(settings.rollGuides == defaults.rollGuides);
+    CHECK(settings.rollMarkers == defaults.rollMarkers);
     const auto good =
         parseGlobalSettings(R"({"version": 1, "startRoot": 0, "variationStrength": 0, "gridDivision": 32})");
     CHECK(good.startRoot == 0);

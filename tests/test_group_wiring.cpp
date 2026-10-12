@@ -2698,6 +2698,171 @@ TEST_CASE("the lock button of a voice has a menu for the dimensions", "[roll][ed
     CHECK(lock() == mm::core::LockFlags{});
 }
 
+TEST_CASE("the fold shows the tones of the scale as rows and edits them", "[roll][editor][fold]") {
+    RollRig rig; // A minor, notes at 60, 64, 67, 69
+    CHECK_FALSE(rig.roll.fold());
+    const auto before = rig.roll.viewport();
+    CHECK_FALSE(rig.roll.geometry().fold.active());
+    rig.roll.setHelpers(true, true, false);
+    CHECK(rig.roll.fold());
+    const auto fold = rig.roll.geometry().fold;
+    REQUIRE(fold.active());
+    CHECK(fold.tonesPerOctave() == 7);
+    // the window counts rows now: it shows the same pitches
+    CHECK(rig.roll.viewport().rows == before.rows);
+    CHECK(rig.roll.viewport().lowPitch == static_cast<int>(std::ceil(fold.rowOf(before.lowPitch))));
+    // notes on neighbouring scale tones are neighbouring rows: C (60) and the E (64) are two rows apart
+    const auto geo = rig.roll.geometry();
+    CHECK(geo.pitchToY(60) - geo.pitchToY(64) == Catch::Approx(2.0 * geo.rowHeight()));
+    // a double click adds the scale tone of the row
+    rig.roll.doubleClick({rig.xOf(1920), geo.pitchToY(62) + geo.rowHeight() / 2.0});
+    bool added = false;
+    for (const auto& n : rig.melody()) {
+        added = added || (n.startTick == 1920 && n.pitch == 62);
+    }
+    CHECK(added);
+    // a drag by one row moves by a scale tone: C (60) up one row is D (62)
+    rig.refresh();
+    const uint32_t id = rig.idAt(0);
+    REQUIRE(rig.note(0).pitch == 60);
+    rig.dragBy(rig.at(0, 60), 0.0, -rig.roll.geometry().rowHeight());
+    CHECK(rig.melody()[0].id == id);
+    CHECK(rig.melody()[0].pitch == 62);
+    // switching it off gives the window of pitches back
+    rig.roll.setHelpers(false, true, false);
+    CHECK_FALSE(rig.roll.geometry().fold.active());
+    CHECK(std::abs(rig.roll.viewport().lowPitch - before.lowPitch) <= 2);
+}
+
+TEST_CASE("the marker row toggles accent and slide of a note and makes the field lower", "[roll][editor][markers]") {
+    RollRig rig;
+    CHECK(rig.roll.markerHeight() == 0);
+    const double height = rig.roll.geometry().height;
+    rig.roll.setHelpers(false, true, true);
+    CHECK(rig.roll.markers());
+    CHECK(rig.roll.markerHeight() == mm::plugin::EditableRoll::kMarkerHeight);
+    CHECK(rig.roll.geometry().height == height - mm::plugin::EditableRoll::kMarkerHeight);
+    // a click in the upper half, at the start of the second note, sets its accent; again takes it away
+    const double x = rig.roll.geometry().tickToX(960);
+    rig.roll.pressMarker({x, 3.0});
+    CHECK(rig.melody()[1].accent);
+    CHECK_FALSE(rig.melody()[1].slide);
+    rig.refresh();
+    rig.roll.pressMarker({x + 2.0, 3.0});
+    CHECK_FALSE(rig.melody()[1].accent);
+    // the lower half is the slide
+    rig.refresh();
+    rig.roll.pressMarker({x, 12.0});
+    CHECK(rig.melody()[1].slide);
+    rig.refresh();
+    // a click between the notes does nothing
+    const bool anyBefore = rig.solo.processor.canUndo();
+    rig.roll.pressMarker({rig.roll.geometry().tickToX(480), 3.0});
+    CHECK(rig.solo.processor.canUndo() == anyBefore);
+    CHECK_FALSE(rig.melody()[0].accent);
+    CHECK_FALSE(rig.melody()[2].accent);
+    // each toggle was one undo step
+    REQUIRE(rig.solo.processor.undo());
+    CHECK_FALSE(rig.melody()[1].slide);
+    // without the row a press does nothing
+    rig.roll.setHelpers(false, true, false);
+    rig.refresh();
+    const auto notes = rig.melody();
+    rig.roll.pressMarker({x, 3.0});
+    CHECK(rig.melody() == notes);
+}
+
+TEST_CASE("with the marker row the mouse still reaches the velocity lane and the marks", "[roll][editor][markers]") {
+    RollRig rig;
+    rig.roll.setHelpers(false, true, true);
+    rig.refresh();
+    const auto gutter = static_cast<float>(mm::plugin::EditableRoll::kGutter);
+    const float laneTop =
+        static_cast<float>(rig.roll.getHeight() - static_cast<int>(kLane));
+    // the velocity lane is the lowest part, under the marker row
+    const juce::Point<float> from(static_cast<float>(rig.xOf(960, 2.0)) + gutter,
+                                  laneTop + static_cast<float>(laneY(100)));
+    const juce::Point<float> to(from.x, laneTop + static_cast<float>(laneY(50)));
+    rig.roll.mouseDown(mouseEventAt(rig.roll, from));
+    CHECK(rig.roll.gestureActive());
+    rig.roll.mouseDrag(mouseEventAt(rig.roll, to));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, to));
+    CHECK(rig.melody()[1].velocity == 50);
+    rig.refresh();
+    // a click in the marker row (above the lane) toggles the accent of the note that starts there
+    const float markerTop = laneTop - static_cast<float>(mm::plugin::EditableRoll::kMarkerHeight);
+    const juce::Point<float> mark(static_cast<float>(rig.roll.geometry().tickToX(1920)) + gutter, markerTop + 3.0f);
+    rig.roll.mouseDown(mouseEventAt(rig.roll, mark));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, mark));
+    CHECK(rig.melody()[2].accent);
+    CHECK_FALSE(rig.roll.gestureActive());
+    CHECK(rig.melody()[2].velocity == 100); // the lane was not touched
+}
+
+TEST_CASE("a new roll opened in a fold shows its notes", "[roll][editor][fold]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    mm::core::Pattern pattern = mm::core::makeEmptyPattern(2, "peak_time");
+    for (const uint32_t pitch : {45u, 48u, 52u}) {
+        REQUIRE(mm::core::addNote(pattern, 1, static_cast<uint8_t>(pitch), 0, 480, 100) != 0);
+    }
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, std::move(pattern))); });
+    const auto views = solo.processor.playingVoices();
+    mm::plugin::EditableRoll roll(solo.processor, 2);
+    roll.setBounds(0, 0, 800, 200);
+    roll.setHelpers(true, true, false);
+    roll.setSource(&views[1]);
+    const auto geo = roll.geometry();
+    REQUIRE(geo.fold.active());
+    for (const auto& note : roll.source()) {
+        const double y = geo.pitchToY(note.pitch);
+        INFO("pitch " << int(note.pitch));
+        CHECK(y >= 0.0);
+        CHECK(y + geo.rowHeight() <= geo.height + 1.0);
+    }
+}
+
+TEST_CASE("the roll gets the phrase borders and the kick steps of the pattern", "[roll][editor][guides]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    mm::core::Pattern pattern = mm::core::makeEmptyPattern(8, "peak_time");
+    pattern.phrases.clear();
+    mm::core::Phrase a;
+    a.lengthBars = 4;
+    mm::core::Phrase b;
+    b.startBar = 4;
+    b.lengthBars = 4;
+    b.role = mm::core::PhraseRole::Variation;
+    pattern.phrases = {a, b};
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, std::move(pattern))); });
+    const auto views = solo.processor.playingVoices();
+    REQUIRE(views.size() >= 2);
+    CHECK(views[1].phraseStarts == std::vector<uint32_t>{4 * mm::core::kTicksPerBar});
+    CHECK_FALSE(views[1].kickTicks.empty());
+    CHECK(views[1].kickTicks.front() == 0); // four on the floor
+    mm::plugin::EditableRoll roll(solo.processor, 2);
+    roll.setBounds(0, 0, 800, 200);
+    CHECK(roll.guides()); // on by default
+    roll.setSource(&views[1]);
+    roll.setHelpers(false, false, false);
+    CHECK_FALSE(roll.guides());
+}
+
+TEST_CASE("the roll keeps its window when the key changes in a fold", "[roll][editor][fold]") {
+    RollRig rig;
+    rig.roll.setHelpers(true, true, false);
+    const auto geoBefore = rig.roll.geometry();
+    const int topPitch = geoBefore.fold.pitchOfRow(rig.roll.viewport().lowPitch + rig.roll.viewport().rows - 1);
+    // the key moves to C: the same window of pitches, as rows of the other scale
+    auto fresh = rig.solo.processor.playingVoices();
+    fresh[1].root = 0;
+    rig.roll.setSource(&fresh[1]);
+    const auto geoAfter = rig.roll.geometry();
+    const int topAfter = geoAfter.fold.pitchOfRow(rig.roll.viewport().lowPitch + rig.roll.viewport().rows - 1);
+    CHECK(std::abs(topAfter - topPitch) <= 2);
+    CHECK(geoAfter.fold.root == 0);
+}
+
 TEST_CASE("the mouse handlers reach the velocity lane below the notes", "[roll][lane][editor]") {
     RollRig rig;
     const auto gutter = static_cast<float>(mm::plugin::EditableRoll::kGutter);
@@ -3301,6 +3466,9 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
             settings.startScaleId = "dorian";
             settings.grid = mm::core::EditGrid{8, true};
             settings.snapChromatic = true;
+            settings.rollFold = true;
+            settings.rollGuides = false;
+            settings.rollMarkers = true;
             settings.middleC = 4;
             settings.language = "en";
         });
@@ -3312,6 +3480,9 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
     CHECK(second.get().startScaleId == "dorian");
     CHECK(second.get().grid == mm::core::EditGrid{8, true});
     CHECK(second.get().snapChromatic);
+    CHECK(second.get().rollFold);
+    CHECK_FALSE(second.get().rollGuides);
+    CHECK(second.get().rollMarkers);
     CHECK(second.get().middleC == 4);
     CHECK(second.get().language == "en");
 }
@@ -3327,6 +3498,9 @@ TEST_CASE("a change before the file is read wins for its field and keeps the res
         settings.startRoot = 7;
         settings.grid = mm::core::EditGrid{8, true};
         settings.snapChromatic = true;
+        settings.rollFold = true;
+        settings.rollGuides = false;
+        settings.rollMarkers = true;
         settings.middleC = 4;
         settings.language = "en";
     });
@@ -3341,6 +3515,9 @@ TEST_CASE("a change before the file is read wins for its field and keeps the res
     CHECK(now.startRoot == 7);
     CHECK(now.grid == mm::core::EditGrid{8, true});
     CHECK(now.snapChromatic);
+    CHECK(now.rollFold);
+    CHECK_FALSE(now.rollGuides);
+    CHECK(now.rollMarkers);
     CHECK(now.middleC == 4);
     CHECK(now.language == "en");
     CHECK(now.startScaleId == "dorian");

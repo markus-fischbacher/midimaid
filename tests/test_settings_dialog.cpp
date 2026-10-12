@@ -388,6 +388,34 @@ TEST_CASE("prompt logging is off by default and is switched here", "[settings-di
     CHECK_FALSE(env.ai().logPrompts);
 }
 
+TEST_CASE("the aids of the piano roll are switched here and saved", "[settings-dialog]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    auto& fold = part<juce::ToggleButton>(*dialog, "rollFold");
+    auto& guides = part<juce::ToggleButton>(*dialog, "rollGuides");
+    auto& markers = part<juce::ToggleButton>(*dialog, "rollMarkers");
+    CHECK(fold.isVisible());
+    CHECK_FALSE(fold.getToggleState()); // the defaults of D-232
+    CHECK(guides.getToggleState());
+    CHECK_FALSE(markers.getToggleState());
+    fold.setToggleState(true, juce::dontSendNotification);
+    fold.onClick();
+    CHECK(env.store.get().rollFold);
+    guides.setToggleState(false, juce::dontSendNotification);
+    guides.onClick();
+    CHECK_FALSE(env.store.get().rollGuides);
+    markers.setToggleState(true, juce::dontSendNotification);
+    markers.onClick();
+    CHECK(env.store.get().rollMarkers);
+    CHECK(env.store.get().rollFold); // the others stayed
+    // a dialog that opens later shows what was saved
+    const auto later = env.dialog();
+    CHECK(part<juce::ToggleButton>(*later, "rollFold").getToggleState());
+    CHECK_FALSE(part<juce::ToggleButton>(*later, "rollGuides").getToggleState());
+    CHECK(part<juce::ToggleButton>(*later, "rollMarkers").getToggleState());
+}
+
 TEST_CASE("the dialog shows what was saved before", "[settings-dialog]") {
     juce::ScopedJuceInitialiser_GUI gui;
     Env env;

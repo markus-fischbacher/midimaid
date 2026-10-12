@@ -56,6 +56,9 @@ private:
         std::optional<int> variationStrength;
         std::optional<mm::core::EditGrid> grid;
         std::optional<bool> snapChromatic;
+        std::optional<bool> rollFold;
+        std::optional<bool> rollGuides;
+        std::optional<bool> rollMarkers;
         std::optional<int> middleC;
         std::optional<std::string> language;
         /// The transposition settings are several fields: what was changed is applied field by field, so a change of one

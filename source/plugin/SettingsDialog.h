@@ -63,6 +63,8 @@ private:
     juce::ComboBox transposeModeBox_, transposeBehaviorBox_, transposeTimingBox_, transposeTargetBox_,
         transposeReferenceBox_, transposeChannelBox_;
     juce::ToggleButton transposeExportToggle_, midiThruToggle_;
+    juce::Label rollViewLabel_;
+    juce::ToggleButton rollFoldToggle_, rollGuidesToggle_, rollMarkersToggle_; ///< the aids of the piano roll (D-232)
     void changeTranspose(const std::function<void(mm::core::TransposeSettings&)>& change);
     void updateTranspose();
     juce::Label languageLabel_, languageHint_;

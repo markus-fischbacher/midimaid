@@ -132,6 +132,8 @@ public:
         bool melody = false;      ///< the voice has the melody role (accent colour)
         bool locked = false;      ///< the voice is locked in every dimension (SPEC 3.5)
         mm::core::LockFlags lockFlags; ///< the locks of the voice per dimension (D-231)
+        std::vector<uint32_t> phraseStarts; ///< start ticks of the phrases after the first (roll guides, D-232)
+        std::vector<uint32_t> kickTicks;    ///< the kick steps of the pattern (roll guides, D-232)
         /// What the piano roll edits: the source notes of the pattern (with ids, no groove, no instance octave).
         std::vector<mm::core::RollNote> source;
         mm::core::PitchClass root = 9;
