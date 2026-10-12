@@ -205,7 +205,7 @@ void LibraryDialog::filesDropped(const juce::StringArray& files, int, int) {
 
 juce::String LibraryDialog::infoText(const mm::core::LibraryEntryInfo& info) const {
     const auto* style = alive() ? processor_.styles().find(info.styleId) : nullptr;
-    const std::string styleName = style != nullptr ? style->nameDe : info.styleId;
+    const std::string styleName = style != nullptr ? localized(style->nameDe, style->nameEn) : info.styleId;
     const std::string scale = info.scaleId.empty() ? std::string("?") : tr(keys::scaleKey(info.scaleId)).toStdString();
     const std::string key = kKeyNames[info.root % 12];
     if (info.kind == mm::core::LibraryKind::Set) {

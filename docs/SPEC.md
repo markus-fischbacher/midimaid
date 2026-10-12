@@ -1358,7 +1358,7 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
 
 ### 8.2 Sprache
 - v1.0: Deutsch, mit vollständiger Übersetzungs-Infrastruktur; [v1.1] Englisch, umschaltbar, Standard
-  folgt der Systemsprache
+  folgt der Systemsprache (umgesetzt, D-224)
 - Alle Texte über eine zentrale Übersetzungstabelle (`resources/i18n/de.json`, `en.json`), keine
   festen Strings im UI-Code
 - Ein Test prüft, dass alle Sprachdateien dieselben Schlüssel enthalten (ab v1.1 relevant)

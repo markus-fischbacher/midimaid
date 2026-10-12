@@ -185,6 +185,11 @@ namespace mm::core::text {
     X(kTransposeChannelN, "settings.transpose.channel.n")                                                              \
     X(kToggleTransposeExport, "settings.transpose.export")                                                             \
     X(kToggleMidiThru, "settings.transpose.thru")                                                                      \
+    X(kLabelLanguage, "settings.language")                                                                             \
+    X(kLanguageAuto, "settings.language.auto")                                                                         \
+    X(kLanguageDe, "settings.language.de")                                                                             \
+    X(kLanguageEn, "settings.language.en")                                                                             \
+    X(kLanguageHint, "settings.languageHint")                                                                          \
     X(kLabelLog, "settings.log")                                                                                       \
     X(kDrumMapHint, "settings.drumMapHint")                                                                            \
     X(kButtonReferences, "button.references")                                                                      \

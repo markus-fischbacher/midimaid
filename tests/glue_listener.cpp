@@ -1,4 +1,5 @@
 #include "NoUserSettings.h"
+#include "plugin/EmbeddedTranslation.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
@@ -12,6 +13,7 @@ public:
 
     void testRunStarting(const Catch::TestRunInfo&) override {
         mm::plugin::overrideGlobalSettings(&mmtest::disabledSettings());
+        mm::plugin::setUiLanguage("de"); // the texts of the tests do not depend on the computer
         mm::plugin::overrideReferenceStore(&mmtest::disabledReferences());
     }
     void testRunEnded(const Catch::TestRunStats&) override {

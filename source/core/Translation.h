@@ -43,4 +43,9 @@ private:
 /// Replaces `{name}` in `text` as described at `Translation::tr`.
 std::string fillPlaceholders(std::string_view text, Translation::Args args);
 
+/// The language of the UI from the setting ("auto", "de", "en") and the system language (a code like "de" or "de_DE"):
+/// an explicit choice wins, "auto" (and anything unknown) follows the system, a system language we have no texts for
+/// gives English (SPEC 8.2). The result is "de" or "en".
+std::string resolveLanguage(std::string_view setting, std::string_view systemLanguage);
+
 } // namespace mm::core

@@ -46,7 +46,7 @@ GlobalSettingsStore::~GlobalSettingsStore() {
 }
 
 bool GlobalSettingsStore::Pending::any() const {
-    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || middleC || transpose || ai;
+    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || middleC || language || transpose || ai;
 }
 
 void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) const {
@@ -70,6 +70,9 @@ void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) con
     }
     if (middleC) {
         settings.middleC = *middleC;
+    }
+    if (language) {
+        settings.language = *language;
     }
     if (transpose) {
         const auto& was = transpose->before;
@@ -159,6 +162,7 @@ void GlobalSettingsStore::update(const std::function<void(mm::core::GlobalSettin
             note(pending_.grid, before.grid, next.grid);
             note(pending_.snapChromatic, before.snapChromatic, next.snapChromatic);
             note(pending_.middleC, before.middleC, next.middleC);
+            note(pending_.language, before.language, next.language);
             if (!(before.transpose == next.transpose)) {
                 pending_.transpose = Pending::TransposeChange{
                     pending_.transpose ? pending_.transpose->before : before.transpose, next.transpose};

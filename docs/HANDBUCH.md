@@ -133,6 +133,8 @@ anderen Stimmen darum.
 Groove („Drum-Referenz übernommen: n Kicks, m Hi-Hats“). **Drums lösen** entfernt sie. Weicht deine Belegung von General
 MIDI ab, stellst du sie in den Einstellungen unter *Drum-Belegung* ein.
 
+**Sprache:** Unter *Einstellungen → Sprache* wählst du *Automatisch* (die Systemsprache), *Deutsch* oder *English*. Die Wahl gilt für Fenster, die du danach öffnest; schließe das Plug-in-Fenster und öffne es neu.
+
 **Notennamen:** Unter *Einstellungen → Notennamen* wählst du, ob die mittlere Taste (MIDI 60) C3 heißt (Live, Logic) oder C4. Das gilt für die Tastenbeschriftung der Roll und die Referenznote beim Transponieren.
 
 **Notennamen:** Unter *Einstellungen → Notennamen* wählst du, ob die mittlere Taste (MIDI 60) C3 heißt (Live, Logic) oder C4. Das gilt für die Tastenbeschriftung der Roll und die Referenznote beim Transponieren.

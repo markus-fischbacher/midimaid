@@ -65,6 +65,8 @@ private:
     juce::ToggleButton transposeExportToggle_, midiThruToggle_;
     void changeTranspose(const std::function<void(mm::core::TransposeSettings&)>& change);
     void updateTranspose();
+    juce::Label languageLabel_, languageHint_;
+    juce::ComboBox languageBox_;
     juce::Label noteNamingLabel_;
     juce::ComboBox noteNamingBox_;
     void fillReferenceNotes();

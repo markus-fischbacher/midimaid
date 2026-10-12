@@ -3144,6 +3144,7 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
             settings.grid = mm::core::EditGrid{8, true};
             settings.snapChromatic = true;
             settings.middleC = 4;
+            settings.language = "en";
         });
         first.waitForWrites();
     }
@@ -3154,6 +3155,7 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
     CHECK(second.get().grid == mm::core::EditGrid{8, true});
     CHECK(second.get().snapChromatic);
     CHECK(second.get().middleC == 4);
+    CHECK(second.get().language == "en");
 }
 
 TEST_CASE("a change before the file is read wins for its field and keeps the rest of the file", "[settings][store]") {
@@ -3167,6 +3169,8 @@ TEST_CASE("a change before the file is read wins for its field and keeps the res
         settings.startRoot = 7;
         settings.grid = mm::core::EditGrid{8, true};
         settings.snapChromatic = true;
+        settings.middleC = 4;
+        settings.language = "en";
     });
     CHECK(store.get().expert); // visible at once
     store.waitForWrites();
@@ -3179,6 +3183,8 @@ TEST_CASE("a change before the file is read wins for its field and keeps the res
     CHECK(now.startRoot == 7);
     CHECK(now.grid == mm::core::EditGrid{8, true});
     CHECK(now.snapChromatic);
+    CHECK(now.middleC == 4);
+    CHECK(now.language == "en");
     CHECK(now.startScaleId == "dorian");
     CHECK(now.variationStrength == 55);
     CHECK(mm::core::parseGlobalSettings(temp.file.loadFileAsString().toStdString()) == now); // and the file says so
