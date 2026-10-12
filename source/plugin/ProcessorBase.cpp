@@ -259,7 +259,7 @@ void ProcessorBase::updateSlotMode() {
 void ProcessorBase::onEvolveParameter(const juce::String& id, bool on) {
     if (id == "evolve") {
         if (!isNonRealtime()) { // an offline render ignores it (SPEC 6.6)
-            setEvolve(on);
+            setEvolve(on, true);
         }
     } else if (!on) {
         return; // the fall of a trigger back to 0 is no edge
@@ -356,7 +356,7 @@ ProcessorBase::OverlayMessage ProcessorBase::evolveShow(size_t slot, const mm::c
     return message;
 }
 
-void ProcessorBase::setEvolve(bool on) {
+void ProcessorBase::setEvolve(bool on, bool fromHost) {
     if (on == evolveOn_) {
         if (!on) {
             evolveTimer_.reset(); // an idle timer from an offline render
@@ -379,7 +379,9 @@ void ProcessorBase::setEvolve(bool on) {
         evolveTimer_.reset();
         sendOverlay(evolveEnd(true));
     }
-    setEvolveParameter(on);
+    if (!fromHost) { // the host moved the parameter itself: writing it back would race with its own writes (pluginval)
+        setEvolveParameter(on);
+    }
 }
 
 ProcessorBase::EvolveInfo ProcessorBase::evolveInfo() const {

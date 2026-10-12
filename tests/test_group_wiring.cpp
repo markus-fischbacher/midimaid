@@ -5994,3 +5994,23 @@ TEST_CASE("one drag of the swing slider is one undo step", "[group-wiring][groov
     CHECK(rig.track().groove.swing == 0.5f);
     CHECK_FALSE(rig.hub.processor.canUndo());
 }
+
+TEST_CASE("evolve parameters: what the host wrote is not written back, the toggle of the window is", "[group-wiring][evolve][parameters]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 41))); });
+    auto* evolve = hub.processor.parameters().getParameter("evolve");
+    evolve->setValueNotifyingHost(0.6f); // a host (pluginval, an automation lane) moves it to a value of its own
+    pumpMessages(40);
+    CHECK(hub.processor.evolveOn());
+    CHECK(evolve->getValue() == 0.6f); // the plug-in does not race with the host by writing 1.0 over it
+    evolve->setValueNotifyingHost(0.2f);
+    pumpMessages(40);
+    CHECK_FALSE(hub.processor.evolveOn());
+    CHECK(evolve->getValue() == 0.2f);
+    hub.processor.setEvolve(true); // the toggle of the window does write the parameter
+    CHECK(evolve->getValue() == 1.0f);
+    hub.processor.setEvolve(false);
+    CHECK(evolve->getValue() == 0.0f);
+}

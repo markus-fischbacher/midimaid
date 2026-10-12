@@ -228,7 +228,8 @@ public:
         bool changed = false; ///< a stage other than the slot sounds: "keep" does something
         bool operator==(const EvolveInfo&) const = default;
     };
-    void setEvolve(bool on);
+    /// `fromHost`: the host parameter itself asked for it, so the parameter is not written back.
+    void setEvolve(bool on, bool fromHost = false);
     bool evolveOn() const { return evolveOn_; }
     EvolveInfo evolveInfo() const;
     /// Takes the stage that sounds into the slot (a history entry and an undo step, SPEC 6.7); Evolve goes on from there.
