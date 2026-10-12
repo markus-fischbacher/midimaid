@@ -3,6 +3,7 @@
 #include "core/FormPlan.h"
 #include "core/Groove.h"
 #include "core/Progression.h"
+#include "core/Turnaround.h"
 
 #include <algorithm>
 
@@ -78,6 +79,15 @@ std::optional<VoiceNotes> generatePhraseNotes(const Pattern& pattern, const Phra
             return std::nullopt;
         }
     }
+    if (phrase.turnaround) {
+        Phrase local = phrase;
+        local.startBar = 0;
+        std::vector<bool> varies(sub.voices.size());
+        for (size_t i = 0; i < varies.size(); ++i) {
+            varies[i] = !kept(i);
+        }
+        applyTurnaround(sub, local, settings.energyPct, phraseSeed, varies);
+    }
     VoiceNotes result;
     for (size_t i = 0; i < sub.voices.size(); ++i) {
         std::vector<Note> notes = kept(i) ? std::vector<Note>{} : sub.voices[i].notes;
@@ -124,6 +134,14 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
             if (!keep[index] && !fillVoice(pattern, index, style, request.settings, rng)) {
                 return failed();
             }
+        }
+        if (!pattern.phrases.empty()) {
+            std::vector<bool> varies(keep.size());
+            for (size_t i = 0; i < keep.size(); ++i) {
+                varies[i] = !keep[i];
+            }
+            applyTurnaround(pattern, pattern.phrases[0], request.settings.energyPct,
+                            phraseSeed(seed, pattern.phrases[0].role), varies);
         }
     } else {
         std::vector<std::string> archetypes(pattern.voices.size());
@@ -191,11 +209,15 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     if (request.formPlan.has_value() && isValidFormPlan(request.lengthBars, *request.formPlan)) {
         phrases = *request.formPlan;
     }
+    if (!request.formPlan.has_value() || !isValidFormPlan(request.lengthBars, *request.formPlan)) {
+        assignTurnarounds(phrases, request.settings.energyPct, seed);
+    }
     pattern.phrases = phrases;
     if (phrases.size() == 1) {
         for (const size_t index : generationOrder(pattern)) {
             fillVoice(pattern, index, style, request.settings, rng);
         }
+        applyTurnaround(pattern, phrases[0], request.settings.energyPct, phraseSeed(seed, phrases[0].role));
     } else {
         std::vector<std::string> archetypes(pattern.voices.size());
         for (const size_t index : generationOrder(pattern)) {

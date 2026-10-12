@@ -262,7 +262,7 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
 - Pro Phrase gibt es eine Rolle: Hauptmotiv, Variation, Steigerung, Ausdünnung, Antwort
   (im Code `Main`, `Variation`, `Build`, `Breakdown`, `Answer`)
 - Optional hat eine Phrase ein eigenes Kick-Raster, z. B. `halftime` im Breakdown (STYLES.md §1.2)
-- **[v1.1] Turnaround** ist keine Rolle, sondern ein Merkmal einer Phrase: Ihr letzter Takt wird als
+- **[v1.1] Turnaround (umgesetzt, D-226)** ist keine Rolle, sondern ein Merkmal einer Phrase: Ihr letzter Takt wird als
   Turnaround variiert (nur bei 8- und 16-Takt-Phrasen, STYLES.md §1.12)
 - Die KI liefert Motive und einen Formplan, der Algorithmus erzeugt daraus die Varianten
 - In der Piano-Roll sind Phrasengrenzen sichtbar, Phrasen lassen sich einzeln neu erzeugen, variieren
