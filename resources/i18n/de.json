@@ -241,6 +241,8 @@
   "group.missing": "Hub nicht gefunden",
   "group.offered": "Hub nicht gefunden: du kannst ihn übernehmen",
   "group.refused": "Es gibt bereits einen Hub",
+  "status.usageTokens": "Tokens {tokens} (Sitzung: {session})",
+  "status.usageCost": "Tokens {tokens} · geschätzt ~{cost} {currency} (Sitzung: {session} · ~{sessionCost})",
   "group.mixedFormats": "  |  Achtung: In diesem Projekt laufen AU- und VST3-Instanzen. Hub und Voices müssen dasselbe Format haben",
   "group.sandboxHint": " (liegt der Hub in diesem Projekt: der Host startet Plug-ins evtl. in getrennten Prozessen)",
   "button.help": "Hilfe",

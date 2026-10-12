@@ -89,7 +89,8 @@ TEST_CASE("the placeholders of a text are the same in every use", "[i18n]") {
     const auto german = loadLanguage("de");
     const std::set<std::string> known = {"n",   "note",   "name",   "value", "slot",     "style",
                                          "key", "scale",  "length", "seed",  "winner",   "voice",
-                                         "m",   "reason", "score",  "level", "provider", "list"};
+                                         "m",   "reason", "score",  "level", "provider", "list",
+                                         "tokens", "cost", "currency", "session", "sessionCost"};
     for (const auto& key : german.keys()) {
         const auto text = german.tr(key);
         for (size_t i = text.find('{'); i != std::string::npos; i = text.find('{', i + 1)) {

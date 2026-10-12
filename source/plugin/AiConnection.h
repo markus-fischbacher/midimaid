@@ -13,6 +13,10 @@
 
 namespace mm::plugin {
 
+/// The data folder of MidiMaid for the user (settings, models.json, pricing.json, log): "Klirrwerk/MidiMaid" in the
+/// application data directory of the system.
+juce::File midiMaidDataFolder();
+
 /// Connects the settings of the musician to the AI backend (SPEC 7, 8.4, 8.5): reads the provider from the settings
 /// file, the key from the keychain (in the background), builds the provider and hands it to `AiBackend`. Without an
 /// active provider nothing is set and nothing goes to the network (SPEC 7.5). Everything blocking runs on a worker

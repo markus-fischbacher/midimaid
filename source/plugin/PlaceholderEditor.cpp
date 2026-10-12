@@ -3,6 +3,7 @@
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
 #include "plugin/AiText.h"
+#include "plugin/AiUsage.h"
 #include "plugin/EmbeddedTranslation.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/HelpDialog.h"
@@ -639,10 +640,17 @@ void PlaceholderEditor::updateStatus() {
                                       : status == GenerationStatus::DoneImportCut  ? keys::kStatusDoneImportCut
                                       : status == GenerationStatus::DoneLocked     ? keys::kStatusDoneLocked
                                                                                    : keys::kStatusDone;
-        statusLabel_.setText(report.usedAi && report.belowMinScore
-                                 ? tr(keys::kStatusBelowQuality, {{"score", std::to_string(report.score)}})
-                                 : tr(done),
-                             juce::dontSendNotification);
+        juce::String text = report.usedAi && report.belowMinScore
+                                ? tr(keys::kStatusBelowQuality, {{"score", std::to_string(report.score)}})
+                                : tr(done);
+        if (report.usedAi) { // the tokens and the estimated cost of the request and of the session (SPEC 7.5)
+            const auto usage = usageStatusText(report.usage, AiUsage::instance().session(),
+                                               AiUsage::instance().pricing().currency);
+            if (!usage.empty()) {
+                text += "  |  " + juce::String::fromUTF8(usage.c_str());
+            }
+        }
+        statusLabel_.setText(text, juce::dontSendNotification);
         break;
     }
     case GenerationStatus::ImportRead:

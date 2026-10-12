@@ -2,6 +2,7 @@
 
 #include "ai/AiRefine.h"
 #include "core/PatternGenerator.h"
+#include "plugin/AiConnection.h"
 #include "plugin/AppLog.h"
 
 #include <chrono>
@@ -19,6 +20,13 @@ struct GenerationService::State {
 };
 
 namespace {
+
+/// Only a cloud provider costs money (SPEC 7.5): a local one shows the tokens only.
+bool providerIsCloud(const std::string& id) {
+    const auto models = AiConnection::instance().models(); // a copy: `find` points into it
+    const auto* entry = models.find(id);
+    return entry != nullptr && entry->cloud;
+}
 
 mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atomic<bool>* cancel) {
     mm::core::GenerationRequest request;
@@ -174,6 +182,8 @@ void GenerationService::request(const GenerationJob& job) {
                 report.belowMinScore = result.belowMinScore;
                 report.copyFlagged = result.copyFlagged;
                 report.score = result.score;
+                report.usage = AiUsage::instance().record(job.model, providerIsCloud(job.provider->info().id),
+                                                          result.inputTokens, result.outputTokens);
                 if (result.outcome == mm::ai::AiOutcome::Success && !cancel.cancelled()) {
                     pattern = std::move(result.pattern);
                     if (job.settings.chromaticPct) { // the pattern remembers it: variations keep to the same share

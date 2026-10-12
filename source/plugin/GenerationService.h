@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ai/AiGeneration.h"
+#include "plugin/AiUsage.h"
 #include "core/InstanceSettings.h"
 #include "core/Pattern.h"
 #include "core/ReferenceProfile.h"
@@ -60,6 +61,7 @@ struct GenerationReport {
     bool belowMinScore = false;
     bool copyFlagged = false; ///< the answer is too close to an entry of the set (D-87); `belowMinScore` is set too
     int score = 0;
+    AiUsage::Entry usage; ///< the tokens and the estimated cost of the request (SPEC 7.5)
 };
 
 /// Runs generations on a background thread (CLAUDE.md: threading). One worker; a new request cancels the running

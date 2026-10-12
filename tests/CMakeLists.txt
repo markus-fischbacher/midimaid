@@ -4,7 +4,7 @@ target_compile_definitions(mm_core_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJEC
                                                   MIDIMAID_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden")
 
 find_package(Threads REQUIRED)
-add_executable(mm_ai_tests test_ai_schema.cpp test_ai_mock.cpp test_ai_prompt.cpp test_ai_compact.cpp test_ai_generation.cpp test_ai_http.cpp test_ai_models.cpp test_ai_refine.cpp test_ai_phrase_shaping.cpp)
+add_executable(mm_ai_tests test_ai_schema.cpp test_ai_mock.cpp test_ai_prompt.cpp test_ai_compact.cpp test_ai_generation.cpp test_ai_http.cpp test_ai_models.cpp test_ai_pricing.cpp test_ai_refine.cpp test_ai_phrase_shaping.cpp)
 target_link_libraries(mm_ai_tests PRIVATE mm_ai Threads::Threads Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_ai_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
@@ -19,8 +19,8 @@ add_executable(mm_engine_tests test_playhead_meter.cpp test_pattern_player.cpp t
 target_link_libraries(mm_engine_tests PRIVATE mm_engine Threads::Threads Catch2::Catch2WithMain mm_warnings)
 target_compile_definitions(mm_engine_tests PRIVATE MIDIMAID_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
 
-add_executable(mm_plugin_glue_tests test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp test_ai_plugin.cpp test_reference_effect_plugin.cpp test_state_migration.cpp test_library_plugin.cpp test_ai_connection.cpp test_settings_dialog.cpp test_midi_import_plugin.cpp test_reference_store.cpp test_references_dialog.cpp test_determinism.cpp test_performance.cpp test_slot_actions.cpp test_help_dialog.cpp glue_listener.cpp)
-mm_warn_sources(test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp test_ai_plugin.cpp test_reference_effect_plugin.cpp test_state_migration.cpp test_library_plugin.cpp test_ai_connection.cpp test_settings_dialog.cpp test_midi_import_plugin.cpp test_reference_store.cpp test_references_dialog.cpp test_determinism.cpp test_performance.cpp test_slot_actions.cpp test_help_dialog.cpp glue_listener.cpp)
+add_executable(mm_plugin_glue_tests test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp test_ai_plugin.cpp test_ai_usage.cpp test_reference_effect_plugin.cpp test_state_migration.cpp test_library_plugin.cpp test_ai_connection.cpp test_settings_dialog.cpp test_midi_import_plugin.cpp test_reference_store.cpp test_references_dialog.cpp test_determinism.cpp test_performance.cpp test_slot_actions.cpp test_help_dialog.cpp glue_listener.cpp)
+mm_warn_sources(test_processor_glue.cpp test_generation.cpp test_group_wiring.cpp test_ai_plugin.cpp test_ai_usage.cpp test_reference_effect_plugin.cpp test_state_migration.cpp test_library_plugin.cpp test_ai_connection.cpp test_settings_dialog.cpp test_midi_import_plugin.cpp test_reference_store.cpp test_references_dialog.cpp test_determinism.cpp test_performance.cpp test_slot_actions.cpp test_help_dialog.cpp glue_listener.cpp)
 # The generation tests pump the message loop (runDispatchLoopUntil needs modal loops).
 target_compile_definitions(mm_plugin_glue_tests PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(mm_plugin_glue_tests PRIVATE mm_plugin_common Catch2::Catch2WithMain)
