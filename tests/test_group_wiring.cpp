@@ -5675,3 +5675,103 @@ TEST_CASE("trigger parameters: variation all changes more than one voice does", 
     CHECK(one > 0);
     CHECK(all > one);
 }
+
+// --- the chromatic share (SPEC 3.8, D-219) ---------------------------------------------------------------------
+
+TEST_CASE("the chromatic share is saved with the instance, only when chosen, and kept in range", "[group-wiring][chromatic]") {
+    Quiet quiet;
+    Instance source("Source");
+    CHECK_FALSE(source.processor.instanceSettings().generation.chromaticPct.has_value());
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("genChromatic")); // states of the style's share stay as they were
+    auto settings = source.processor.instanceSettings();
+    settings.generation.chromaticPct = 45;
+    source.processor.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.processor.instanceSettings().generation.chromaticPct == std::optional<int>(45));
+    settings.generation.chromaticPct = 0; // 0 % is a choice
+    source.processor.setInstanceSettings(settings);
+    CHECK(source.processor.instanceSettings().generation.chromaticPct == std::optional<int>(0));
+    settings.generation.chromaticPct = 400;
+    source.processor.setInstanceSettings(settings);
+    CHECK(source.processor.instanceSettings().generation.chromaticPct == std::optional<int>(100));
+    settings.generation.chromaticPct = -7;
+    source.processor.setInstanceSettings(settings);
+    CHECK(source.processor.instanceSettings().generation.chromaticPct == std::optional<int>(0));
+    // and a state without the attribute loads as the style's
+    target.processor.setStateInformation(standard.getData(), static_cast<int>(standard.getSize()));
+    CHECK_FALSE(target.processor.instanceSettings().generation.chromaticPct.has_value());
+}
+
+TEST_CASE("a pattern is generated with the chromatic share of the instance and remembers it", "[group-wiring][chromatic]") {
+    Quiet quiet;
+    for (const int percent : {0, 90}) {
+        Instance hub("Hub");
+        hub.setRole(InstanceRole::Hub);
+        auto settings = hub.processor.instanceSettings();
+        settings.generation.chromaticPct = percent;
+        hub.processor.setInstanceSettings(settings);
+        hub.processor.generate();
+        INFO("percent " << percent);
+        const bool filled = waitFor([&] { return !hub.processor.slotsSnapshot().isEmpty(0); });
+        INFO("status " << static_cast<int>(hub.processor.generationStatus()));
+        REQUIRE(filled);
+        CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->info.chromaticPct == percent);
+        // a variation keeps it: the constraint layer keeps working with the share of the pattern
+        REQUIRE(hub.processor.vary(100, std::nullopt, std::nullopt, std::nullopt));
+        CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->info.chromaticPct == percent);
+    }
+    Instance plain("Plain");
+    plain.setRole(InstanceRole::Hub);
+    plain.processor.generate();
+    REQUIRE(waitFor([&] { return !plain.processor.slotsSnapshot().isEmpty(0); }));
+    CHECK(plain.processor.slotsSnapshot().slot(0)->pattern->info.chromaticPct == -1);
+}
+
+TEST_CASE("the chromatic slider is an expert control that follows the instance", "[group-wiring][chromatic][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    auto* slider = child<juce::Slider>(*editor, "chromatic");
+    REQUIRE(slider != nullptr);
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK_FALSE(slider->isVisible()); // basic level
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(true, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK(slider->isVisible());
+    CHECK(slider->getValue() == -1.0);
+    CHECK(slider->getTextFromValue(-1.0) == "Stil"); // the style's share
+    CHECK(slider->getTextFromValue(35.0) == "35 %");
+    CHECK(editor->getLocalBounds().contains(slider->getBounds()));
+    for (auto* other : editor->getChildren()) {
+        if (other != slider && other->isVisible() && other->getWidth() > 0 &&
+            dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+            INFO(other->getComponentID().toStdString());
+            CHECK_FALSE(slider->getBounds().intersects(other->getBounds()));
+        }
+    }
+    slider->setValue(60.0, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().generation.chromaticPct == std::optional<int>(60));
+    slider->setValue(0.0, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().generation.chromaticPct == std::optional<int>(0)); // 0 % is a choice, not "Stil"
+    slider->setValue(-1.0, juce::sendNotificationSync);
+    CHECK_FALSE(hub.processor.instanceSettings().generation.chromaticPct.has_value());
+    // a change of the instance (a loaded state) moves the slider
+    auto settings = hub.processor.instanceSettings();
+    settings.generation.chromaticPct = 20;
+    hub.processor.setInstanceSettings(settings);
+    CHECK(waitFor([&] { return slider->getValue() == 20.0; }));
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+}

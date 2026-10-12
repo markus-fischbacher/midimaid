@@ -48,6 +48,7 @@ Eine **Stimme** zeigt nur ihre eigene Spur: Stumm, Oktave, Griff zum Herausziehe
   („Fertig: gesperrte Stimmen, Tonart und Länge bleiben“). Sind alle gesperrt, gibt es nichts zu erzeugen.
 - **Variation** (je Stimme) ändert ein Pattern; wie stark, bestimmt der Regler **Stärke** (im Experten-Modus, Standard 30).
   **Variation (alle)** (Experte) wirkt auf alle Stimmen. Die Harmonie bleibt.
+- **Chromatik** (Experte, neben Energie und Kreativität): Wie viele Töne die Skala verlassen dürfen. *Stil* nimmt den Wert des Stils (Melodic 0 %, Peak Time 10 %, Hard/Industrial 35 %), 0 % bleibt auf der Skala, 100 % setzt viele Durchgangs- und Wechseltöne. Das Pattern merkt sich den Wert; Variation und *Neu* bleiben dabei.
 - **Neu** (je Stimme) erzeugt nur diese Stimme neu; Harmonie, Kick-Raster und die anderen Stimmen bleiben.
 - **Duplizieren** (je Stimme) verdoppelt die **gewählten Noten** der Piano-Roll; **Rückgängig** und **Wiederholen** gelten für
   jede Änderung.

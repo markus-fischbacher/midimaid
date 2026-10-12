@@ -553,3 +553,30 @@ TEST_CASE("validation: values at the limits are valid", "[core][pattern][validat
     p.nextNoteId = 1;
     CHECK(validatePattern(p).empty());
 }
+
+TEST_CASE("the chromatic share of a pattern is written only when chosen and survives the round trip", "[pattern][chromatic]") {
+    Pattern pattern = makeEmptyPattern(2, "peak_time");
+    CHECK(pattern.info.chromaticPct == -1);
+    const json plain = patternToJson(pattern);
+    CHECK_FALSE(plain["info"].contains("chromaticPct")); // patterns of the style's share stay as they were
+    pattern.info.chromaticPct = 35;
+    const json chosen = patternToJson(pattern);
+    CHECK(chosen["info"]["chromaticPct"] == 35);
+    const auto back = loadPatternJson(chosen);
+    REQUIRE(back.ok());
+    CHECK(back.pattern->info.chromaticPct == 35);
+    pattern.info.chromaticPct = 0; // 0 % is a choice, too
+    CHECK(loadPatternJson(patternToJson(pattern)).pattern->info.chromaticPct == 0);
+    CHECK(loadPatternJson(plain).pattern->info.chromaticPct == -1);
+    // out of range is refused, not clamped
+    pattern.info.chromaticPct = 101;
+    CHECK_FALSE(validatePattern(pattern).empty());
+    pattern.info.chromaticPct = -2;
+    CHECK_FALSE(validatePattern(pattern).empty());
+    pattern.info.chromaticPct = 100;
+    CHECK(validatePattern(pattern).empty());
+    // a file with a value out of range loads with the style's share (the share is a hint to the constraint layer)
+    const auto bad = loadWith(makeEmptyPattern(2, "peak_time"), [](json& d) { d["info"]["chromaticPct"] = 101; });
+    REQUIRE(bad.ok());
+    CHECK(bad.pattern->info.chromaticPct == -1);
+}

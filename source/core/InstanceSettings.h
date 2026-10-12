@@ -35,6 +35,7 @@ struct GenerationSettings {
     std::optional<std::string> scaleId = "natural_minor"; ///< an id of `allScales()`
     std::optional<uint64_t> seed;                         ///< fixed seed, else random per request
     std::string prompt; ///< what the musician asks the AI for (SPEC 3.1); offline: ignored
+    std::optional<int> chromaticPct{}; ///< 0 to 100: the chromatic share of SPEC 3.8; none: the style's
 
     bool operator==(const GenerationSettings&) const = default;
 };

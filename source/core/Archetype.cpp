@@ -625,10 +625,27 @@ VelocityContour archetypeContour(std::string_view archetypeId) {
     return contour;
 }
 
+StyleProfile withChromatic(const StyleProfile& style, int chromaticPct) {
+    StyleProfile copy = style;
+    if (chromaticPct >= 0) {
+        copy.chromaticDefaultPercent = std::min(chromaticPct, 100);
+    }
+    return copy;
+}
+
+namespace {
+
+/// The chromatic share a pattern works with: the one chosen for it, else the style's.
+int chromaticOf(const Pattern& pattern, const StyleProfile& style) {
+    return pattern.info.chromaticPct >= 0 ? pattern.info.chromaticPct : style.chromaticDefaultPercent;
+}
+
+} // namespace
+
 ConstraintSettings constraintSettingsFor(const Pattern& pattern, const StyleProfile& style) {
     ConstraintSettings settings = ConstraintSettings::forPattern(pattern, style.registerProfile());
     settings.kickClearanceTicks = style.bass.kickClearanceTicks;
-    settings.chromaticPercent = style.chromaticDefaultPercent;
+    settings.chromaticPercent = chromaticOf(pattern, style);
     return settings;
 }
 
@@ -636,7 +653,7 @@ QualityContext qualityContextFor(const Pattern& pattern, const StyleProfile& sty
     QualityContext context;
     context.energyPct = settings.energyPct;
     context.creativityPct = settings.creativityPct;
-    context.chromaticPercent = style.chromaticDefaultPercent;
+    context.chromaticPercent = chromaticOf(pattern, style);
     for (const Track& track : pattern.voices) {
         context.ignoresKick.push_back(ignoresKickArchetype(track.archetypeId));
     }

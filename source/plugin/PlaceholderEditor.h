@@ -112,6 +112,8 @@ private:
     juce::ToggleButton autoOfflineButton_;
     juce::TextEditor seedEditor_;
     juce::TextButton randomButton_;
+    juce::Label chromaticLabel_;
+    juce::Slider chromaticSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight}; // expert: -1 = the style's
     juce::Label energyLabel_;
     juce::Label creativityLabel_;
     juce::Slider energySlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};

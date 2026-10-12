@@ -202,6 +202,9 @@ std::vector<std::string> validatePattern(const Pattern& pattern) {
     if (pattern.info.creativityPct > 100) {
         issues.add("info.creativityPct", "must be 0-100");
     }
+    if (pattern.info.chromaticPct < -1 || pattern.info.chromaticPct > 100) {
+        issues.add("info.chromaticPct", "must be -1 or 0-100");
+    }
     if (pattern.info.energyPct > 100) {
         issues.add("info.energyPct", "must be 0-100");
     }

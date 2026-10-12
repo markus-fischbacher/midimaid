@@ -39,7 +39,12 @@ const Archetype* findArchetype(std::string_view id);
 struct ArchetypeSettings {
     int energyPct = 50;     ///< 0-100: density, accent share, octave jumps, velocity level (STYLES.md 1.5)
     int creativityPct = 40; ///< 0-100: variation bars, unusual (chromatic) tones, scatter of the archetype choice
+    int chromaticPct = -1;  ///< 0-100: share of notes that may leave the scale (SPEC 3.8); -1: the style's default
 };
+
+/// The style with the chromatic share of `chromaticPct` (0-100, else unchanged): what a generation with the control of
+/// SPEC 3.8 works with, so the generators, the constraint layer and the quality criteria all agree.
+StyleProfile withChromatic(const StyleProfile& style, int chromaticPct);
 
 /// Chooses an archetype of the profile for `role` at random, weighted by the profile weights moved by the energy
 /// (calm: x(150 - energy)/100, dense: x(50 + energy)/100). Ids without an implementation or for another role are
