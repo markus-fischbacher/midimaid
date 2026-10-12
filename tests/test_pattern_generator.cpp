@@ -7,6 +7,7 @@
 #include "core/PatternValidation.h"
 #include "core/Progression.h"
 
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
 #include <set>
@@ -350,6 +351,112 @@ TEST_CASE("generation around locks protects against the set for the generated vo
     if (guarded.success) {
         CHECK_FALSE(checkCopyProtection(guarded.pattern, guardedRequest.referenceSet).violated);
     }
+}
+
+TEST_CASE("the last results of the slot are the history of the repetition protection", "[generator][repeat]") {
+    const StyleProfile style = loadShipped("peak_time");
+    std::vector<Pattern> results;
+    for (uint64_t seed = 1; seed <= 25; ++seed) {
+        results.push_back(generateCandidate(style, requestFor(2, 1), seed));
+    }
+    const auto entries = historyEntriesOf(results);
+    // the newest 20 patterns, every voice with notes as an entry of its role
+    size_t expected = 0;
+    for (size_t index = results.size() - kRepeatHistory; index < results.size(); ++index) {
+        for (const Track& track : results[index].voices) {
+            expected += track.notes.empty() ? 0 : 1;
+        }
+    }
+    CHECK(entries.size() == expected);
+    REQUIRE_FALSE(entries.empty());
+    CHECK(entries.back().notes == results.back().voices.back().notes);
+    CHECK(entries.back().role == results.back().voices.back().role);
+    CHECK(entries.back().bars == results.back().lengthBars);
+    CHECK(entries.back().active);
+    const auto oldest = results.size() - kRepeatHistory;
+    CHECK(entries.front().notes == results[oldest].voices.front().notes);
+    CHECK(historyEntriesOf({}).empty());
+    // a voice without notes gives no entry
+    Pattern bare = results.front();
+    bare.voices[1].notes.clear();
+    CHECK(historyEntriesOf({bare}).size() == 1);
+}
+
+TEST_CASE("a new pattern does not repeat a result of the history", "[generator][repeat]") {
+    const StyleProfile style = loadShipped("peak_time");
+    GenerationRequest request = requestFor(4, 6);
+    const SelectionResult first = generatePattern(style, request);
+    REQUIRE(first.success);
+    request.history = historyEntriesOf({first.pattern});
+    REQUIRE(checkCopyProtection(first.pattern, request.history).violated); // the same seed would give it again
+    const SelectionResult again = generatePattern(style, request);
+    REQUIRE(again.success);
+    CHECK(again.seed != first.seed);
+    CHECK_FALSE(checkCopyProtection(again.pattern, request.history).violated);
+    // the winner seed replays the result whatever the history says (D-88)
+    CHECK(replayWinner(style, request, again.seed) == again.pattern);
+    CHECK(replayWinner(style, request, first.seed) == first.pattern);
+}
+
+TEST_CASE("the repetition protection never blocks a generation", "[generator][repeat]") {
+    // look for a request whose candidates are all protected by a history made of them (some candidates have lines too
+    // plain to be protected, D-87): then the protection must be dropped and the result is the unprotected one
+    bool found = false;
+    for (const char* styleName : {"peak_time", "melodic_techno", "hard_industrial"}) {
+        const StyleProfile style = loadShipped(styleName);
+        for (uint64_t seed = 1; seed <= 60 && !found; ++seed) {
+            GenerationRequest request = requestFor(seed % 2 == 0 ? 8 : 16, seed);
+            request.voices = {VoiceRole::Melody}; // one distinctive line: every candidate can be protected
+            const SelectionResult plain = generatePattern(style, request);
+            if (!plain.success) {
+                continue;
+            }
+            std::vector<Pattern> all;
+            for (int round = 0; round < kMaxRounds; ++round) {
+                for (int index = 0; index < kCandidatesPerRound; ++index) {
+                    all.push_back(generateCandidate(style, request, candidateSeed(request.seed, round, index)));
+                }
+            }
+            std::vector<ReferenceEntry> history; // by hand: `historyEntriesOf` keeps only the newest 20
+            for (const Pattern& candidate : all) {
+                for (const Track& track : candidate.voices) {
+                    history.push_back({track.role, candidate.lengthBars, track.notes, true});
+                }
+            }
+            const bool allBlocked = std::all_of(all.begin(), all.end(), [&](const Pattern& candidate) {
+                return checkCopyProtection(candidate, history).violated;
+            });
+            if (!allBlocked) {
+                continue;
+            }
+            found = true;
+            request.history = history;
+            const SelectionResult result = generatePattern(style, request);
+            REQUIRE(result.success);
+            CHECK(result.pattern == plain.pattern);
+            CHECK(result.seed == plain.seed);
+            // a cancelled request still ends without a result and without a second run
+            std::atomic<bool> cancel{true};
+            request.cancel = &cancel;
+            CHECK_FALSE(generatePattern(style, request).success);
+        }
+    }
+    CHECK(found);
+}
+
+TEST_CASE("generation around locks avoids the history for the generated voices", "[generator][repeat]") {
+    const StyleProfile style = loadShipped("peak_time");
+    GenerationRequest request = requestFor(4, 6);
+    Pattern current = generateCandidate(style, request, 3);
+    current.voices[0].lock = LockFlags{true, true, true};
+    const SelectionResult plain = generatePatternAroundLocks(style, request, current);
+    REQUIRE(plain.success);
+    request.history = historyEntriesOf({plain.pattern});
+    const SelectionResult again = generatePatternAroundLocks(style, request, current);
+    REQUIRE(again.success);
+    CHECK(again.seed != plain.seed);
+    CHECK(again.pattern.voices[0].notes == current.voices[0].notes); // the locked voice stays, it is never "repeated"
+    CHECK_FALSE(checkCopyProtection(again.pattern, request.history).violated);
 }
 
 TEST_CASE("every voice of the pattern is generated, bass first", "[generator]") {

@@ -883,6 +883,14 @@ void ProcessorBase::generate() {
         if (slot != nullptr && slot->pattern && mm::core::hasLockedVoice(*slot->pattern)) {
             job.lockedFrom = slot->pattern;
         }
+        if (slot != nullptr && !job.settings.seed) { // a fixed seed asks for exactly that pattern: no protection (D-225)
+            // the last results of the slot: a new pattern should not repeat them
+            auto results = slot->history;
+            if (slot->pattern) {
+                results.push_back(*slot->pattern);
+            }
+            job.history = mm::core::historyEntriesOf(results);
+        }
     }
     if (job.lockedFrom && std::all_of(job.lockedFrom->voices.begin(), job.lockedFrom->voices.end(),
                                       [](const mm::core::Track& track) { return mm::core::isVoiceLocked(track); })) {

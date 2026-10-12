@@ -407,6 +407,8 @@ public:
     /// Message thread: the pending import is used up (or dismissed).
     void clearPendingImport() { pendingImport_.reset(); }
     /// True when the last request was a refinement (message thread).
+    /// How many entries of the history (the last results of the slot) the last job carried for the repetition protection.
+    size_t lastJobHistorySize() const { return lastJob_ ? lastJob_->history.size() : 0; }
     bool lastJobIsRefine() const { return lastJob_ && lastJob_->refine; }
     /// How many notes the last successful `vary` changed.
     size_t lastVariationChanges() const { return lastVariationChanges_; }

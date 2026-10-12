@@ -637,6 +637,33 @@ TEST_CASE("a fixed seed makes generate repeat itself, no seed draws a new one", 
     CHECK(results[2].info.seed != 4711);
 }
 
+TEST_CASE("generate without a fixed seed avoids the last results of the slot, a fixed seed does not", "[generation][repeat]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    const auto generateOnce = [&] {
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return processor.generationStatus() == mm::plugin::GenerationStatus::Done; }));
+        pumpFor(20);
+    };
+    generateOnce();
+    CHECK(processor.lastJobHistorySize() == 0); // an empty slot has no results
+    generateOnce();
+    const auto afterOne = processor.lastJobHistorySize();
+    CHECK(afterOne >= 2); // the voices of the first result (the slot holds it as history and as pattern)
+    generateOnce();
+    CHECK(processor.lastJobHistorySize() > afterOne);
+
+    auto settings = processor.instanceSettings();
+    settings.generation.seed = 5;
+    processor.setInstanceSettings(settings);
+    generateOnce();
+    CHECK(processor.lastJobHistorySize() == 0); // a fixed seed asks for exactly that pattern
+    settings.generation.seed.reset();
+    processor.setInstanceSettings(settings);
+    generateOnce();
+    CHECK(processor.lastJobHistorySize() > 0);
+}
+
 TEST_CASE("key, scale and seed are saved, and a state from before them keeps drawing the key", "[generation]") {
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor source("Test");

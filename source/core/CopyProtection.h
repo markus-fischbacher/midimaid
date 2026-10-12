@@ -72,6 +72,14 @@ struct CopyCheck {
 /// similarity is above `kCopyThresholdPermille`.
 CopyCheck checkCopyProtection(const Pattern& pattern, const std::vector<ReferenceEntry>& set);
 
+/// The repetition protection of v1.1 (STYLES.md 1.14, D-225) uses the same metric against the last results of the slot:
+/// this many are taken.
+constexpr size_t kRepeatHistory = 20;
+
+/// The entries of the repetition protection: the voices with notes of the last `kRepeatHistory` patterns (the end of
+/// `results` is the newest), each as an active entry of its role.
+std::vector<ReferenceEntry> historyEntriesOf(const std::vector<Pattern>& results);
+
 /// The check as a hard criterion for `selectBest` (true = candidate allowed). Holds a copy of the set.
 HardCheck copyProtectionCheck(std::vector<ReferenceEntry> set);
 

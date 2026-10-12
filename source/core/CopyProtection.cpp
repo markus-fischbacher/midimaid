@@ -140,6 +140,20 @@ CopyCheck checkCopyProtection(const Pattern& pattern, const std::vector<Referenc
     return result;
 }
 
+std::vector<ReferenceEntry> historyEntriesOf(const std::vector<Pattern>& results) {
+    std::vector<ReferenceEntry> entries;
+    const size_t first = results.size() > kRepeatHistory ? results.size() - kRepeatHistory : 0;
+    for (size_t index = first; index < results.size(); ++index) {
+        const Pattern& pattern = results[index];
+        for (size_t voice = 0; voice < pattern.voices.size(); ++voice) {
+            if (!pattern.voices[voice].notes.empty()) {
+                entries.push_back({pattern.voices[voice].role, pattern.lengthBars, pattern.voices[voice].notes, true});
+            }
+        }
+    }
+    return entries;
+}
+
 HardCheck copyProtectionCheck(std::vector<ReferenceEntry> set) {
     auto shared = std::make_shared<const std::vector<ReferenceEntry>>(std::move(set));
     return [shared](const Pattern& pattern) { return !checkCopyProtection(pattern, *shared).violated; };

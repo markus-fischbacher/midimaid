@@ -29,6 +29,10 @@ struct GenerationRequest {
     std::vector<VoiceRole> voices;               ///< voice roles in order; empty = bass and melody (at most kMaxVoices)
     std::optional<std::vector<Phrase>> formPlan; ///< fixed phrases (valid for the length), else drawn (FormPlan.h)
     std::vector<ReferenceEntry> referenceSet;    ///< active set for the copy protection (empty = none)
+    /// The last results of the slot for the repetition protection (v1.1, empty = none). A candidate that resembles one
+    /// of them is rejected like a copy; if that leaves no candidate at all the protection is dropped for this request,
+    /// so it never blocks a generation. Not used by `replayWinner`.
+    std::vector<ReferenceEntry> history;
     /// The progressions of the musician's own set that join those of the style (SPEC 3.20; empty = none). Used by the
     /// harmony of every candidate, so a replayed winner seed gives the same chords as the generation did.
     std::vector<WeightedProgression> personalProgressions;
