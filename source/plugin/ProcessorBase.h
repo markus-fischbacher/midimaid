@@ -407,6 +407,9 @@ public:
     void onGroupStatusChanged(mm::core::GroupStatus status);
     /// Planned slot changes that reached this voice too late for their point (SPEC 6.5, D-142).
     uint32_t lateSwitches() const { return groupSync_.lateSwitches(); }
+    /// Message thread: a trigger parameter asked for a variation of voice `voice` (1 to `kMaxVoices`, 0 = all) with the
+    /// strength of the settings. A voice hands it to the hub. Public for the group link.
+    void varyFromTrigger(int voice);
     /// Called by the group link on the message thread: a voice takes over the hub's Evolve stage (null: none) and plays
     /// it in that slot from the stamp (or the next bar line) on. Other roles ignore it. The stage is not kept.
     void adoptHubOverlay(const mm::core::OverlayPtr& overlay, std::optional<double> stampPpq = std::nullopt);
@@ -460,6 +463,7 @@ private:
     void sendOverlay(const std::optional<OverlayMessage>& message);
     void evolveTickLocked(std::optional<OverlayMessage>& message);
     void onEvolveParameter(const juce::String& id, bool on);
+    void resetTrigger(const juce::String& id);
     void setEvolveParameter(bool on);
     /// A new instance takes the key the user chose last (global settings, D-162) once the file is read.
     void applyStartKey();

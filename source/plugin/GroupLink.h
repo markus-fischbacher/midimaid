@@ -30,6 +30,8 @@ public:
     void publishOverlay(mm::core::OverlayPtr overlay, std::optional<double> stampPpq = std::nullopt);
     /// Any thread: asks the hub to do `action` for this voice (runs on the message thread).
     void forward(mm::core::GroupAction action);
+    /// Any thread: asks the hub for a variation of voice `voice` (0 = all voices).
+    void forwardVary(int voice);
     /// Message thread: takes the hub role that was offered.
     void acceptOffer();
     /// Owner is going away: no callback reaches it after this returns; leaves the registry.
@@ -43,6 +45,7 @@ public:
     void onOverlay(const mm::core::OverlayPtr& overlay, std::optional<double> stampPpq) override;
     void onStatus(mm::core::GroupStatus status, size_t voices) override;
     bool onAction(mm::core::GroupAction action) override;
+    bool onVary(int voice) override;
     mm::core::SlotSnapshot currentSlots() override;
 
 private:

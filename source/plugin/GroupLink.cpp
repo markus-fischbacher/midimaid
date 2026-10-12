@@ -85,6 +85,14 @@ void GroupLink::forward(mm::core::GroupAction action) {
     });
 }
 
+void GroupLink::forwardVary(int voice) {
+    onMessageThread([self = shared_from_this(), voice] {
+        if (self->id_ != 0) {
+            processGroup().forwardVary(self->id_, voice);
+        }
+    });
+}
+
 void GroupLink::acceptOffer() {
     onMessageThread([self = shared_from_this()] {
         if (self->id_ != 0) {
@@ -143,6 +151,15 @@ bool GroupLink::onAction(mm::core::GroupAction action) {
     case mm::core::GroupAction::ShowHub:
         return owner_->bringEditorToFront();
     }
+    return true;
+}
+
+bool GroupLink::onVary(int voice) {
+    const juce::ScopedLock lock(lock_);
+    if (owner_ == nullptr) {
+        return false;
+    }
+    owner_->varyFromTrigger(voice);
     return true;
 }
 

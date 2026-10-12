@@ -240,7 +240,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
   - [x] Etappe 3 (D-217): Einstellungsdialog und Speicherung in den globalen Einstellungen (Referenznote, Modus, Verhalten, Zeitpunkt, Ziel, Kanal, Export), MIDI Thru
 - [ ] Vorhören bei gestopptem Transport, auch für Voices (SPEC §3.11)
 - [ ] Legato-Einsatz (SPEC §3.4)
-- [ ] Trigger-Parameter Generieren/Variation (SPEC §3.13)
+- [x] Trigger-Parameter Generieren/Variation (SPEC §3.13, D-218)
 - [ ] Session-Ansicht: Slot per Clip-Hüllkurve, Beispiele in der Live-Vorlage
 
 **Musik**

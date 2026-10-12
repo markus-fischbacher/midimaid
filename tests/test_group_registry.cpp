@@ -47,6 +47,10 @@ public:
         actions.push_back(action);
         return true;
     }
+    bool onVary(int voice) override {
+        varied.push_back(voice);
+        return true;
+    }
     SlotSnapshot currentSlots() override { return std::make_shared<const SlotBank>(bank); }
 
     GroupStatus status() const { return statuses.empty() ? GroupStatus::Solo : statuses.back(); }
@@ -63,6 +67,7 @@ public:
     std::vector<std::optional<double>> stamps;
     std::vector<GroupStatus> statuses;
     std::vector<GroupAction> actions;
+    std::vector<int> varied;
     std::vector<OverlayPtr> overlays;
     std::vector<std::optional<double>> overlayStamps;
     size_t voices = 0;
@@ -429,4 +434,27 @@ TEST_CASE("a voice that joins again hears the stage again", "[group-registry][ev
     REQUIRE(voice->overlays.size() == 2);
     CHECK(voice->overlays[1] == stage);
     CHECK_FALSE(voice->overlayStamps[1].has_value());
+}
+
+TEST_CASE("a voice's variation trigger goes to the hub with the voice it names", "[group-registry][trigger]") {
+    GroupRegistry registry;
+    auto hub = std::make_shared<FakeMember>(40);
+    auto voice = std::make_shared<FakeMember>();
+    auto solo = std::make_shared<FakeMember>();
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    const auto voiceId = registry.add(voice, InstanceRole::Voice);
+    const auto soloId = registry.add(solo, InstanceRole::Solo);
+    CHECK(registry.forwardVary(voiceId, 2));
+    CHECK(registry.forwardVary(voiceId, 0)); // all voices
+    CHECK(registry.forwardVary(voiceId, 99)); // limited to the voices there can be
+    REQUIRE(hub->varied.size() == 3);
+    CHECK(hub->varied[0] == 2);
+    CHECK(hub->varied[1] == 0);
+    CHECK(hub->varied[2] == kMaxVoices);
+    CHECK_FALSE(registry.forwardVary(hubId, 1));  // the hub asks nobody
+    CHECK_FALSE(registry.forwardVary(soloId, 1)); // nor does a solo instance
+    CHECK_FALSE(registry.forwardVary(9999, 1));
+    registry.remove(hubId);
+    CHECK_FALSE(registry.forwardVary(voiceId, 1)); // no hub, nobody to ask
+    CHECK(hub->varied.size() == 3);
 }

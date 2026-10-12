@@ -5521,3 +5521,157 @@ TEST_CASE("a transposition setting changed before the file is read wins and the 
     CHECK(now.variationStrength == 44);
     CHECK(mm::core::parseGlobalSettings(temp.file.loadFileAsString().toStdString()) == now);
 }
+
+// --- trigger parameters (SPEC 3.13, D-218) --------------------------------------------------------------------
+
+namespace {
+
+void pulse(Instance& instance, const char* id) {
+    auto* parameter = instance.processor.parameters().getParameter(id);
+    REQUIRE(parameter != nullptr);
+    parameter->setValueNotifyingHost(1.0f); // the rising edge
+    pumpMessages(30);
+}
+
+float valueOf(Instance& instance, const char* id) {
+    return instance.processor.parameters().getParameter(id)->getValue();
+}
+
+size_t historySize(Instance& instance) {
+    return instance.processor.slotsSnapshot().slot(0)->history.size();
+}
+
+} // namespace
+
+TEST_CASE("trigger parameters: variation n varies voice n, the trigger falls back to 0", "[group-wiring][trigger]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    const mm::core::Pattern original = evolvePattern(hub, 31);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+    for (const size_t voice : {size_t{0}, size_t{1}}) {
+        Instance fresh("Hub");
+        fresh.setRole(InstanceRole::Hub);
+        fresh.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+        pulse(fresh, voice == 0 ? "variation_1" : "variation_2");
+        INFO("voice " << voice + 1);
+        const auto bank = fresh.processor.slotsSnapshot();
+        CHECK(historySize(fresh) == 2); // the variation is a result
+        CHECK(fresh.processor.generationStatus() == mm::plugin::GenerationStatus::Varied);
+        const auto& now = *bank.slot(0)->pattern;
+        CHECK(now.voices[voice].notes != original.voices[voice].notes);
+        CHECK(now.voices[1 - voice].notes == original.voices[1 - voice].notes); // the other voice stays
+        CHECK(valueOf(fresh, voice == 0 ? "variation_1" : "variation_2") == 0.0f); // a trigger: ready for the next edge
+        pulse(fresh, voice == 0 ? "variation_1" : "variation_2");
+        CHECK(historySize(fresh) == 3); // and it fires again
+    }
+}
+
+TEST_CASE("trigger parameters: variation all varies every voice, a number without a voice does nothing",
+          "[group-wiring][trigger]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    const mm::core::Pattern original = evolvePattern(hub, 32);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+    pulse(hub, "variation_5"); // the pattern has two voices
+    CHECK(historySize(hub) == 1);
+    CHECK(hub.processor.generationStatus() == mm::plugin::GenerationStatus::NothingToVary);
+    pulse(hub, "variation_all");
+    CHECK(historySize(hub) == 2);
+    const auto& now = *hub.processor.slotsSnapshot().slot(0)->pattern;
+    CHECK(now.voices[0].notes != original.voices[0].notes);
+    CHECK(now.voices[1].notes != original.voices[1].notes);
+}
+
+TEST_CASE("trigger parameters: the strength is the one of the settings", "[group-wiring][trigger]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.update([](mm::core::GlobalSettings& settings) { settings.variationStrength = 100; });
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 33))); });
+    pulse(hub, "variation_all");
+    const size_t strong = hub.processor.lastVariationChanges();
+    store.update([](mm::core::GlobalSettings& settings) { settings.variationStrength = 5; });
+    Instance other("Hub2");
+    other.setRole(InstanceRole::Hub); // a second hub is refused: it is solo then, which varies all the same
+    other.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(other, 33))); });
+    pulse(other, "variation_all");
+    CHECK(other.processor.lastVariationChanges() < strong);
+}
+
+TEST_CASE("trigger parameters: a falling edge and a bounce do nothing", "[group-wiring][trigger]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 34))); });
+    auto* parameter = hub.processor.parameters().getParameter("variation_1");
+    parameter->setValueNotifyingHost(0.0f); // already 0
+    pumpMessages(30);
+    CHECK(historySize(hub) == 1);
+    hub.processor.setNonRealtime(true);
+    pulse(hub, "variation_1");
+    pulse(hub, "variation_all");
+    pulse(hub, "generate");
+    CHECK(historySize(hub) == 1); // SPEC 3.13: not in an offline render
+    CHECK(hub.processor.generationStatus() != mm::plugin::GenerationStatus::Generating); // no request was started
+    hub.processor.setNonRealtime(false);
+}
+
+TEST_CASE("trigger parameters: generate fills the slot like the button", "[group-wiring][trigger]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    CHECK(hub.processor.slotsSnapshot().isEmpty(0));
+    pulse(hub, "generate");
+    CHECK(waitFor([&] { return !hub.processor.slotsSnapshot().isEmpty(0); }));
+    CHECK(valueOf(hub, "generate") == 0.0f);
+}
+
+TEST_CASE("trigger parameters: a voice's triggers go to the hub", "[group-wiring][trigger][group]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    const mm::core::Pattern original = evolvePattern(hub, 35);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, original)); });
+    pulse(voice, "variation_2"); // the hub varies voice 2
+    CHECK(voice.processor.generationStatus() == mm::plugin::GenerationStatus::Forwarded);
+    CHECK(historySize(hub) == 2);
+    const auto now = hub.processor.slotsSnapshot().slot(0)->pattern;
+    CHECK(now->voices[1].notes != original.voices[1].notes);
+    CHECK(now->voices[0].notes == original.voices[0].notes);
+    pulse(voice, "variation_all");
+    CHECK(historySize(hub) == 3);
+    // the voice kept nothing of its own
+    CHECK(sameNotes(*voice.processor.slotsSnapshot().slot(0)->pattern, *hub.processor.slotsSnapshot().slot(0)->pattern));
+    // and a voice without a hub has nobody to ask
+    Instance lonely("Lonely");
+    lonely.setRole(InstanceRole::Voice);
+    hub.setRole(InstanceRole::Solo);
+    pulse(lonely, "variation_1");
+    CHECK(lonely.processor.generationStatus() == mm::plugin::GenerationStatus::UseHub);
+}
+
+TEST_CASE("trigger parameters: variation all changes more than one voice does", "[group-wiring][trigger]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.update([](mm::core::GlobalSettings& settings) { settings.variationStrength = 100; });
+    size_t one = 0;
+    size_t all = 0;
+    for (const char* id : {"variation_1", "variation_all"}) {
+        Instance hub("Hub");
+        hub.setRole(InstanceRole::Hub);
+        hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 36))); });
+        pulse(hub, id);
+        (std::string(id) == "variation_all" ? all : one) = hub.processor.lastVariationChanges();
+    }
+    CHECK(one > 0);
+    CHECK(all > one);
+}

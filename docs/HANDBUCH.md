@@ -154,7 +154,7 @@ Aufnahme, Freeze, Arrangement).
 
 ## 10. Automation
 
-Die Host-Parameter heißen **Slot** (1–16), **Mute 1 … Mute 8**, **Evolve** und **Evolve Keep** (nur am Hub wirksam). Damit schaltest du Patterns und Stimmen im
+Die Host-Parameter heißen **Slot** (1–16), **Mute 1 … Mute 8**, **Transpose**, **Evolve** und **Evolve Keep** (nur am Hub wirksam) sowie die Trigger **Generate**, **Variation 1 … 8** und **Variation All**: Die Flanke 0 → 1 löst aus (auf einen Controller-Knopf oder eine Automationsspur legbar), der Parameter springt danach von selbst zurück. *Variation* nimmt die Stärke aus den Einstellungen; eine Stimme reicht den Trigger an den Hub weiter; ein Bounce ignoriert die Trigger. Damit schaltest du Patterns und Stimmen im
 Arrangement um. In einer Gruppe automatisierst du den **Slot im Hub**; eine Stimme kann auf *Slot: eigener* gestellt
 werden, wenn sie ihren Slot selbst automatisieren soll (Bounce, Freeze). Die Wechsel greifen zum nächsten Takt.
 
