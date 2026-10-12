@@ -511,6 +511,33 @@ std::vector<uint8_t> drumBytes(uint32_t bars, int late = 0, uint8_t kick = 36, u
     return writeMidiFile(PatternView{list.data(), list.size(), bars * kTicksPerBar}, {});
 }
 
+/// `bars` bars of drums with a kick on the beats and closed hats on the off-beat 8ths only (steps 2, 6, 10, 14).
+std::vector<uint8_t> offbeatHatBytes(uint32_t bars) {
+    std::vector<PatternNote> list;
+    for (uint32_t bar = 0; bar < bars; ++bar) {
+        for (uint32_t step = 0; step < 16; ++step) {
+            const uint32_t tick = bar * kTicksPerBar + step * 240;
+            if (step % 4 == 0) {
+                list.push_back({tick, 120, 10, 36, 110});
+            }
+            if (step % 4 == 2) {
+                list.push_back({tick, 60, 10, 42, 80});
+            }
+        }
+    }
+    std::stable_sort(list.begin(), list.end(),
+                     [](const PatternNote& a, const PatternNote& b) { return a.startTick < b.startTick; });
+    return writeMidiFile(PatternView{list.data(), list.size(), bars * kTicksPerBar}, {});
+}
+
+int melodyNotesOnHats(const Pattern& pattern) {
+    int count = 0;
+    for (const auto& note : pattern.voices[1].notes) {
+        count += (note.startTick / 240) % 4 == 2 && note.startTick % 240 == 0 ? 1 : 0;
+    }
+    return count;
+}
+
 bool drumDone(ProcessorBase& processor) {
     const auto status = processor.generationStatus();
     return status == GenerationStatus::DrumRefApplied || status == GenerationStatus::DrumRefStored ||
@@ -667,4 +694,51 @@ TEST_CASE("the drum mapping of the settings tells a rack's notes", "[midi-import
     REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::DrumRefStored; }));
     CHECK(processor.drumReference()->kickSteps.count() == 4);
     CHECK(processor.drumReference()->hatSteps.count() == 16);
+}
+
+TEST_CASE("the hat mode moves the melody when a clip is dropped and in later generations", "[midi-import-plugin][drum-reference][hatmode]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    int droppedWith = 0;
+    int droppedBefore = 0;
+    int generatedWith = 0;
+    int generatedFree = 0;
+    for (uint64_t seed = 21; seed < 27; ++seed) {
+        InstrumentProcessor processor("Test");
+        auto settings = processor.instanceSettings();
+        settings.generation.seed = seed;
+        settings.generation.energyPct = 80;
+        settings.generation.hatMode = HatMode::With;
+        processor.setInstanceSettings(settings);
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+        const auto before = *processor.slotsSnapshot().slot(0)->pattern;
+        TempMidi midi(offbeatHatBytes(1));
+        REQUIRE(processor.importVoice(midi.file, 0));
+        REQUIRE(pumpUntil([&] { return drumDone(processor); }));
+        REQUIRE(processor.generationStatus() == GenerationStatus::DrumRefApplied);
+        const auto after = *processor.slotsSnapshot().slot(0)->pattern;
+        CHECK(melodyNotesOnHats(after) >= melodyNotesOnHats(before));
+        droppedBefore += melodyNotesOnHats(before);
+        droppedWith += melodyNotesOnHats(after);
+
+        // the next generation takes the stored reference and the mode
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return processor.generationStatus() == GenerationStatus::Done; }));
+        const auto next = *processor.slotsSnapshot().slot(0)->pattern;
+        CHECK(next.rhythmRef.has_value());
+        generatedWith += melodyNotesOnHats(next);
+
+        InstrumentProcessor plain("Plain");
+        auto freeSettings = settings;
+        freeSettings.generation.hatMode = HatMode::Free;
+        plain.setInstanceSettings(freeSettings);
+        TempMidi midi2(offbeatHatBytes(1));
+        REQUIRE(plain.importVoice(midi2.file, 0));
+        REQUIRE(pumpUntil([&] { return drumDone(plain); }));
+        plain.generate();
+        REQUIRE(pumpUntil([&] { return plain.generationStatus() == GenerationStatus::Done; }));
+        generatedFree += melodyNotesOnHats(*plain.slotsSnapshot().slot(0)->pattern);
+    }
+    CHECK(droppedWith > droppedBefore);
+    CHECK(generatedWith > generatedFree);
 }

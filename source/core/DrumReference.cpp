@@ -220,8 +220,10 @@ bool playsAsWritten(const Track& track) {
 
 } // namespace
 
-void applyRhythmReference(Pattern& pattern, const RhythmReference& reference, const StyleProfile& style) {
+void applyRhythmReference(Pattern& pattern, const RhythmReference& reference, const StyleProfile& style,
+                          HatMode hatMode) {
     pattern.rhythmRef = reference;
+    applyHatMode(pattern, hatMode);
     pattern.kickGridId = "custom";
     for (Track& track : pattern.voices) {
         if (!playsAsWritten(track)) {

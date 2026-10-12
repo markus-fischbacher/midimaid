@@ -45,6 +45,10 @@ namespace mm::core::text {
     X(kLabelEnergy, "label.energy")                                                                                    \
     X(kLabelCreativity, "label.creativity")                                                                            \
     X(kLabelChromatic, "label.chromatic")                                                                              \
+    X(kLabelHatMode, "label.hatMode")                                                                                  \
+    X(kHatModeFree, "hatMode.free")                                                                                    \
+    X(kHatModeWith, "hatMode.with")                                                                                    \
+    X(kHatModeAgainst, "hatMode.against")                                                                              \
     X(kChromaticStyle, "label.chromaticStyle")                                                                         \
     X(kButtonExpert, "button.expert")                                                                                  \
     X(kButtonRenew, "button.renew")                                                                                    \

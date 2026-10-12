@@ -1070,7 +1070,7 @@ void ProcessorBase::applyDrumReference(const ImportRequest& request, const mm::c
     drumReference_ = reference;
     const auto index = static_cast<size_t>(request.slot);
     const bool applied = editNotes(index, [&](mm::core::Pattern& pattern) {
-        mm::core::applyRhythmReference(pattern, *reference, *style);
+        mm::core::applyRhythmReference(pattern, *reference, *style, settings.hatMode);
         pattern.info.source = "edit";
         return size_t{1};
     });
@@ -1728,7 +1728,7 @@ void ProcessorBase::applyGenerated(const GenerationJob& job, mm::core::Pattern p
         // New and generated patterns take the drum reference that was dropped last (SPEC 3.14).
         if (drumReference_ && !pattern.rhythmRef) {
             if (const auto* style = styles_.findOrFallback(pattern.styleId)) {
-                mm::core::applyRhythmReference(pattern, *drumReference_, *style);
+                mm::core::applyRhythmReference(pattern, *drumReference_, *style, job.settings.hatMode);
             }
         }
         std::optional<mm::core::Pattern> before = slot != nullptr ? slot->pattern : std::nullopt;
@@ -2371,6 +2371,9 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         if (settings_.generation.chromaticPct) { // only when chosen: states of the style's share stay as they were
             root.setAttribute("genChromatic", *settings_.generation.chromaticPct);
         }
+        if (settings_.generation.hatMode != mm::core::HatMode::Free) { // only when chosen: older states stay as they were
+            root.setAttribute("genHatMode", juce::String(std::string(mm::core::toString(settings_.generation.hatMode))));
+        }
         root.setAttribute("genRoot", settings_.generation.root
                                          ? juce::String(static_cast<int>(*settings_.generation.root))
                                          : juce::String("auto"));
@@ -2438,6 +2441,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     if (root->hasAttribute("genChromatic")) {
         settings.generation.chromaticPct = root->getIntAttribute("genChromatic", 0);
     }
+    settings.generation.hatMode = mm::core::parseHatMode(root->getStringAttribute("genHatMode").toStdString());
     // A state without key and scale comes from before they were settings: it keeps drawing them (D-149).
     settings.generation.root.reset();
     settings.generation.scaleId.reset();

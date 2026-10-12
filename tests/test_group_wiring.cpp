@@ -5858,6 +5858,75 @@ TEST_CASE("the chromatic slider is an expert control that follows the instance",
     child<juce::ToggleButton>(*editor, "expert")->onClick();
 }
 
+// --- the hat mode of the melody (SPEC 3.14, D-228) --------------------------------------------------------------
+
+TEST_CASE("the hat mode is saved with the instance, only when chosen", "[group-wiring][hatmode]") {
+    Quiet quiet;
+    Instance source("Source");
+    CHECK(source.processor.instanceSettings().generation.hatMode == mm::core::HatMode::Free);
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("genHatMode")); // states from before stay as they were
+    for (const auto mode : {mm::core::HatMode::With, mm::core::HatMode::Against}) {
+        auto settings = source.processor.instanceSettings();
+        settings.generation.hatMode = mode;
+        source.processor.setInstanceSettings(settings);
+        juce::MemoryBlock saved;
+        source.processor.getStateInformation(saved);
+        Instance target("Target");
+        target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        CHECK(target.processor.instanceSettings().generation.hatMode == mode);
+        // a state without the attribute loads as free
+        target.processor.setStateInformation(standard.getData(), static_cast<int>(standard.getSize()));
+        CHECK(target.processor.instanceSettings().generation.hatMode == mm::core::HatMode::Free);
+    }
+}
+
+TEST_CASE("the hat mode box is an expert control that follows the instance", "[group-wiring][hatmode][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    auto* box = child<juce::ComboBox>(*editor, "hatMode");
+    REQUIRE(box != nullptr);
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK_FALSE(box->isVisible()); // basic level
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(true, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK(box->isVisible());
+    CHECK(box->getNumItems() == 3);
+    CHECK(box->getItemText(0) == "Frei");
+    CHECK(box->getItemText(1) == "Mit Hats");
+    CHECK(box->getItemText(2) == "Gegen Hats");
+    CHECK(editor->getLocalBounds().contains(box->getBounds()));
+    for (auto* other : editor->getChildren()) {
+        if (other != box && other->isVisible() && other->getWidth() > 0 &&
+            dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+            INFO(other->getComponentID().toStdString());
+            CHECK_FALSE(box->getBounds().intersects(other->getBounds()));
+        }
+    }
+    box->setSelectedId(2, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().generation.hatMode == mm::core::HatMode::With);
+    box->setSelectedId(3, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().generation.hatMode == mm::core::HatMode::Against);
+    box->setSelectedId(1, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().generation.hatMode == mm::core::HatMode::Free);
+    // a change of the instance (a loaded state) moves the box
+    auto settings = hub.processor.instanceSettings();
+    settings.generation.hatMode = mm::core::HatMode::Against;
+    hub.processor.setInstanceSettings(settings);
+    CHECK(waitFor([&] { return box->getSelectedId() == 3; }));
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+}
+
 // --- groove templates (SPEC 3.9, D-220) -----------------------------------------------------------------------
 
 namespace {

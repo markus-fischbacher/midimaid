@@ -112,6 +112,8 @@ private:
     juce::ToggleButton autoOfflineButton_;
     juce::TextEditor seedEditor_;
     juce::TextButton randomButton_;
+    juce::Label hatModeLabel_;
+    juce::ComboBox hatModeBox_; // expert level: melody rhythm relative to the hats (SPEC 3.14)
     juce::Label chromaticLabel_;
     juce::Slider chromaticSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight}; // expert: -1 = the style's
     juce::Label energyLabel_;

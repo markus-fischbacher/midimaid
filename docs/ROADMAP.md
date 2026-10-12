@@ -263,7 +263,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [ ] Automatische Rollen-Erkennung mit Konfidenz
 - [ ] Motiv-Zellen, Rhythmus-Statistik, Profil pro Set, Regler „Persönlich“, Kriterium „Nähe zum Set“,
       Profil-Schnappschuss (SPEC §3.20)
-- [ ] Melodie „mit/gegen Hats“ (SPEC §3.14)
+- [x] Melodie „mit/gegen Hats“ (SPEC §3.14, D-228)
 
 **Komfort**
 - [ ] Bibliothek: Tags, BPM, Bewertung, Suche, Filter, Vorhören
