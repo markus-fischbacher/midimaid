@@ -247,7 +247,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [ ] Wahrscheinlichkeit und Bedingungen A:B inkl. Export aufgelöster Durchläufe (SPEC §3.19)
 - [ ] Ratchets (STYLES.md §1.13)
 - [ ] Polymeter-Sequenzen mit Neustart, Archetyp `polymeter_seq` (STYLES.md §1.3)
-- [ ] Turnaround (STYLES.md §1.12)
+- [x] Turnaround (STYLES.md §1.12, D-226; Ratchet-Variante mit den Ratchets, Schalter je Phrase offen)
 - [ ] Chord-Memory (STYLES.md §1.10)
 - [x] Groove-Vorlagen-Sammlung (SPEC §3.9, D-220; eigene Vorlagen speichern bleibt offen)
 - [x] Chromatik-Regler (SPEC §3.8, D-219)

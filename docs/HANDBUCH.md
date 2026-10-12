@@ -69,6 +69,9 @@ und wechseln zugleich mit ihm (zum Beginn des nächsten Durchlaufs). Die Host-Pa
 
 **Slots kopieren, tauschen, leeren:** Ein Rechtsklick auf ein Feld der Slot-Leiste öffnet das Menü *Slot kopieren*, *Slot einfügen*, *Slot leeren* und *Tauschen mit …*. Du kannst auch ein Feld auf ein anderes **ziehen**: Das tauscht die beiden Slots, mit gehaltener **Alt-Taste** (Option) kopiert es; der Zeiger zeigt dann ein „+“. Einfügen ist ein Ergebnis wie *Erzeugen* (◀ und *Rückgängig* gehen zurück). **Leeren und Tauschen** lassen sich mit *Rückgängig* zurücknehmen (der ganze Slot kommt mit Verlauf, Name und Farbe wieder); das Durchblättern des Verlaufs (◀ ▶) beendet die Schritte des Slots.
 
+**Turnaround:** Bei Patterns mit 8 oder 16 Takten kann der **letzte Takt einer Phrase** anders klingen (die letzten zwei Schläge schweigen, ein Lauf aus 16teln
+über dem letzten Schlag oder ein Oktavsprung). Das wird beim Erzeugen gezogen, bei hoher Energie öfter als bei niedriger. Gesperrte Stimmen bleiben unverändert.
+
 **Sperren:** Der Knopf *Sperren* an einer Stimme hält sie fest, bis du sie wieder freigibst. Erzeugen, Variation und
 Verfeinern lassen sie in Ruhe.
 

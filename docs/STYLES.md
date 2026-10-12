@@ -115,7 +115,7 @@ Auf betonten Schritten (0, 4, 8, 12) gilt für gleichzeitig klingende Töne von 
 - **Auftakte** (1–2 Noten vor einem Taktbeginn) sind erlaubt und werden bei `lead_phrase` und
   `call_response` bevorzugt
 
-### 1.12 [v1.1] Turnaround
+### 1.12 [v1.1] Turnaround (umgesetzt, D-226; Ratchet-Variante mit §1.13)
 In 8- und 16-Takt-Phrasen kann der letzte Takt als **Turnaround** variieren (Pause, Fill, Oktavsprung,
 Ratchet). Die Wahrscheinlichkeit steigt mit der Energie. Turnaround ist ein Merkmal der Phrase, keine
 eigene Phrasen-Rolle.
