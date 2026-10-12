@@ -1422,14 +1422,15 @@ TEST_CASE("the shipped profiles carry the chord colours of STYLES.md", "[archety
         }
         INFO(name);
         CHECK(actual == colors);
-        // [v1.1] default of the field (on for peak time and hard, off for melodic), not used in v1.0
+        // [v1.1] default of the field (on for peak time and hard, off for melodic); the generator copies it into the
+        // pattern (`voicing.chordMemory`), the archetype reads the pattern, not the style (D-229)
         CHECK(style.melody.chordMemory == (name != "melodic_techno"));
         StyleProfile flipped = style;
         flipped.melody.chordMemory = !style.melody.chordMemory;
         Pattern a = makePattern(2);
         Pattern b = makePattern(2);
         CHECK(melodyOf(a, "stabs", style, 3, 50, 40) ==
-              melodyOf(b, "stabs", flipped, 3, 50, 40)); // voice leading everywhere
+              melodyOf(b, "stabs", flipped, 3, 50, 40)); // a pattern without the flag: voice leading
     }
 }
 

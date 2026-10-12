@@ -13,8 +13,8 @@
 
 namespace mm::core {
 
-/// Voicings of stabs and chords (STYLES.md 1.10): close position, voice leading over chord changes. Chord memory
-/// ([v1.1]) is not part of v1.0; the voice leading applies everywhere.
+/// Voicings of stabs and chords (STYLES.md 1.10): close position, voice leading over chord changes; with chord memory
+/// ([v1.1], `memoryProgression`) one shape moves in parallel instead.
 
 /// Chord colours of the style profiles. The profile id "sus" stands for `Sus2` or `Sus4` (see `pickChordColor`).
 enum class ChordColor { Min, Fifth, Min7, Min9, Sus2, Sus4, Cluster };
@@ -55,6 +55,15 @@ std::optional<std::vector<std::vector<int>>> voiceProgression(const Scale& scale
                                                               std::span<const Chord> chords,
                                                               std::span<const ChordColor> colors,
                                                               std::span<const bool> doubleLowest, Range range);
+
+/// Chord memory (STYLES.md 1.10, v1.1): one chord shape moved in parallel over the progression. The shape is the voicing
+/// of the first chord (`voiceChord` without a previous one, no doubling); every later chord gets the same intervals with
+/// its lowest tone on the root of that chord (the semitone distance of the chord roots, the octave nearest to the
+/// voicing before). Tones outside the scale are kept: the colour and quality of the first chord are the shape.
+/// nullopt if the first chord cannot be voiced or a chord does not fit in the range in any octave.
+std::optional<std::vector<std::vector<int>>> memoryProgression(const Scale& scale, PitchClass keyRoot,
+                                                               std::span<const Chord> chords, ChordColor color,
+                                                               Range range);
 
 /// Largest distance (semitones) from any tone of one voicing to the nearest tone of the other, both directions.
 /// 0 for identical voicings and for empty input.

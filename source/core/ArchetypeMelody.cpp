@@ -526,7 +526,13 @@ private:
             return false;
         }
         const std::span<const bool> noDoubling(fixed.data(), chords.size());
-        auto voicings = voiceProgression(in_.scale, keyRoot(), chords, colors, noDoubling, in_.range);
+        std::optional<std::vector<std::vector<int>>> voicings;
+        if (in_.pattern.voicing.chordMemory) { // one shape in parallel (STYLES.md 1.10); a range too narrow falls back
+            voicings = memoryProgression(in_.scale, keyRoot(), chords, colors.front(), in_.range);
+        }
+        if (!voicings.has_value()) {
+            voicings = voiceProgression(in_.scale, keyRoot(), chords, colors, noDoubling, in_.range);
+        }
         if (!voicings.has_value()) {
             // a narrow range cannot hold every colour (a fifth needs 13 pitches with its octave): triads fit
             std::fill(colors.begin(), colors.end(), ChordColor::Min);

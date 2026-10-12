@@ -250,4 +250,40 @@ int maxVoiceMovement(const std::vector<int>& from, const std::vector<int>& to) {
     return worst;
 }
 
+std::optional<std::vector<std::vector<int>>> memoryProgression(const Scale& scale, PitchClass keyRoot,
+                                                               std::span<const Chord> chords, ChordColor color,
+                                                               Range range) {
+    if (chords.empty()) {
+        return std::nullopt;
+    }
+    const auto tones = colorTones(scale, keyRoot, chords.front(), color);
+    const auto shape = voiceChord(tones, range, false, nullptr);
+    if (!shape.has_value() || shape->empty()) {
+        return std::nullopt;
+    }
+    const int top = shape->back() - shape->front();
+    std::vector<std::vector<int>> result;
+    int previousLow = shape->front();
+    for (const Chord& chord : chords) {
+        const int shift = ((chord.rootOffset - chords.front().rootOffset) % 12 + 12) % 12;
+        const int lowClass = (shape->front() + shift) % 12;
+        int best = -1;
+        for (int low = range.low; low + top <= range.high; ++low) {
+            if (low % 12 == lowClass && (best < 0 || std::abs(low - previousLow) < std::abs(best - previousLow))) {
+                best = low;
+            }
+        }
+        if (best < 0) {
+            return std::nullopt;
+        }
+        std::vector<int> voicing;
+        for (const int pitch : *shape) {
+            voicing.push_back(best + pitch - shape->front());
+        }
+        result.push_back(std::move(voicing));
+        previousLow = best;
+    }
+    return result;
+}
+
 } // namespace mm::core

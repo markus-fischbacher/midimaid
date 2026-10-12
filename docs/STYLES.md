@@ -98,7 +98,7 @@ Auf betonten Schritten (0, 4, 8, 12) gilt für gleichzeitig klingende Töne von 
 - Enge Lage (3–4 Töne innerhalb einer Oktave plus optionaler Oktavverdopplung), Register MIDI 55–79
 - **Stimmführung:** Bei Akkordwechseln bewegt sich jede Stimme möglichst um höchstens 2 Halbtöne,
   gemeinsame Töne bleiben liegen
-- **[v1.1] Chord-Memory-Modus:** Eine Akkordform wird parallel verschoben (Detroit/Dub-Techno-Farbe), auch wenn
+- **[v1.1] Chord-Memory-Modus (umgesetzt, D-229):** Eine Akkordform wird parallel verschoben (Detroit/Dub-Techno-Farbe), auch wenn
   dabei skalenfremde Töne entstehen. Die Constraint-Schicht lässt das im Stab-Archetyp zu.
   Standard ab v1.1: an bei Peak Time und Hard/Industrial, aus bei Melodic (dort gilt die Stimmführung).
   In v1.0 gilt überall die Stimmführung.

@@ -72,6 +72,8 @@ und wechseln zugleich mit ihm (zum Beginn des nächsten Durchlaufs). Die Host-Pa
 **Turnaround:** Bei Patterns mit 8 oder 16 Takten kann der **letzte Takt einer Phrase** anders klingen (die letzten zwei Schläge schweigen, ein Lauf aus 16teln
 über dem letzten Schlag oder ein Oktavsprung). Das wird beim Erzeugen gezogen, bei hoher Energie öfter als bei niedriger. Gesperrte Stimmen bleiben unverändert.
 
+**Chord-Memory:** Bei Peak Time und Hard/Industrial spielen die Akkord-Stabs (*Stabs*, *Aggro-Stabs*) **eine Akkordform, die parallel mit den Akkorden wandert**, auch mit Tönen außerhalb der Skala (Detroit- und Dub-Farbe). Melodic Techno bleibt bei weicher Stimmführung. Kollidiert ein Stab auf der Eins mit dem Bass, rückt er als Ganzes um ein 16tel. Der Stil entscheidet; einen eigenen Schalter gibt es nicht.
+
 **Sperren:** Der Knopf *Sperren* an einer Stimme hält sie fest, bis du sie wieder freigibst. Erzeugen, Variation und
 Verfeinern lassen sie in Ruhe.
 

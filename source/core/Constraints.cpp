@@ -87,6 +87,13 @@ VoiceConstraints rangeOf(const Pattern& pattern, const Track& track,
     return {fallback.low, fallback.high, ignoresKick};
 }
 
+/// A stab voice in chord memory mode (STYLES.md 1.10): the shape moves in parallel, so its tones are not snapped to the
+/// scale and a stab that clashes with the bass moves to the next 16th instead of changing a tone.
+bool isChordMemoryVoice(const Pattern& pattern, const Track& track) {
+    return pattern.voicing.chordMemory && track.role == VoiceRole::Melody &&
+           (track.archetypeId == "stabs" || track.archetypeId == "aggro_stabs");
+}
+
 class Pass {
 public:
     Pass(Pattern& pattern, const ConstraintSettings& settings, bool firstPass, ConstraintReport& report)
@@ -231,6 +238,7 @@ private:
         const PitchClass root = pattern_.context.root;
         const size_t budget = static_cast<size_t>(std::max(settings_.chromaticPercent, 0)) * track.notes.size() / 100;
         size_t chromaticUsed = 0;
+        const bool memoryVoice = isChordMemoryVoice(pattern_, track);
 
         std::vector<Note> kept;
         kept.reserve(track.notes.size());
@@ -263,7 +271,7 @@ private:
                 continue;
             }
 
-            if (scale != nullptr && !isAllowed(*scale, root, chord, pitch)) {
+            if (scale != nullptr && !memoryVoice && !isAllowed(*scale, root, chord, pitch)) {
                 const auto snapped = quantize(*scale, root, chord, pitch);
                 const bool weakStep = note.startTick % kBeatTicks != 0;
                 const bool adjacent = snapped.has_value() && std::abs(*snapped - pitch) == 1;
@@ -552,6 +560,52 @@ private:
         return violatesBassRules(bass, note.startTick, note.lengthTicks, pitch, tensionAllowed);
     }
 
+    /// Chord memory (STYLES.md 1.10): a stab whose tones clash with the bass on a strong step moves, as a whole and with
+    /// its shape intact, to the next 16th when that is free and clean. Stabs with a locked rhythm or pitch stay.
+    void shiftClashingStabs(Track& track, const Track& bass, bool tensionAllowed) {
+        std::vector<uint32_t> starts;
+        for (const Note& note : track.notes) {
+            if (starts.empty() || starts.back() != note.startTick) {
+                starts.push_back(note.startTick);
+            }
+        }
+        for (const uint32_t start : starts) {
+            const uint32_t target = start + kStepTicks;
+            bool clash = false;
+            bool movable = target < endTick_;
+            for (const Note& note : track.notes) {
+                if (note.startTick == start) {
+                    clash = clash || breaksBassRules(bass, note, note.pitch, tensionAllowed);
+                    movable = movable && !isLocked(track, note, Dimension::Rhythm) &&
+                              !isLocked(track, note, Dimension::Pitch);
+                } else if (note.startTick == target) {
+                    movable = false; // the step is taken
+                }
+            }
+            if (!clash || !movable) {
+                continue;
+            }
+            bool clean = true;
+            for (const Note& note : track.notes) {
+                if (note.startTick == start) {
+                    Note moved = note;
+                    moved.startTick = target;
+                    clean = clean && !breaksBassRules(bass, moved, moved.pitch, tensionAllowed);
+                }
+            }
+            if (!clean) {
+                continue;
+            }
+            for (Note& note : track.notes) {
+                if (note.startTick == start) {
+                    note.startTick = target;
+                }
+            }
+            ++report_.intervalsFixed;
+        }
+        std::stable_sort(track.notes.begin(), track.notes.end(), noteLess);
+    }
+
     /// The voices other than the bass yield to the bass: a violating note moves to the nearest pitch that is
     /// allowed, in range and free of violations (down before up), or is dropped if there is none.
     void constrainInteractions() {
@@ -573,6 +627,9 @@ private:
                 continue;
             }
             const VoiceConstraints range = voiceConstraints(v, track);
+            if (isChordMemoryVoice(pattern_, track)) {
+                shiftClashingStabs(track, *bass, tensionAllowed);
+            }
             std::vector<bool> remove(track.notes.size(), false);
             for (size_t i = 0; i < track.notes.size(); ++i) {
                 Note& note = track.notes[i];
