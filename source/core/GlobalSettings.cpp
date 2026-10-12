@@ -148,6 +148,9 @@ GlobalSettings sanitize(GlobalSettings settings) {
         settings.startScaleId = defaults.startScaleId;
     }
     settings.variationStrength = std::clamp(settings.variationStrength, 0, 100);
+    if (settings.middleC != 3 && settings.middleC != 4) {
+        settings.middleC = defaults.middleC;
+    }
     if (!isValidDivision(settings.grid.division)) {
         settings.grid.division = defaults.grid.division;
     }
@@ -196,6 +199,7 @@ GlobalSettings parseGlobalSettings(std::string_view text) {
     }
     boolean("gridTriplet", settings.grid.triplet);
     boolean("snapChromatic", settings.snapChromatic);
+    integer("middleC", 3, 4, settings.middleC);
     if (const auto it = root.find("drumMap"); it != root.end() && it->is_string()) {
         settings.drumMap = it->get<std::string>();
     }
@@ -239,6 +243,7 @@ std::string toJson(const GlobalSettings& input) {
     root["gridDivision"] = settings.grid.division;
     root["gridTriplet"] = settings.grid.triplet;
     root["snapChromatic"] = settings.snapChromatic;
+    root["middleC"] = settings.middleC;
     root["drumMap"] = settings.drumMap;
     root["transpose"] = {{"mode", toString(settings.transpose.mode)},
                          {"behavior", toString(settings.transpose.behavior)},

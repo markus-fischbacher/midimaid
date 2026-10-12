@@ -131,6 +131,10 @@ anderen Stimmen darum.
 Groove („Drum-Referenz übernommen: n Kicks, m Hi-Hats“). **Drums lösen** entfernt sie. Weicht deine Belegung von General
 MIDI ab, stellst du sie in den Einstellungen unter *Drum-Belegung* ein.
 
+**Notennamen:** Unter *Einstellungen → Notennamen* wählst du, ob die mittlere Taste (MIDI 60) C3 heißt (Live, Logic) oder C4. Das gilt für die Tastenbeschriftung der Roll und die Referenznote beim Transponieren.
+
+**Notennamen:** Unter *Einstellungen → Notennamen* wählst du, ob die mittlere Taste (MIDI 60) C3 heißt (Live, Logic) oder C4. Das gilt für die Tastenbeschriftung der Roll und die Referenznote beim Transponieren.
+
 **Referenzen (dein Stil):** Mit *Referenzen* öffnest du ein Fenster je Stil. Ziehe `.mid`-Dateien oder Ordner hinein: MidiMaid
 liest Tonart, Skala, Rolle (Bass, Melodie, Akkorde, Schlagzeug) und Akkordfolge. Je Eintrag kannst du *an/aus* schalten,
 das *Gewicht* ändern und *Entfernen*. Es wirkt in dieser Form:

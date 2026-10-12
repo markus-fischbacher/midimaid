@@ -65,6 +65,9 @@ private:
     juce::ToggleButton transposeExportToggle_, midiThruToggle_;
     void changeTranspose(const std::function<void(mm::core::TransposeSettings&)>& change);
     void updateTranspose();
+    juce::Label noteNamingLabel_;
+    juce::ComboBox noteNamingBox_;
+    void fillReferenceNotes();
     juce::Label drumMapLabel_, drumMapHint_;
     juce::TextEditor drumMapEditor_;
     juce::Label providerLabel_, keyLabel_, urlLabel_, modelLabel_, timeoutLabel_, tokensLabel_, levelLabel_,

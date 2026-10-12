@@ -268,7 +268,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 **Komfort**
 - [ ] Bibliothek: Tags, BPM, Bewertung, Suche, Filter, Vorhören
 - [ ] Englische Sprachdatei, Sprachumschaltung
-- [ ] Notennamen-Konvention wählbar
+- [x] Notennamen-Konvention wählbar (D-221)
 - [ ] Token- und Kostenanzeige, `pricing.json`
 - [ ] Warnung bei gemischten Formaten in einer Gruppe
 

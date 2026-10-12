@@ -1,3 +1,4 @@
+#include "core/Theory.h"
 #include "plugin/SettingsDialog.h"
 
 #include "core/TextKeys.h"
@@ -335,16 +336,21 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     fill(transposeTargetBox_, "transposeTarget",
          {keys::kTransposeTargetBoth, keys::kTransposeTargetBass, keys::kTransposeTargetMelody});
     fill(transposeReferenceBox_, "transposeReference", {keys::kTransposeReferenceAuto});
-    {
-        // Item id = note + 2 (id 1 is "automatic"); the names follow the convention of Live and Logic (C3 = 60).
-        constexpr const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-        for (int note = 24; note <= 96; ++note) {
-            transposeReferenceBox_.addItem(
-                tr(keys::kTransposeReferenceNote,
-                   {{"note", std::string(names[note % 12]) + std::to_string(note / 12 - 2) + " (" + std::to_string(note) + ")"}}),
-                note + 2);
+    fillReferenceNotes();
+    makeLabel(noteNamingLabel_, keys::kLabelNoteNaming);
+    noteNamingBox_.setComponentID("noteNaming");
+    noteNamingBox_.addItem(tr(keys::kNoteNamingC3), 1);
+    noteNamingBox_.addItem(tr(keys::kNoteNamingC4), 2);
+    noteNamingBox_.setSelectedId(settings_().get().middleC == 4 ? 2 : 1, juce::dontSendNotification);
+    noteNamingBox_.onChange = [this] {
+        if (updating_) {
+            return;
         }
-    }
+        const int middleC = noteNamingBox_.getSelectedId() == 2 ? 4 : 3;
+        settings_().update([&](mm::core::GlobalSettings& settings) { settings.middleC = middleC; });
+        fillReferenceNotes();
+    };
+    addAndMakeVisible(noteNamingBox_);
     fill(transposeChannelBox_, "transposeChannel", {keys::kTransposeChannelAll});
     for (int channel = 1; channel <= 16; ++channel) {
         transposeChannelBox_.addItem(tr(keys::kTransposeChannelN, {{"n", std::to_string(channel)}}), channel + 1);
@@ -424,6 +430,7 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {nullptr, {&transposeReferenceBox_, &transposeChannelBox_}, {250}, kControl, true},
              {nullptr, {&transposeExportToggle_, &midiThruToggle_}, {250}, kControl, true},
              {nullptr, {&transposeHint_}, {}, kHint, true},
+             {&noteNamingLabel_, {&noteNamingBox_}, {}, kControl, false, false, -1, 260},
              {&drumMapLabel_, {&drumMapEditor_}, {}, kControl, false, true},
              {nullptr, {&drumMapHint_}, {}, 40, true},
              {nullptr, {&closeButton_}, {}, kControl, false, true}};
@@ -538,6 +545,24 @@ void SettingsDialog::changeTranspose(const std::function<void(mm::core::Transpos
         return;
     }
     settings_().update([&](mm::core::GlobalSettings& settings) { change(settings.transpose); });
+}
+
+void SettingsDialog::fillReferenceNotes() {
+    // Item id = note + 2 (id 1 is "automatic"); the names follow the chosen convention of the middle C.
+    const int middleC = settings_().get().middleC;
+    const int selected = transposeReferenceBox_.getSelectedId();
+    const bool was = updating_;
+    updating_ = true;
+    transposeReferenceBox_.clear(juce::dontSendNotification);
+    transposeReferenceBox_.addItem(tr(keys::kTransposeReferenceAuto), 1);
+    for (int note = 24; note <= 96; ++note) {
+        transposeReferenceBox_.addItem(
+            tr(keys::kTransposeReferenceNote,
+               {{"note", mm::core::pitchName(note, middleC) + " (" + std::to_string(note) + ")"}}),
+            note + 2);
+    }
+    transposeReferenceBox_.setSelectedId(selected > 0 ? selected : 1, juce::dontSendNotification);
+    updating_ = was;
 }
 
 void SettingsDialog::updateTranspose() {

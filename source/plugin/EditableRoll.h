@@ -26,6 +26,8 @@ public:
     /// ids that still exist; another slot, voice or pattern length starts a fresh view (selection and window).
     void setSource(const ProcessorBase::VoiceView* view);
     void setEditSettings(mm::core::EditGrid grid, mm::core::PitchSnap snap);
+    /// The octave number of MIDI note 60 in the key labels: 3 (Live, Logic) or 4.
+    void setMiddleC(int middleC);
 
     const std::vector<mm::core::RollNote>& source() const { return source_; }
     /// The length of the shown pattern in ticks, 0 while the roll shows none.
@@ -125,6 +127,7 @@ private:
     std::string scaleId_;
     mm::core::EditGrid grid_;
     mm::core::PitchSnap pitchSnap_ = mm::core::PitchSnap::Scale;
+    int middleC_ = 3;
     void notifyTimeView(const mm::core::RollViewport& before);
     mm::core::RollViewport viewport_;
     bool haveView_ = false;

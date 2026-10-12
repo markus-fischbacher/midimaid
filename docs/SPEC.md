@@ -1395,7 +1395,7 @@ Max-Tokens, MIDI-Kanäle, Slide-Überlappung, Akzent-Velocity, Kick-Freiraum, Ok
 Drum-Zuordnung (Liste), Zustimmung pro Cloud-Provider für Referenz-Beispiele und importierte Stimmen
 (anzeigen, widerrufen; §3.20), Mindestvorlauf geplanter Wechsel (Experte, §3.4), „Prompts protokollieren“
 (§10),
-[v1.1] Tastenbelegung (§8.3), Sprache, Notennamen-Konvention (C3 = 60 oder C4 = 60), Transponieren (Referenznote, Modus,
+[v1.1] Tastenbelegung (§8.3), Sprache, Notennamen-Konvention (C3 = 60 oder C4 = 60; umgesetzt, D-221), Transponieren (Referenznote, Modus,
 Verhalten, Zeitpunkt, Ziel, Kanal), MIDI Thru, Favoriten zusätzlich ins aktive Set, Export-Modus für
 Wahrscheinlichkeiten, Tonumfänge, Standardstil, Quantisierung beim Wechsel, Logging an/aus.
 
