@@ -672,7 +672,7 @@ Export). Damit sie sich nicht gegenseitig aushebeln, gilt diese feste Reihenfolg
 2. Groove und Swing (Zeitversatz, Velocity-Profil)
 3. Slide-Überlappung neu berechnen (die Überlappung bezieht sich auf die verschobene Folgenote)
 4. Kick-Freiraum neu prüfen und Notenenden kürzen (Groove kann Notenenden in die Kick schieben)
-5. Akzent-Velocity anwenden, [v1.1] Ratchets auflösen
+5. Akzent-Velocity anwenden, [v1.1] Ratchets auflösen (umgesetzt, D-227)
 
 ### 4.3 Determinismus
 Jedes Pattern speichert Seed, Stilprofil-Version, Parameter und (bei KI) die Rohantwort.

@@ -62,6 +62,8 @@ public:
     /// Accent and slide of the selection: all set takes them away, otherwise they are set (one undo step).
     void toggleAccent();
     void toggleSlide();
+    /// Ratchet of the selection: `repeats` 1 (off) to 4 (`core/PatternEdit::setRatchet`), one undo step.
+    void setRatchet(int repeats);
     /// Adds `delta` to the velocity of the selection (cut to 1-127), one undo step.
     void changeVelocity(int delta);
     /// The menu of a right click on a note and what its items do (`kMenu...`).
@@ -97,6 +99,7 @@ public:
     static constexpr int kMenuAccent = 1;
     static constexpr int kMenuSlide = 2;
     static constexpr int kMenuDelete = 3;
+    static constexpr int kMenuRatchetBase = 10; ///< + the repeats: 11 = off, 12 to 14 = 2 to 4 repeats
 
 private:
     enum class Mode { Idle, Moving, Resizing, Rubber, Velocity, Draw };

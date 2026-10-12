@@ -2540,6 +2540,53 @@ TEST_CASE("the context menu shows the state of the selection and runs its items"
     CHECK(rig.melody().size() == 3);
 }
 
+TEST_CASE("the ratchet submenu sets the repeats of the selection and shows them", "[roll][editor][ratchet]") {
+    using Roll = mm::plugin::EditableRoll;
+    RollRig rig;
+    const auto ratchetItems = [&] {
+        std::vector<std::tuple<int, juce::String, bool, bool>> found;
+        juce::PopupMenu menu = rig.roll.contextMenu();
+        for (juce::PopupMenu::MenuItemIterator it(menu, true); it.next();) {
+            const int id = it.getItem().itemID;
+            if (id > Roll::kMenuRatchetBase && id <= Roll::kMenuRatchetBase + 4) {
+                found.emplace_back(id, it.getItem().text, it.getItem().isEnabled, it.getItem().isTicked);
+            }
+        }
+        return found;
+    };
+    auto shown = ratchetItems();
+    REQUIRE(shown.size() == 4);
+    CHECK(std::get<1>(shown[0]) == "Ratchet aus");
+    CHECK(std::get<1>(shown[2]) == "Ratchet ×3");
+    for (const auto& item : shown) {
+        CHECK_FALSE(std::get<2>(item)); // nothing selected
+    }
+    rig.roll.setRatchet(3);
+    CHECK(rig.melody()[1].ratchet == 1); // no selection: nothing changes
+    CHECK_FALSE(rig.solo.processor.canUndo());
+
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    shown = ratchetItems();
+    for (const auto& item : shown) {
+        CHECK(std::get<2>(item));
+    }
+    CHECK(std::get<3>(shown[0])); // ratchet off is ticked
+    rig.roll.runMenuAction(Roll::kMenuRatchetBase + 3);
+    CHECK(rig.melody()[1].ratchet == 3);
+    rig.refresh();
+    shown = ratchetItems();
+    CHECK(std::get<3>(shown[2]));
+    CHECK_FALSE(std::get<3>(shown[0]));
+    rig.roll.runMenuAction(Roll::kMenuRatchetBase + 1);
+    CHECK(rig.melody()[1].ratchet == 1);
+    rig.roll.runMenuAction(Roll::kMenuRatchetBase + 4);
+    REQUIRE(rig.solo.processor.undo());
+    CHECK(rig.melody()[1].ratchet == 1);
+    rig.roll.runMenuAction(Roll::kMenuRatchetBase + 5); // not an item
+    CHECK(rig.melody()[1].ratchet == 1);
+}
+
 TEST_CASE("the mouse handlers reach the velocity lane below the notes", "[roll][lane][editor]") {
     RollRig rig;
     const auto gutter = static_cast<float>(mm::plugin::EditableRoll::kGutter);

@@ -2175,7 +2175,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     if (voiceIndex < pattern.voices.size()) {
         for (const auto& note : pattern.voices[voiceIndex].notes) {
             view.source.push_back(
-                {note.id, note.pitch, note.startTick, note.lengthTicks, note.velocity, note.accent, note.slide});
+                {note.id, note.pitch, note.startTick, note.lengthTicks, note.velocity, note.accent, note.slide, note.ratchet});
         }
     }
     view.displayName = view.melody ? tr(mm::core::text::kVoiceMelody)

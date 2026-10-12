@@ -266,6 +266,11 @@ namespace mm::core::text {
     X(kRollFocus, "roll.focus")                                                                                        \
     X(kRollAccent, "roll.accent")                                                                                      \
     X(kRollSlide, "roll.slide")                                                                                        \
+    X(kRollRatchet, "roll.ratchet")                                                                                    \
+    X(kRollRatchetOff, "roll.ratchetOff")                                                                              \
+    X(kRollRatchet2, "roll.ratchet2")                                                                                  \
+    X(kRollRatchet3, "roll.ratchet3")                                                                                  \
+    X(kRollRatchet4, "roll.ratchet4")                                                                                  \
     X(kRollDelete, "roll.delete")                                                                                      \
     X(kRollSnapScale, "roll.snapScale")                                                                                \
     X(kRollSnapChromatic, "roll.snapChromatic")                                                                        \

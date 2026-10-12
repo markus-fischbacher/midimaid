@@ -182,6 +182,18 @@ size_t setSlide(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, b
     });
 }
 
+size_t setRatchet(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int repeats) {
+    const auto value = static_cast<uint8_t>(std::clamp(repeats, 1, 4));
+    return forNotes(pattern, voice, ids, [&](Note& note) {
+        const bool differs = note.ratchet != value || (value > 1 && note.slide);
+        note.ratchet = value;
+        if (value > 1) {
+            note.slide = false;
+        }
+        return differs;
+    });
+}
+
 size_t setAccent(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, bool accent) {
     return forNotes(pattern, voice, ids, [&](Note& note) {
         const bool differs = note.accent != accent;

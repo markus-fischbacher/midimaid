@@ -23,6 +23,7 @@ struct RollNote {
     uint8_t velocity = 100;
     bool accent = false;
     bool slide = false;
+    uint8_t ratchet = 1;
 
     bool operator==(const RollNote&) const = default;
 };

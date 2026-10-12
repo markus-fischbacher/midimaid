@@ -55,4 +55,8 @@ size_t duplicateNotes(Pattern& pattern, size_t voice, std::span<const uint32_t> 
 size_t setSlide(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, bool slide);
 size_t setAccent(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, bool accent);
 
+/// Ratchet of the notes: `repeats` 1 (off) to 4, other values are limited to that range. A ratchet removes the slide of
+/// the note (the two never combine). Returns the number of notes that changed.
+size_t setRatchet(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int repeats);
+
 } // namespace mm::core

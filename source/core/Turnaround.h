@@ -20,9 +20,10 @@ enum class TurnaroundKind {
     Pause,      ///< the last two beats fall silent
     Fill,       ///< a run of 16th notes over the last beat, rising in velocity
     OctaveJump, ///< the notes of the last two beats move an octave
+    Ratchet,    ///< one late note of the bar is repeated 2-4 times (STYLES.md 1.13); the bar's only ratchet
 };
 
-/// The kind drawn for a voice: energy favours fills and jumps, low energy the pause. Voices with chords (several notes
+/// The kind drawn for a voice: energy favours fills, jumps and ratchets, low energy the pause. Voices with chords (several notes
 /// on one start) never get a fill, a run would turn them into a line.
 TurnaroundKind chooseTurnaroundKind(bool chordal, int energyPct, Pcg32& rng);
 

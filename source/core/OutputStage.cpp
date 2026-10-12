@@ -261,6 +261,34 @@ static uint8_t shiftedPitch(uint8_t pitch, int octaveShift) {
     return static_cast<uint8_t>(value);
 }
 
+/// Stage 5: a ratchet divides the sounding note into `repeats` equal parts; every part but the last gives a quarter of its
+/// length back, so that the repeats do not touch (same pitch). The first part keeps the velocity, the others follow at
+/// 85 % of it. When the parts would be shorter than the minimum note, the repeats are reduced until they fit; a note
+/// that cannot be divided sounds as one. Slides never carry a ratchet.
+static void resolveRatchet(const OutputNote& note, uint8_t ratchet, const OutputSettings& settings,
+                           std::vector<OutputNote>& out) {
+    const int64_t length = static_cast<int64_t>(note.endTick) - note.startTick;
+    const int64_t minPart = static_cast<int64_t>(std::max<uint32_t>(settings.minNoteTicks, 1));
+    int64_t repeats = note.slideIntoNext ? 1 : std::clamp<int64_t>(ratchet, 1, 4);
+    while (repeats > 1 && length / repeats < minPart) {
+        --repeats;
+    }
+    if (repeats <= 1) {
+        out.push_back(note);
+        return;
+    }
+    const int64_t part = length / repeats;
+    for (int64_t i = 0; i < repeats; ++i) {
+        OutputNote piece = note;
+        piece.startTick = static_cast<int32_t>(note.startTick + i * part);
+        piece.endTick = static_cast<int32_t>(i + 1 == repeats ? note.startTick + length : piece.startTick + part * 3 / 4);
+        if (i > 0) {
+            piece.velocity = static_cast<uint8_t>(std::max<int>(1, note.velocity * 85 / 100));
+        }
+        out.push_back(piece);
+    }
+}
+
 OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& settings) {
     OutputPattern output;
     const int64_t patternEnd = static_cast<int64_t>(pattern.lengthBars) * kTicksPerBar;
@@ -298,7 +326,7 @@ OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& setting
             note.startTick = static_cast<int32_t>(work.start);
             note.endTick = static_cast<int32_t>(work.end);
             note.slideIntoNext = work.extended && work.glides;
-            voice.notes.push_back(note);
+            resolveRatchet(note, work.source->slide ? uint8_t{1} : work.source->ratchet, settings, voice.notes);
         }
         std::stable_sort(voice.notes.begin(), voice.notes.end(), [](const OutputNote& a, const OutputNote& b) {
             if (a.startTick != b.startTick) {
