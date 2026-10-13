@@ -17,6 +17,7 @@ TEST_CASE("the defaults are A minor, basic level, strength 30 and a 1/16 grid", 
     CHECK_FALSE(defaults.rollFold);
     CHECK(defaults.rollGuides); // the guides are on, the fold and the marker row are off (D-232)
     CHECK_FALSE(defaults.rollMarkers);
+    CHECK(defaults.shortcuts.empty()); // MidiMaid binds no key in advance (D-126)
     CHECK(defaults.language == "auto");
     CHECK(sanitize(defaults) == defaults);
 }
@@ -33,6 +34,7 @@ TEST_CASE("settings survive writing and reading", "[global-settings]") {
     settings.rollFold = true;
     settings.rollGuides = false;
     settings.rollMarkers = true;
+    settings.shortcuts = {{"generate", "cmd+g"}, {"undo", "cmd+z"}, {"focus_all", "f3"}};
     settings.language = "en";
     REQUIRE(findScale("phrygian") != nullptr);
     const auto text = toJson(settings);
@@ -211,4 +213,22 @@ TEST_CASE("the language is auto, de or en, anything else gives auto", "[global-s
     GlobalSettings bad;
     bad.language = "xx";
     CHECK(sanitize(bad).language == "auto");
+}
+
+TEST_CASE("the shortcuts of a file are put in order when it is read", "[global-settings][shortcuts]") {
+    const auto settings = parseGlobalSettings(R"({"version": 1, "shortcuts": {
+        "generate": "CMD+G", "vary": "cmd+g", "undo": "space", "nonsense": "cmd+q", "redo": 5, "delete": "backspace"}})");
+    CHECK(settings.shortcuts.size() == 2);
+    CHECK(settings.shortcuts.at("generate") == "cmd+g");
+    CHECK(settings.shortcuts.at("delete") == "backspace");
+    // a wrong type gives none
+    CHECK(parseGlobalSettings(R"({"version": 1, "shortcuts": "cmd+g"})").shortcuts.empty());
+    CHECK(parseGlobalSettings(R"({"version": 1, "shortcuts": [1, 2]})").shortcuts.empty());
+    CHECK(parseGlobalSettings(R"({"version": 1})").shortcuts.empty());
+    // what is written reads back the same, and sanitising twice changes nothing
+    GlobalSettings out;
+    out.shortcuts = {{"duplicate", "cmd+d"}};
+    CHECK(parseGlobalSettings(toJson(out)).shortcuts == out.shortcuts);
+    out.shortcuts = {{"duplicate", "SPACE"}, {"redo", "cmd+z"}};
+    CHECK(sanitize(out).shortcuts == std::map<std::string, std::string>{{"redo", "cmd+z"}});
 }

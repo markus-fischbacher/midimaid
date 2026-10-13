@@ -1,5 +1,7 @@
 #include "plugin/PlaceholderEditor.h"
 
+#include "plugin/KeyChords.h"
+
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
 #include "plugin/AiText.h"
@@ -37,6 +39,7 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
       dragHandle_(std::make_unique<DragHandle>(processor.midiExporter())) {
     setLookAndFeel(&lookAndFeel_);
     addAndMakeVisible(*dragHandle_);
+    setWantsKeyboardFocus(true); // the keys the user assigned (SPEC 8.3, D-235); a click on a roll lands here
 
     const auto settings = processor_.instanceSettings();
     roleBox_.setComponentID("role");
@@ -1006,6 +1009,162 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     if (voiceBox_.getSelectedId() != settings.outputVoice) {
         voiceBox_.setSelectedId(settings.outputVoice, juce::dontSendNotification);
     }
+}
+
+bool PlaceholderEditor::keyPressed(const juce::KeyPress& press) {
+    if (voiceLayout_ || !globalSettings().ready()) {
+        return false;
+    }
+    const auto chord = chordOf(press);
+    if (!chord.has_value()) {
+        return false;
+    }
+    const std::string action = mm::core::actionForChord(globalSettings().get().shortcuts, *chord);
+    if (action.empty()) {
+        return false;
+    }
+    // without a modifier a key belongs to a text field that has the focus (the prompt, the refinement, the seed)
+    if (mm::core::hasNoModifier(*chord) &&
+        dynamic_cast<juce::TextEditor*>(juce::Component::getCurrentlyFocusedComponent()) != nullptr) {
+        return false;
+    }
+    runShortcut(action);
+    return true; // the key was assigned to an action: the host does not get it
+}
+
+bool PlaceholderEditor::runShortcut(const std::string& action) {
+    const auto press = [](juce::Button& button) {
+        if (!button.isEnabled()) {
+            return false;
+        }
+        if (button.onClick) {
+            button.onClick();
+        }
+        return true;
+    };
+    // the roll the keys of the notes work on: one with a selection, else the one of the focus, else the first
+    const auto targetRoll = [this]() -> EditableRoll* {
+        for (auto& row : rows_) {
+            if (!row->roll().selection().empty()) {
+                return &row->roll();
+            }
+        }
+        if (focusedVoice_ >= 1 && static_cast<size_t>(focusedVoice_) <= rows_.size()) {
+            return &rows_[static_cast<size_t>(focusedVoice_ - 1)]->roll();
+        }
+        return rows_.empty() ? nullptr : &rows_.front()->roll();
+    };
+    // these do not wait for the state of the buttons (the timer refreshes it): the processor knows what can be done
+    const auto slotOfInfo = static_cast<size_t>(std::max(shownInfo_.slot, 1) - 1);
+    if (action == "undo" || action == "redo") {
+        const bool done = action == "undo" ? processor_.undo() : processor_.redo();
+        updateStatus();
+        updateActionButtons();
+        return done;
+    }
+    if (action == "history_back" || action == "history_forward") {
+        const bool done = action == "history_back" ? processor_.historyBack(slotOfInfo) : processor_.historyForward(slotOfInfo);
+        updateStatus();
+        updateActionButtons();
+        return done;
+    }
+    if (action == "generate") {
+        return press(generateButton_);
+    }
+    if (action == "refine_send") {
+        return refineButton_.isVisible() && press(refineButton_);
+    }
+    if (action == "vary") {
+        if (focusedVoice_ >= 1) {
+            varyVoice(static_cast<size_t>(focusedVoice_ - 1), std::nullopt);
+        } else {
+            varyVoice(std::nullopt, std::nullopt);
+        }
+        return true;
+    }
+    if (action == "focus_all") {
+        setFocusedVoice(0);
+        return true;
+    }
+    if (action.rfind("focus_", 0) == 0 && action.size() == 7) {
+        const int voice = action[6] - '0';
+        if (voice >= 1 && static_cast<size_t>(voice) <= rows_.size()) {
+            setFocusedVoice(voice);
+            return true;
+        }
+        return false;
+    }
+    if (action == "grid_finer" || action == "grid_coarser") {
+        // the divisions of the box are its item ids: 1/4, 1/8, 1/16, 1/32 and so on
+        std::vector<int> ids;
+        for (int i = 0; i < gridBox_.getNumItems(); ++i) {
+            ids.push_back(gridBox_.getItemId(i));
+        }
+        std::sort(ids.begin(), ids.end());
+        const auto at = std::find(ids.begin(), ids.end(), gridBox_.getSelectedId());
+        if (at == ids.end()) {
+            return false;
+        }
+        const auto next = action == "grid_finer" ? std::next(at) : (at == ids.begin() ? ids.end() : std::prev(at));
+        if (next == ids.end()) {
+            return false;
+        }
+        gridBox_.setSelectedId(*next, juce::sendNotificationSync);
+        return true;
+    }
+    if (action == "triplets") {
+        tripletButton_.setToggleState(!tripletButton_.getToggleState(), juce::dontSendNotification);
+        if (tripletButton_.onClick) {
+            tripletButton_.onClick(); // the same as a click
+        }
+        return true;
+    }
+    if (action == "snap_toggle") {
+        snapBox_.setSelectedId(snapBox_.getSelectedId() == 2 ? 1 : 2, juce::sendNotificationSync);
+        return true;
+    }
+    if (action == "fold_toggle") {
+        globalSettings().update([](mm::core::GlobalSettings& settings) { settings.rollFold = !settings.rollFold; });
+        applyRollHelpers();
+        return true;
+    }
+    EditableRoll* roll = targetRoll();
+    if (roll == nullptr) {
+        return false;
+    }
+    const auto gridTicks = static_cast<int64_t>(roll->snap().grid.ticks());
+    if (action == "duplicate") {
+        roll->duplicateSelection();
+    } else if (action == "select_all") {
+        roll->selectAll();
+    } else if (action == "delete") {
+        roll->deleteSelection();
+    } else if (action == "pitch_up") {
+        roll->moveSelection(0, 1);
+    } else if (action == "pitch_down") {
+        roll->moveSelection(0, -1);
+    } else if (action == "octave_up") {
+        roll->moveSelection(0, 1, true);
+    } else if (action == "octave_down") {
+        roll->moveSelection(0, -1, true);
+    } else if (action == "move_left") {
+        roll->moveSelection(-gridTicks);
+    } else if (action == "move_right") {
+        roll->moveSelection(gridTicks);
+    } else if (action == "longer") {
+        roll->resizeSelection(static_cast<int32_t>(gridTicks));
+    } else if (action == "shorter") {
+        roll->resizeSelection(-static_cast<int32_t>(gridTicks));
+    } else if (action == "accent") {
+        roll->toggleAccent();
+    } else if (action == "slide") {
+        roll->toggleSlide();
+    } else if (action == "ratchet_off") {
+        roll->setRatchet(1);
+    } else {
+        return false;
+    }
+    return true;
 }
 
 void PlaceholderEditor::applyRollHelpers() {

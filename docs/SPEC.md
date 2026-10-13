@@ -1368,7 +1368,7 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
 - Prompts an die KI bleiben unabhängig von der UI-Sprache in Englisch (bessere Ergebnisse); der
   Nutzerprompt darf in jeder Sprache sein
 
-### 8.3 [v1.1] Tastenkürzel (vom Benutzer belegt)
+### 8.3 [v1.1] Tastenkürzel (vom Benutzer belegt; umgesetzt, D-235)
 **MidiMaid belegt keine Taste vorab (D-126).** Die Aktionen unten gibt es als Kürzel-Aktionen, aber ohne
 Voreinstellung: Der Benutzer weist ihnen in den Einstellungen selbst Tasten zu. So kollidiert MidiMaid nicht mit
 Host-Kürzeln, und Tasten, die ein Host abfängt, wählt der Benutzer bewusst oder gar nicht. Cmd steht für Ctrl unter

@@ -6,6 +6,7 @@
 #include "plugin/EditorParts.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
+#include "plugin/KeyChords.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ProcessorBase.h"
 
@@ -3628,6 +3629,7 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
             settings.rollFold = true;
             settings.rollGuides = false;
             settings.rollMarkers = true;
+            settings.shortcuts = {{"generate", "cmd+g"}};
             settings.middleC = 4;
             settings.language = "en";
         });
@@ -3642,6 +3644,7 @@ TEST_CASE("another store on the same file reads what was written", "[settings][s
     CHECK(second.get().rollFold);
     CHECK_FALSE(second.get().rollGuides);
     CHECK(second.get().rollMarkers);
+    CHECK(second.get().shortcuts == std::map<std::string, std::string>{{"generate", "cmd+g"}});
     CHECK(second.get().middleC == 4);
     CHECK(second.get().language == "en");
 }
@@ -3660,6 +3663,7 @@ TEST_CASE("a change before the file is read wins for its field and keeps the res
         settings.rollFold = true;
         settings.rollGuides = false;
         settings.rollMarkers = true;
+        settings.shortcuts = {{"generate", "cmd+g"}};
         settings.middleC = 4;
         settings.language = "en";
     });
@@ -3677,6 +3681,7 @@ TEST_CASE("a change before the file is read wins for its field and keeps the res
     CHECK(now.rollFold);
     CHECK_FALSE(now.rollGuides);
     CHECK(now.rollMarkers);
+    CHECK(now.shortcuts == std::map<std::string, std::string>{{"generate", "cmd+g"}});
     CHECK(now.middleC == 4);
     CHECK(now.language == "en");
     CHECK(now.startScaleId == "dorian");
@@ -6261,6 +6266,254 @@ TEST_CASE("a pattern is generated with the chromatic share of the instance and r
     plain.processor.generate();
     REQUIRE(waitFor([&] { return !plain.processor.slotsSnapshot().isEmpty(0); }));
     CHECK(plain.processor.slotsSnapshot().slot(0)->pattern->info.chromaticPct == -1);
+}
+
+// --- keyboard shortcuts of the user (SPEC 8.3, D-235) ---------------------------------------------------------------
+
+namespace {
+
+bool pressKey(juce::AudioProcessorEditor& editor, const char* chord) {
+    const auto parsed = mm::core::parseChord(chord);
+    REQUIRE(parsed.has_value());
+    return dynamic_cast<mm::plugin::PlaceholderEditor&>(editor).keyPressed(mm::plugin::keyPressOf(*parsed));
+}
+
+mm::plugin::EditableRoll* firstRoll(juce::AudioProcessorEditor& editor) {
+    for (auto* component : editor.getChildren()) {
+        if (auto* row = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+            return &row->roll();
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+TEST_CASE("a key without an assignment is left to the host", "[group-wiring][shortcuts][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    for (const char* chord : {"cmd+z", "f5", "k", "cmd+shift+g", "escape", "delete", "left"}) {
+        CHECK_FALSE(pressKey(*editor, chord)); // nothing is assigned: MidiMaid takes no key
+    }
+    store.update([](mm::core::GlobalSettings& settings) { settings.shortcuts = {{"focus_1", "cmd+1"}}; });
+    CHECK(pressKey(*editor, "cmd+1"));
+    CHECK_FALSE(pressKey(*editor, "cmd+2"));
+    CHECK_FALSE(pressKey(*editor, "cmd+shift+1")); // another chord
+    CHECK_FALSE(pressKey(*editor, "1"));
+}
+
+TEST_CASE("an assigned key switches the focus, the grid, the snapping and the fold", "[group-wiring][shortcuts][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.update([](mm::core::GlobalSettings& settings) {
+        settings.shortcuts = {{"focus_1", "f1"},         {"focus_2", "f2"},          {"focus_all", "f3"},
+                              {"grid_finer", "alt+up"},  {"grid_coarser", "alt+down"}, {"triplets", "alt+t"},
+                              {"snap_toggle", "alt+s"},  {"fold_toggle", "alt+f"}};
+    });
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(40, 60))); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    hub.step();
+    pumpMessages(80);
+    auto& placeholder = dynamic_cast<mm::plugin::PlaceholderEditor&>(*editor);
+    CHECK(placeholder.focusedVoice() == 0);
+    CHECK(pressKey(*editor, "f1"));
+    CHECK(placeholder.focusedVoice() == 1);
+    CHECK(pressKey(*editor, "f2"));
+    CHECK(placeholder.focusedVoice() == 2);
+    CHECK(pressKey(*editor, "f3"));
+    CHECK(placeholder.focusedVoice() == 0);
+
+    auto* grid = child<juce::ComboBox>(*editor, "grid_box");
+    REQUIRE(grid != nullptr);
+    const int division = grid->getSelectedId();
+    CHECK(pressKey(*editor, "alt+up")); // finer: a larger division
+    CHECK(grid->getSelectedId() > division);
+    CHECK(pressKey(*editor, "alt+down"));
+    CHECK(grid->getSelectedId() == division);
+    const int smallest = [&] {
+        int low = division;
+        for (int i = 0; i < grid->getNumItems(); ++i) {
+            low = std::min(low, grid->getItemId(i));
+        }
+        return low;
+    }();
+    grid->setSelectedId(smallest, juce::sendNotificationSync);
+    CHECK(pressKey(*editor, "alt+down")); // the key is taken even at the end of the list
+    CHECK(grid->getSelectedId() == smallest);
+
+    auto* triplet = child<juce::ToggleButton>(*editor, "triplet");
+    REQUIRE(triplet != nullptr);
+    const bool before = triplet->getToggleState();
+    CHECK(pressKey(*editor, "alt+t"));
+    CHECK(triplet->getToggleState() != before);
+    CHECK(pressKey(*editor, "alt+t"));
+    CHECK(triplet->getToggleState() == before);
+
+    auto* snapBox = child<juce::ComboBox>(*editor, "snap_box");
+    REQUIRE(snapBox != nullptr);
+    const int snapBefore = snapBox->getSelectedId();
+    CHECK(pressKey(*editor, "alt+s"));
+    CHECK(snapBox->getSelectedId() != snapBefore);
+
+    CHECK_FALSE(store.get().rollFold);
+    CHECK(pressKey(*editor, "alt+f"));
+    CHECK(store.get().rollFold);
+    CHECK(firstRoll(*editor)->fold());
+    CHECK(pressKey(*editor, "alt+f"));
+    CHECK_FALSE(store.get().rollFold);
+    CHECK_FALSE(firstRoll(*editor)->fold());
+}
+
+TEST_CASE("assigned keys edit the notes of the roll", "[group-wiring][shortcuts][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.update([](mm::core::GlobalSettings& settings) {
+        settings.shortcuts = {{"select_all", "cmd+a"},   {"delete", "backspace"},   {"duplicate", "cmd+d"},
+                              {"pitch_up", "shift+up"},  {"pitch_down", "shift+down"}, {"octave_up", "alt+up"},
+                              {"octave_down", "alt+down"}, {"move_right", "shift+right"}, {"move_left", "shift+left"},
+                              {"longer", "alt+right"},   {"shorter", "alt+left"},   {"accent", "cmd+k"},
+                              {"slide", "cmd+l"},        {"undo", "cmd+z"},         {"redo", "cmd+shift+z"}};
+    });
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    mm::core::Pattern pattern = mm::core::makeEmptyPattern(1, "peak_time");
+    REQUIRE(mm::core::addNote(pattern, 0, 45, 0, 480, 100) != 0);
+    REQUIRE(mm::core::addNote(pattern, 0, 48, 960, 480, 100) != 0);
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, pattern)); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    hub.step();
+    pumpMessages(80);
+    const auto bass = [&] { return hub.processor.slotsSnapshot().slot(0)->pattern->voices[0].notes; };
+    auto* roll = firstRoll(*editor);
+    REQUIRE(roll != nullptr);
+    const auto before = bass();
+
+    CHECK(pressKey(*editor, "cmd+a"));
+    CHECK(roll->selection().size() == 2);
+    CHECK(pressKey(*editor, "shift+up")); // a scale step: the first note is the A of A minor, next is B
+    CHECK(bass()[0].pitch == 47);
+    CHECK(bass()[1].pitch == 50);
+    CHECK(pressKey(*editor, "shift+down"));
+    CHECK(bass()[0].pitch == 45);
+    CHECK(pressKey(*editor, "alt+up"));
+    CHECK(bass()[0].pitch == 57);
+    CHECK(pressKey(*editor, "alt+down"));
+    CHECK(bass()[0].pitch == 45);
+    CHECK(pressKey(*editor, "shift+right")); // one step of the grid (a 16th by default)
+    CHECK(bass()[0].startTick == 240);
+    CHECK(pressKey(*editor, "shift+left"));
+    CHECK(bass()[0].startTick == 0);
+    CHECK(pressKey(*editor, "alt+right"));
+    CHECK(bass()[0].lengthTicks == 720);
+    CHECK(pressKey(*editor, "alt+left"));
+    CHECK(bass()[0].lengthTicks == 480);
+    CHECK(pressKey(*editor, "cmd+k"));
+    CHECK(bass()[0].accent);
+    CHECK(pressKey(*editor, "cmd+l"));
+    CHECK(bass()[0].slide);
+    CHECK(pressKey(*editor, "cmd+z")); // undo the slide
+    CHECK_FALSE(bass()[0].slide);
+    CHECK(pressKey(*editor, "cmd+shift+z")); // and redo it
+    CHECK(bass()[0].slide);
+    CHECK(pressKey(*editor, "cmd+d"));
+    CHECK(bass().size() == 4);
+    CHECK(pressKey(*editor, "backspace"));
+    CHECK(bass().size() == 2); // the selection is the copies: they go
+    CHECK(bass().size() == before.size());
+}
+
+TEST_CASE("key presses become chords and back", "[shortcuts][keys]") {
+    for (const char* text : {"cmd+k", "shift+k", "alt+k", "cmd+shift+alt+k", "k", "5", "f1", "f12", "f20", "left", "right", "up",
+                             "down", "home", "end", "pageup", "pagedown", "delete", "backspace", "return", "tab", "escape",
+                             "cmd+[", "cmd+.", "alt+,"}) {
+        INFO(text);
+        const auto chord = mm::core::parseChord(text);
+        REQUIRE(chord.has_value());
+        const auto press = mm::plugin::keyPressOf(*chord);
+        const auto back = mm::plugin::chordOf(press);
+        REQUIRE(back.has_value());
+        CHECK(*back == *chord);
+    }
+    // the space bar and a lone modifier are no chords
+    CHECK_FALSE(mm::plugin::chordOf(juce::KeyPress(juce::KeyPress::spaceKey)).has_value());
+    CHECK_FALSE(mm::plugin::chordOf(juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0)).has_value());
+    CHECK_FALSE(mm::plugin::chordOf(juce::KeyPress()).has_value());
+    CHECK_FALSE(mm::plugin::chordOf(juce::KeyPress(juce::KeyPress::numberPad0)).has_value());
+    // a letter is the same with and without caps
+    CHECK(mm::plugin::chordOf(juce::KeyPress('K', juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0)) ==
+          mm::plugin::chordOf(juce::KeyPress('k', juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0)));
+    // the text shown to the user
+    CHECK(mm::plugin::chordText(*mm::core::parseChord("cmd+shift+k")).endsWith("Shift+K"));
+    CHECK(mm::plugin::chordText(*mm::core::parseChord("f5")) == "F5");
+    CHECK(mm::plugin::chordText(*mm::core::parseChord("alt+left")) == "Alt+Left");
+}
+
+TEST_CASE("assigned keys generate, vary and take steps through the history", "[group-wiring][shortcuts][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.update([](mm::core::GlobalSettings& settings) {
+        settings.shortcuts = {{"generate", "cmd+g"}, {"vary", "cmd+v"}, {"history_back", "cmd+["}, {"history_forward", "cmd+]"},
+                              {"undo", "cmd+z"},     {"redo", "cmd+y"},  {"refine_send", "cmd+r"}};
+    });
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    CHECK(pressKey(*editor, "cmd+z")); // assigned, so the key is taken, even with nothing to undo
+    hub.processor.generate();
+    REQUIRE(waitFor([&] { return hub.processor.slotsSnapshot().slot(0)->pattern.has_value(); }, 20000));
+    const auto first = *hub.processor.slotsSnapshot().slot(0)->pattern;
+    CHECK(pressKey(*editor, "cmd+v")); // a variation of all voices
+    REQUIRE(waitFor([&] { return *hub.processor.slotsSnapshot().slot(0)->pattern != first; }));
+    CHECK(pressKey(*editor, "cmd+z"));
+    CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->voices == first.voices); // (the version counter goes on)
+    CHECK(pressKey(*editor, "cmd+y"));
+    CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->voices != first.voices);
+    CHECK(pressKey(*editor, "cmd+g")); // a new pattern
+    REQUIRE(waitFor([&] { return hub.processor.slotsSnapshot().slot(0)->history.size() >= 2; }, 20000));
+    pumpMessages(80);
+    const auto latest = *hub.processor.slotsSnapshot().slot(0)->pattern;
+    CHECK(pressKey(*editor, "cmd+["));
+    CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->voices != latest.voices);
+    CHECK(pressKey(*editor, "cmd+]"));
+    CHECK(hub.processor.slotsSnapshot().slot(0)->pattern->voices == latest.voices);
+    // without a text for the refinement nothing is sent, the key is taken all the same
+    CHECK(pressKey(*editor, "cmd+r"));
+    auto& placeholder = dynamic_cast<mm::plugin::PlaceholderEditor&>(*editor);
+    CHECK_FALSE(placeholder.runShortcut("no_such_action"));
+    CHECK_FALSE(placeholder.runShortcut(""));
+}
+
+TEST_CASE("the voice window takes no keys", "[group-wiring][shortcuts][editor]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempSettings temp;
+    auto& store = temp.open();
+    REQUIRE(waitFor([&] { return store.ready(); }));
+    store.update([](mm::core::GlobalSettings& settings) { settings.shortcuts = {{"focus_1", "f1"}}; });
+    Quiet quiet;
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    pumpMessages(60);
+    CHECK_FALSE(pressKey(*editor, "f1"));
 }
 
 TEST_CASE("the chromatic slider is an expert control that follows the instance", "[group-wiring][chromatic][editor]") {

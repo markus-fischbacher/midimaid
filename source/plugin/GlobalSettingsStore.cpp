@@ -46,7 +46,7 @@ GlobalSettingsStore::~GlobalSettingsStore() {
 }
 
 bool GlobalSettingsStore::Pending::any() const {
-    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || rollFold || rollGuides || rollMarkers || middleC || language || transpose || ai;
+    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || rollFold || rollGuides || rollMarkers || middleC || shortcuts || language || transpose || ai;
 }
 
 void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) const {
@@ -76,6 +76,9 @@ void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) con
     }
     if (rollMarkers) {
         settings.rollMarkers = *rollMarkers;
+    }
+    if (shortcuts) {
+        settings.shortcuts = *shortcuts;
     }
     if (middleC) {
         settings.middleC = *middleC;
@@ -174,6 +177,7 @@ void GlobalSettingsStore::update(const std::function<void(mm::core::GlobalSettin
             note(pending_.rollGuides, before.rollGuides, next.rollGuides);
             note(pending_.rollMarkers, before.rollMarkers, next.rollMarkers);
             note(pending_.middleC, before.middleC, next.middleC);
+            note(pending_.shortcuts, before.shortcuts, next.shortcuts);
             note(pending_.language, before.language, next.language);
             if (!(before.transpose == next.transpose)) {
                 pending_.transpose = Pending::TransposeChange{

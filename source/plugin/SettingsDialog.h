@@ -22,6 +22,10 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    /// While a key is being assigned (`startCapture`), the next key press is the shortcut of the chosen action (SPEC 8.3,
+    /// D-235): the space bar is refused (it stays the transport of the DAW), Escape cancels. True if the key was taken.
+    bool keyPressed(const juce::KeyPress& press) override;
+    bool capturing() const { return capturing_; }
 
     /// Opens the dialog in a window of its own, or brings the open one to the front. Message thread.
     static void show();
@@ -63,6 +67,13 @@ private:
     juce::ComboBox transposeModeBox_, transposeBehaviorBox_, transposeTimingBox_, transposeTargetBox_,
         transposeReferenceBox_, transposeChannelBox_;
     juce::ToggleButton transposeExportToggle_, midiThruToggle_;
+    juce::Label shortcutsLabel_, shortcutKeyLabel_, shortcutHint_;
+    juce::ComboBox shortcutActionBox_;
+    juce::TextButton shortcutAssignButton_, shortcutRemoveButton_, shortcutResetButton_;
+    bool capturing_ = false;
+    void updateShortcut();
+    void changeShortcuts(const std::function<void(std::map<std::string, std::string>&)>& change);
+    std::string chosenAction() const;
     juce::Label rollViewLabel_;
     juce::ToggleButton rollFoldToggle_, rollGuidesToggle_, rollMarkersToggle_; ///< the aids of the piano roll (D-232)
     void changeTranspose(const std::function<void(mm::core::TransposeSettings&)>& change);

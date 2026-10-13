@@ -171,6 +171,8 @@ Jede Stimme hat einen **Griff**, den du in die DAW ziehst: Das ergibt eine `.mid
 mit der Oktave der Instanz. Zum **Aufnehmen** auf die Synth-Spur siehe `docs/SETUP-HILFE.md` (Routing, Monitoring,
 Aufnahme, Freeze, Arrangement).
 
+**Tastenkürzel:** MidiMaid belegt von sich aus keine Taste, damit es nicht mit dem Host kollidiert. In den Einstellungen unter *Tastenkürzel* wählst du eine Aktion (Erzeugen, Rückgängig, Variation, Raster enger, Noten eine Oktave hoch, Spurfokus und weitere), drückst *Taste zuweisen* und dann die Taste, die du willst. *Entfernen* löscht die Belegung, *Standard wiederherstellen* alle. Die Leertaste bleibt immer bei der DAW. Ein Kürzel gilt nur, wenn das Plugin-Fenster den Fokus hat (ein Klick ins Fenster genügt); eine Taste ohne Umschalt-, Cmd/Strg- oder Alt-Taste wirkt nicht, solange du in ein Textfeld tippst. Manche Hosts verarbeiten einzelne Tasten selbst (Esc in Live, Cmd+Z in Logic).
+
 ## 10. Automation
 
 Die Host-Parameter heißen **Slot** (1–16), **Mute 1 … Mute 8**, **Transpose**, **Evolve** und **Evolve Keep** (nur am Hub wirksam) sowie die Trigger **Generate**, **Variation 1 … 8** und **Variation All**: Die Flanke 0 → 1 löst aus (auf einen Controller-Knopf oder eine Automationsspur legbar), der Parameter springt danach von selbst zurück. *Variation* nimmt die Stärke aus den Einstellungen; eine Stimme reicht den Trigger an den Hub weiter; ein Bounce ignoriert die Trigger. Damit schaltest du Patterns und Stimmen im

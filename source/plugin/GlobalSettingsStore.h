@@ -5,6 +5,7 @@
 #include <atomic>
 #include <functional>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <optional>
 
 namespace mm::plugin {
@@ -60,6 +61,7 @@ private:
         std::optional<bool> rollGuides;
         std::optional<bool> rollMarkers;
         std::optional<int> middleC;
+        std::optional<std::map<std::string, std::string>> shortcuts;
         std::optional<std::string> language;
         /// The transposition settings are several fields: what was changed is applied field by field, so a change of one
         /// of them before the read leaves the others of the file alone.
