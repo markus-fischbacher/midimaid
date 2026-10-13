@@ -82,6 +82,15 @@ private:
     void applyStoredSettings();
     void saveEditSettings();
 
+    /// The settings of the hub UI sit in a column on the right in sections (D-249).
+    static constexpr int kSidebarWidth = 300;
+    static constexpr size_t kOpenRollsMax = 2; ///< more voices than this: one open roll, the others strips
+    struct Section {
+        juce::Rectangle<int> bounds;
+        std::string_view key;
+    };
+    std::vector<Section> sections_;
+
     ProcessorBase& processor_;
     MidiMaidLookAndFeel lookAndFeel_; // declared before the components that use it
     struct PlayheadTicker : juce::Timer {

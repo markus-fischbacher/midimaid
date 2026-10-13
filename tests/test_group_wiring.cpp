@@ -2183,6 +2183,34 @@ TEST_CASE("the hub UI hands grid, triplets and snapping to the rolls and shows t
     CHECK(roll3->snap().grid == mm::core::EditGrid{8, true});
 }
 
+TEST_CASE("from three voices on one roll is open and the others are strips (D-249)", "[editor][layout]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    auto* hubEditor = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    REQUIRE(hubEditor != nullptr);
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+    REQUIRE(waitFor([&] { return find(*editor, "roll_2") != nullptr; }));
+    CHECK(hubEditor->focusedVoice() == 0); // two voices: both open
+
+    mm::core::Pattern many = markedTwoVoices(41, 42);
+    for (int i = 3; i <= 5; ++i) {
+        many.voices.push_back(many.voices[1]);
+        many.voices.back().midiChannel = static_cast<uint8_t>(i);
+        many.voices.back().notes[0].id = mm::core::allocateNoteId(many);
+    }
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(1, many)); });
+    solo.processor.selectSlot(2);
+    REQUIRE(waitFor([&] { return find(*editor, "roll_5") != nullptr; }));
+    CHECK(hubEditor->focusedVoice() == 1);
+    // the open roll is much taller than a strip, and every row stays inside the window
+    const auto* first = find(*editor, "roll_1");
+    const auto* last = find(*editor, "roll_5");
+    REQUIRE((first != nullptr && last != nullptr));
+    CHECK(first->getHeight() > 100);
+    CHECK(editor->getLocalBounds().contains(first->getScreenBounds().translated(-editor->getScreenX(), -editor->getScreenY())));
+}
+
 TEST_CASE("a resize is cancelled when somebody else changes the length under it", "[roll][editor]") {
     RollRig rig;
     const auto edge = rig.roll.geometry().tickToX(960 + 480) - 1.0;
@@ -7288,10 +7316,10 @@ TEST_CASE("the personal slider is an expert control that follows the instance", 
             CHECK_FALSE(slider->getBounds().intersects(other->getBounds()));
         }
     }
-    // five columns share the row: the slider and the hat mode both have room
+    // the settings sit in rows of the side column (D-249): the slider and the hat mode both have room, one below the other
     CHECK(slider->getWidth() > 60);
     CHECK(child<juce::ComboBox>(*editor, "hatMode")->getWidth() > 60);
-    CHECK(slider->getRight() <= child<juce::ComboBox>(*editor, "hatMode")->getX());
+    CHECK(slider->getBottom() <= child<juce::ComboBox>(*editor, "hatMode")->getY());
     slider->setValue(80.0, juce::sendNotificationSync);
     CHECK(hub.processor.instanceSettings().generation.personalPct == 80);
     slider->setValue(0.0, juce::sendNotificationSync);

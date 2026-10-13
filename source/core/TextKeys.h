@@ -47,6 +47,10 @@ namespace mm::core::text {
     X(kLabelChromatic, "label.chromatic")                                                                              \
     X(kLabelPersonal, "label.personal")                                                                                \
     X(kStartRestart, "start.restart")                                                                                  \
+    X(kSectionGenerator, "section.generator")                                                                          \
+    X(kSectionWishes, "section.wishes")                                                                                \
+    X(kSectionSwitch, "section.switch")                                                                                \
+    X(kSectionEvolve, "section.evolve")                                                                                \
     X(kStartLegato, "start.legato")                                                                                    \
     X(kQuantBar, "quant.bar")                                                                                          \
     X(kQuantBeat, "quant.beat")                                                                                        \
