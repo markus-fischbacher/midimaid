@@ -4,6 +4,7 @@
 #include "core/StyleProfile.h"
 
 #include <cstdint>
+#include <optional>
 #include <functional>
 #include <vector>
 
@@ -13,6 +14,8 @@ namespace mm::core {
 /// definitions of the soft criteria are start values for the listening test of phase 1a (D-111).
 
 /// The soft criteria, each 0-100 (a voice without notes does not count; with no voice at all a criterion is 100).
+struct SetProfile;
+
 struct SoftScores {
     int motif = 100;         ///< repetition of the bars of a voice
     int range = 100;         ///< span of the voices
@@ -20,6 +23,10 @@ struct SoftScores {
     int kick = 100;          ///< bass notes off the kick steps
     int intervals = 100;     ///< strong-step intervals against the bass (STYLES.md 1.8)
     int rhythmVariety = 100; ///< different note lengths
+    int proximity = 100;     ///< closeness to the profile of the reference set (v1.1, D-242)
+    /// How much the proximity counts, in percent of its weight in the profile: 2 x "Persönlich" with a profile that has
+    /// lines for the voices of the pattern, else 0 (the criterion is not there).
+    int proximityPct = 0;
 
     bool operator==(const SoftScores&) const = default;
 };
@@ -30,6 +37,8 @@ struct QualityContext {
     int chromaticPercent = 0;      ///< from 30 on tense intervals are allowed (STYLES.md 1.8)
     bool harshStyle = false;       ///< Hard/Industrial: tense intervals are always allowed
     std::vector<bool> ignoresKick; ///< per voice (pattern order): the archetype may hold over kicks (`long_tied`)
+    const SetProfile* profile = nullptr; ///< the profile of the reference set (non-owning, null: no proximity, D-242)
+    int personalPct = 50;                ///< 0-100: the weight of the proximity
 
     bool operator==(const QualityContext&) const = default;
 };
@@ -47,6 +56,13 @@ constexpr int kMelodySpanLimit = 19; ///< octave plus fifth
 constexpr int kMelodyMinSpan = 3;    ///< a melody of 3 or more notes needs at least this span
 
 SoftScores scoreCriteria(const Pattern& pattern, const QualityContext& context);
+
+/// How close the voices of the pattern are to the profile of the reference set, 0-100 (D-242): for every bass and melody
+/// voice whose role has lines in the profile, two thirds the rhythm (100 minus the mean distance, in tenths of a percent,
+/// between the share of bars with a note start on a step and the profile's `stepPermille`) and one third the density
+/// (the smaller of notes per bar and the profile's, over the larger). The mean over these voices. nullopt when the
+/// profile is invalid or has no lines for any voice of the pattern.
+std::optional<int> proximityScore(const Pattern& pattern, const SetProfile& profile);
 
 /// Weighted mean of the criteria with the weights of the profile, rounded half up to 0-100. With high creativity the
 /// weight of the motif criterion shrinks to `(100 - creativity / 2) %` (SPEC 7.6). All weights 0 give 100.

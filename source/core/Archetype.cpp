@@ -3,6 +3,7 @@
 #include "core/ArchetypeMelody.h"
 #include "core/KickGrid.h"
 #include "core/Macros.h"
+#include "core/SetProfile.h"
 #include "core/Theory.h"
 #include "core/VelocityContour.h"
 
@@ -101,6 +102,7 @@ public:
               const ArchetypeSettings& settings, const Range& range, const Scale& scale, Pcg32& rng)
         : pattern_(pattern), style_(style), spec_(specOf(archetype.id)), range_(range), scale_(scale), rng_(rng),
           energy_(std::clamp(settings.energyPct, 0, 100)), creativity_(std::clamp(settings.creativityPct, 0, 100)),
+          profile_(settings.profile), personal_(std::clamp(settings.personalPct, 0, 100)),
           endTick_(pattern.lengthBars * kTicksPerBar), kicks_(kickTicks(pattern)),
           clearance_(style.bass.kickClearanceTicks), tension_(style.chromaticDefaultPercent >= 30) {}
 
@@ -190,6 +192,36 @@ private:
 
     // -- the cell ----------------------------------------------------------------------------------------------
 
+    /// Moves the steps that the bass lines of the reference set use more often than average towards the front of `order`
+    /// (and the others back), by up to 8 places at a "Persönlich" of 100 (D-242). The order of equal keys stays; without a
+    /// profile or a bass line in it nothing changes.
+    void biasByProfile(std::array<int, kSteps>& order, size_t count) {
+        if (profile_ == nullptr || !profile_->valid || profile_->bass.items == 0 || personal_ == 0 || count < 2) {
+            return;
+        }
+        const auto& permille = profile_->bass.stepPermille;
+        int total = 0;
+        for (const int value : permille) {
+            total += value;
+        }
+        const int mean = total / kSteps;
+        std::array<int, kSteps> key{};
+        for (size_t i = 0; i < count; ++i) {
+            const int bias100 = (permille[static_cast<size_t>(order[i])] - mean) * personal_ * 8 / 1000;
+            key[i] = static_cast<int>(i) * 100 - bias100;
+        }
+        std::array<size_t, kSteps> index{};
+        for (size_t i = 0; i < count; ++i) {
+            index[i] = i;
+        }
+        std::stable_sort(index.begin(), index.begin() + static_cast<std::ptrdiff_t>(count),
+                         [&](size_t a, size_t b) { return key[a] < key[b]; });
+        const std::array<int, kSteps> before = order;
+        for (size_t i = 0; i < count; ++i) {
+            order[i] = before[index[i]];
+        }
+    }
+
     void drawCell() {
         std::array<int, kSteps> offbeats{};
         std::array<int, kSteps> others{};
@@ -200,6 +232,9 @@ private:
         }
         rng_.shuffle(offbeats.begin(), offbeats.begin() + static_cast<std::ptrdiff_t>(offbeatCount));
         rng_.shuffle(others.begin(), others.begin() + static_cast<std::ptrdiff_t>(otherCount));
+        // the steps the set uses move up, by `personal_` (no draw: the shuffle is as ever); the offbeat steps are always kept
+        // first and all of them, so their order never shows: only the others are moved
+        biasByProfile(others, otherCount);
         uint8_t position = 0;
         for (size_t i = 0; i < offbeatCount; ++i) {
             cell_.rank[static_cast<size_t>(offbeats[i])] = position++;
@@ -511,6 +546,8 @@ private:
     Pcg32& rng_;
     int energy_;
     int creativity_;
+    const SetProfile* profile_;
+    int personal_;
     uint32_t endTick_;
     std::vector<uint32_t> kicks_;
     uint32_t clearance_;
@@ -585,7 +622,8 @@ bool generateVoice(Pattern& pattern, size_t voiceIndex, std::string_view archety
         notes = Generator(pattern, *archetype, style, settings, *range, *scale, rng).run();
     } else {
         const MelodyInput input{
-            pattern, style, archetype->id, *range, *scale, settings.energyPct, settings.creativityPct};
+            pattern, style, archetype->id, *range, *scale, settings.energyPct, settings.creativityPct, settings.profile,
+            settings.personalPct};
         auto melody = generateMelodyNotes(input, rng);
         if (!melody.has_value()) {
             return false;
@@ -655,6 +693,8 @@ QualityContext qualityContextFor(const Pattern& pattern, const StyleProfile& sty
     context.energyPct = settings.energyPct;
     context.creativityPct = settings.creativityPct;
     context.chromaticPercent = chromaticOf(pattern, style);
+    context.profile = settings.profile;
+    context.personalPct = settings.personalPct;
     for (const Track& track : pattern.voices) {
         context.ignoresKick.push_back(ignoresKickArchetype(track.archetypeId));
     }

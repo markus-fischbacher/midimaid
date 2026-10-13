@@ -4,6 +4,7 @@
 #include "core/Macros.h"
 #include "core/Motif.h"
 #include "core/Quality.h"
+#include "core/SetProfile.h"
 #include "core/Voicing.h"
 
 #include <algorithm>
@@ -264,6 +265,14 @@ private:
         }
     }
 
+    /// The motif a line starts from: that of a cell of the reference set when it acts (`motifFromProfile`), else a generated one.
+    std::optional<Motif> motifFor(const MotifParams& params, const MotifRules& rules) {
+        if (auto fromSet = motifFromProfile(params, rules, in_.profile, in_.personalPct, rng_)) {
+            return fromSet;
+        }
+        return generateMotif(params, rules, rng_);
+    }
+
     bool buildHypnotic() {
         const int perBar = midCount();
         const uint32_t bars = in_.pattern.lengthBars >= 2 && perBar * 2 <= 6 && rng_.chance(50) ? 2u : 1u;
@@ -273,7 +282,7 @@ private:
         params.minNotes = count;
         params.maxNotes = count;
         const MotifRules rules = motifRules(chordAt(0), 7, 0);
-        const auto motif = generateMotif(params, rules, rng_);
+        const auto motif = motifFor(params, rules);
         if (!motif.has_value()) {
             return false;
         }
@@ -299,7 +308,7 @@ private:
             params.pickupPercent = 40; // pickups are preferred in phrases (STYLES.md 1.11)
             // span up to an octave, five semitones of headroom for the climax
             const MotifRules rules = motifRules(chordAt(startTick), 12, 5);
-            const auto motif = generateMotif(params, rules, rng_);
+            const auto motif = motifFor(params, rules);
             if (!motif.has_value()) {
                 return false;
             }
@@ -392,7 +401,7 @@ private:
             params.minNotes = std::clamp(midCount() * static_cast<int>(motifBars), 3, 8);
             params.maxNotes = params.minNotes;
             const MotifRules rules = motifRules(chordAt(startTick), 9, 0);
-            const auto call = generateMotif(params, rules, rng_);
+            const auto call = motifFor(params, rules);
             if (!call.has_value()) {
                 return false;
             }

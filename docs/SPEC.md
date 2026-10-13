@@ -561,7 +561,7 @@ Die folgenden Unterpunkte beschreiben den Zielzustand nach v1.1.
 **Wirkung auf den Algorithmus** (ab 5 aktiven Einträgen im Set)
 - **Progressionen:** Die Akkordfolgen des Sets gehen gewichtet in den Progressions-Generator ein,
   neben den Progressionen des Stilprofils
-- **Motive:** Die Motiv-Engine kann eine Motiv-Zelle des Sets als Ausgangspunkt nehmen und variiert sie
+- **Motive** (umgesetzt, D-242)**:** Die Motiv-Engine kann eine Motiv-Zelle des Sets als Ausgangspunkt nehmen und variiert sie
   (STYLES.md §1.11)
 - **Rhythmen:** Rhythmusmuster des Sets ergänzen die Rhythmen der Archetypen
 - **Profil:** Archetyp-Gewichte, Skalenwahl, Dichte, Chromatik, Register, Groove; Abweichungen vom

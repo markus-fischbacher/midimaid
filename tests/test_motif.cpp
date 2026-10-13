@@ -579,3 +579,68 @@ TEST_CASE("isValidMotif: a non-chord tone must also be left by step", "[motif]")
     motif.notes[2].degree = 4; // B (step 1) is approached from A by step but left for E: a leap of three steps
     CHECK_FALSE(isValidMotif(motif, rules));
 }
+
+// ---- a motif from a cell of a reference set (D-242) -----------------------------------------------------------------
+
+TEST_CASE("a cell becomes a motif on the same steps, with the nearest scale steps", "[motif][cell]") {
+    const MotifRules rules = minorRules(); // A minor, A C E on the strong steps, base A3
+    // the notes of handMotif as a cell: A3 B3 C4 E4 C4 -> intervals 0 +2 +1 +4 -4 on the steps 0 2 4 6 8
+    const auto motif = motifFromCell({0, 2, 4, 6, 8}, {0, 2, 1, 4, -4}, 1, rules);
+    REQUIRE(motif.has_value());
+    CHECK(isValidMotif(*motif, rules));
+    CHECK(motif->bars == 1);
+    REQUIRE(motif->notes.size() == 5);
+    const int degrees[] = {0, 1, 2, 4, 2};
+    const uint8_t steps[] = {0, 2, 4, 6, 8};
+    for (size_t i = 0; i < 5; ++i) {
+        CHECK(motif->notes[i].startStep == steps[i]);
+        CHECK(motif->notes[i].degree == degrees[i]);
+    }
+    // the lengths run to the next note (two steps), the last one at most a beat
+    CHECK(motif->notes[0].lengthTicks == 480);
+    CHECK(motif->notes[3].lengthTicks == 480);
+    CHECK(motif->notes[4].lengthTicks == 960);
+    // two bars
+    const auto two = motifFromCell({0, 2, 4, 6, 8, 16, 18, 20}, {0, 2, 1, 4, -4, 0, 2, 1}, 2, rules);
+    REQUIRE(two.has_value());
+    CHECK(two->bars == 2);
+    CHECK(two->notes.back().startStep == 20);
+    CHECK(isValidMotif(*two, rules));
+}
+
+TEST_CASE("a note of a cell on a strong step that is not a chord tone moves to the nearest one", "[motif][cell]") {
+    const MotifRules rules = minorRules();
+    // A3 B3 then a third up to D4 on step 4 (a strong step, D is no tone of A C E): C4 is the nearest chord tone
+    const auto motif = motifFromCell({0, 2, 4, 6, 8}, {0, 2, 3, -3, -2}, 1, rules);
+    REQUIRE(motif.has_value());
+    CHECK(isValidMotif(*motif, rules));
+    CHECK(motif->notes[2].startStep == 4);
+    CHECK(motif->notes[2].degree == 2); // C4, not D4 (degree 3)
+}
+
+TEST_CASE("a cell that does not fit gives no motif", "[motif][cell]") {
+    const MotifRules rules = minorRules();
+    const std::vector<uint8_t> steps{0, 2, 4, 6, 8};
+    const std::vector<int8_t> intervals{0, 2, 1, 4, -4};
+    CHECK(motifFromCell(steps, intervals, 1, rules).has_value());
+    CHECK_FALSE(motifFromCell(steps, intervals, 3, rules).has_value());   // bars
+    CHECK_FALSE(motifFromCell(steps, intervals, 0, rules).has_value());
+    CHECK_FALSE(motifFromCell(steps, {0, 2, 1, 4}, 1, rules).has_value()); // lengths differ
+    CHECK_FALSE(motifFromCell(steps, {1, 2, 1, 4, -4}, 1, rules).has_value()); // the first interval is 0
+    CHECK_FALSE(motifFromCell({0, 2}, {0, 2}, 1, rules).has_value());     // fewer than three notes
+    CHECK_FALSE(motifFromCell({0, 4, 2, 6, 8}, intervals, 1, rules).has_value()); // not ascending
+    CHECK_FALSE(motifFromCell({0, 2, 4, 6, 16}, intervals, 1, rules).has_value()); // outside the bar
+    CHECK_FALSE(motifFromCell({0, 2, 2, 6, 8}, intervals, 1, rules).has_value());  // twice the same step
+    std::vector<uint8_t> many;
+    std::vector<int8_t> manyIntervals;
+    for (uint8_t i = 0; i < 17; ++i) {
+        many.push_back(i);
+        manyIntervals.push_back(0);
+    }
+    CHECK_FALSE(motifFromCell(many, manyIntervals, 2, rules).has_value()); // too many notes
+    MotifRules noScale = rules;
+    noScale.scale = nullptr;
+    CHECK_FALSE(motifFromCell(steps, intervals, 1, noScale).has_value());
+    // a cell that jumps wider than the rules allow (span 7 semitones) has no valid shift
+    CHECK_FALSE(motifFromCell(steps, {0, 12, -12, 12, -12}, 1, rules).has_value());
+}

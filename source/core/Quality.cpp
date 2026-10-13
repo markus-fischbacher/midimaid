@@ -3,8 +3,11 @@
 #include "core/Constraints.h"
 #include "core/KickGrid.h"
 #include "core/Random.h"
+#include "core/SetProfile.h"
 
 #include <algorithm>
+#include <bitset>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <tuple>
@@ -115,6 +118,46 @@ DensityBand densityBand(VoiceRole role, int energyPct) {
     return {100 + 3 * e, 300 + 5 * e};
 }
 
+std::optional<int> proximityScore(const Pattern& pattern, const SetProfile& profile) {
+    if (!profile.valid || pattern.lengthBars == 0) {
+        return std::nullopt;
+    }
+    int sum = 0;
+    int count = 0;
+    for (const Track& track : pattern.voices) {
+        const RoleStats& stats = track.role == VoiceRole::Bass ? profile.bass : profile.melody;
+        if (track.notes.empty() || stats.items == 0) {
+            continue;
+        }
+        std::vector<std::bitset<16>> bars(pattern.lengthBars);
+        for (const Note& note : track.notes) {
+            const uint32_t step = (note.startTick + 120) / 240;
+            if (step / 16 < bars.size()) {
+                bars[step / 16].set(step % 16);
+            }
+        }
+        int distance = 0;
+        for (size_t s = 0; s < 16; ++s) {
+            int withNote = 0;
+            for (const auto& bar : bars) {
+                withNote += bar.test(s) ? 1 : 0;
+            }
+            distance += std::abs(withNote * 1000 / static_cast<int>(bars.size()) - stats.stepPermille[s]);
+        }
+        const int rhythm = std::clamp(100 - distance / 16 / 10, 0, 100);
+        const int perBar = static_cast<int>(track.notes.size() * 100 / pattern.lengthBars);
+        const int low = std::min(perBar, stats.notesPerBar100);
+        const int high = std::max(perBar, stats.notesPerBar100);
+        const int density = high == 0 ? 100 : low * 100 / high;
+        sum += (rhythm * 2 + density + 1) / 3;
+        ++count;
+    }
+    if (count == 0) {
+        return std::nullopt;
+    }
+    return (sum + count / 2) / count;
+}
+
 SoftScores scoreCriteria(const Pattern& pattern, const QualityContext& context) {
     std::vector<int> motif;
     std::vector<int> range;
@@ -174,6 +217,12 @@ SoftScores scoreCriteria(const Pattern& pattern, const QualityContext& context) 
     }
 
     SoftScores scores;
+    if (context.profile != nullptr) {
+        if (const auto proximity = proximityScore(pattern, *context.profile)) {
+            scores.proximity = *proximity;
+            scores.proximityPct = std::clamp(context.personalPct, 0, 100) * 2;
+        }
+    }
     scores.motif = meanOrFull(motif);
     scores.range = meanOrFull(range);
     scores.density = meanOrFull(density);
@@ -192,7 +241,8 @@ int overallScore(const SoftScores& scores, const QualityProfile& weights, int cr
                                 {std::max(weights.density, 0) * int64_t{200}, scores.density},
                                 {std::max(weights.kick, 0) * int64_t{200}, scores.kick},
                                 {std::max(weights.intervals, 0) * int64_t{200}, scores.intervals},
-                                {std::max(weights.rhythmVariety, 0) * int64_t{200}, scores.rhythmVariety}};
+                                {std::max(weights.rhythmVariety, 0) * int64_t{200}, scores.rhythmVariety},
+                                {std::max(weights.proximity, 0) * int64_t{2} * scores.proximityPct, scores.proximity}};
     int64_t numerator = 0;
     int64_t denominator = 0;
     for (const auto& pair : pairs) {

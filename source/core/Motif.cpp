@@ -1,5 +1,7 @@
 #include "core/Motif.h"
 
+#include "core/SetProfile.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <limits>
@@ -485,6 +487,104 @@ uint32_t repetitionPermille(const std::vector<Motif>& sequence) {
     }
     const auto same = static_cast<uint32_t>(std::count(sequence.begin(), sequence.end(), sequence.front()));
     return same * 1000 / static_cast<uint32_t>(sequence.size());
+}
+
+std::optional<Motif> motifFromCell(const std::vector<uint8_t>& steps, const std::vector<int8_t>& intervals, uint8_t bars,
+                                   const MotifRules& rules) {
+    if (rules.scale == nullptr || rules.scale->size() == 0 || (bars != 1 && bars != 2) || steps.size() != intervals.size() ||
+        steps.size() < 3 || steps.size() > 16 || intervals[0] != 0) {
+        return std::nullopt;
+    }
+    const int total = bars * kStepsPerBar;
+    for (size_t i = 0; i < steps.size(); ++i) {
+        if (steps[i] >= total || (i > 0 && steps[i] <= steps[i - 1])) {
+            return std::nullopt;
+        }
+    }
+    const auto midi = [&](int degree) { return scaleStepToMidi(*rules.scale, rules.basePitch, degree); };
+    constexpr int kShifts[] = {0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 7, -7};
+    for (const int shift : kShifts) {
+        Motif motif;
+        motif.bars = bars;
+        int degree = shift;
+        int pitch = midi(degree);
+        for (size_t i = 0; i < steps.size(); ++i) {
+            if (i > 0) {
+                // the scale step near the previous one whose pitch is nearest to the interval (nearer to the previous
+                // step on a tie, then the lower)
+                const int target = pitch + intervals[i];
+                int best = degree;
+                int bestDistance = 1 << 20;
+                for (int candidate = degree - 10; candidate <= degree + 10; ++candidate) {
+                    const int distance = std::abs(midi(candidate) - target);
+                    // (two candidates of the same distance and the same distance from the previous step cannot both be the
+                    // nearest: the previous step itself would be nearer than one of them)
+                    const bool better = distance < bestDistance ||
+                                        (distance == bestDistance && std::abs(candidate - degree) < std::abs(best - degree));
+                    if (better) {
+                        best = candidate;
+                        bestDistance = distance;
+                    }
+                }
+                degree = best;
+                pitch = midi(degree);
+            }
+            int noteDegree = degree;
+            if (steps[i] % 4 == 0 &&
+                !isChordTone(rules.keyRoot, rules.referenceChord, midi(noteDegree))) {
+                for (int delta = 1; delta <= 3; ++delta) {
+                    if (isChordTone(rules.keyRoot, rules.referenceChord, midi(noteDegree - delta))) {
+                        noteDegree = noteDegree - delta;
+                        break;
+                    }
+                    if (isChordTone(rules.keyRoot, rules.referenceChord, midi(noteDegree + delta))) {
+                        noteDegree = noteDegree + delta;
+                        break;
+                    }
+                }
+            }
+            MotifNote note;
+            note.startStep = steps[i];
+            const int next = i + 1 < steps.size() ? steps[i + 1] : total;
+            note.lengthTicks = static_cast<uint32_t>(std::min(next - steps[i], 4)) * (kTicksPerBar / kStepsPerBar);
+            note.degree = static_cast<int8_t>(std::clamp(noteDegree, -127, 127));
+            motif.notes.push_back(note);
+        }
+        if (isValidMotif(motif, rules)) {
+            return motif;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<Motif> motifFromProfile(const MotifParams& params, const MotifRules& rules, const SetProfile* profile,
+                                      int personalPct, Pcg32& rng) {
+    if (profile == nullptr || !profile->valid || personalPct <= 0) {
+        return std::nullopt;
+    }
+    std::vector<const MotifCell*> cells;
+    std::vector<uint32_t> weights;
+    for (const MotifCell& cell : profile->cells) {
+        const auto count = static_cast<int>(cell.steps.size());
+        if (cell.role == TrackRole::Melody && cell.bars == params.bars && count >= std::max(3, params.minNotes - 1) &&
+            count <= params.maxNotes + 2) {
+            cells.push_back(&cell);
+            weights.push_back(static_cast<uint32_t>(std::max(cell.count, 1)));
+        }
+    }
+    if (cells.empty() || !rng.chance(std::min(personalPct, 100) * 60 / 100)) {
+        return std::nullopt;
+    }
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const MotifCell& cell = *cells[rng.weightedIndex(weights)];
+        if (const auto motif = motifFromCell(cell.steps, cell.intervals, cell.bars, rules)) {
+            const auto kind = rng.chance(50) ? MotifVariation::ShiftNote : MotifVariation::NewEnding;
+            if (auto varied = varyMotif(*motif, kind, rules, rng)) {
+                return varied;
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 std::vector<Note> realizeMotif(const Motif& motif, const MotifRules& rules, int stepShift, uint32_t startTick) {

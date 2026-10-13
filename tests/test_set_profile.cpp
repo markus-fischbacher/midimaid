@@ -1,7 +1,9 @@
 #include "core/MidiFile.h"
+#include "core/Motif.h"
 #include "core/PatternGenerator.h"
 #include "core/PatternJson.h"
 #include "core/PatternValidation.h"
+#include "core/Quality.h"
 #include "core/ReferenceProfile.h"
 #include "core/SetProfile.h"
 
@@ -9,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
 #include <functional>
+#include <set>
 #include <nlohmann/json.hpp>
 #include <sstream>
 
@@ -834,4 +837,486 @@ TEST_CASE("generation around locks moves the style towards the profile and keeps
     const auto plain = generatePatternAroundLocks(style, requestWith(std::nullopt, 90), current);
     REQUIRE(plain.success);
     CHECK(plain.pattern.info.profile.empty());
+}
+
+// ---- the effect of the cells, the steps and the proximity (D-242) ----------------------------------------------------------
+
+namespace {
+
+/// A profile whose melody cell is five notes on the steps 0 2 4 6 8 (the notes of the hand motif of the motif tests) and
+/// whose bass steps are the given ones.
+SetProfile cellProfile(const std::array<int, 16>& bassSteps) {
+    SetProfile profile = handProfile({{"natural_minor", 100}}, {0, 1000, 0}, {0, 1000, 0});
+    profile.melody.items = 3;
+    profile.melody.notesPerBar100 = 500;
+    profile.bass.stepPermille = bassSteps;
+    profile.cells.clear();
+    MotifCell cell;
+    cell.role = TrackRole::Melody;
+    cell.bars = 1;
+    cell.steps = {0, 2, 4, 6, 8};
+    cell.intervals = {0, 2, 1, 4, -4};
+    cell.count = 15;
+    profile.cells.push_back(cell);
+    return profile;
+}
+
+std::set<int> firstBarSteps(const Track& track) {
+    std::set<int> steps;
+    for (const auto& note : track.notes) {
+        if (note.startTick < kTicksPerBar) {
+            steps.insert(static_cast<int>((note.startTick + 120) / 240));
+        }
+    }
+    return steps;
+}
+
+} // namespace
+
+TEST_CASE("the melody starts from a cell of the set, varied, and the draws stay as they were without a set", "[set-profile][cells][generation]") {
+    const auto style = shipped();
+    const auto profile = cellProfile({});
+    const std::set<int> cellSteps{0, 2, 4, 6, 8};
+    int personalHits = 0;
+    int plainHits = 0;
+    for (uint64_t seed = 1; seed <= 60; ++seed) {
+        auto personal = requestWith(profile, 100, seed);
+        personal.melodyArchetype = "hypnotic_motif";
+        personal.scaleId = "natural_minor";
+        personal.root = 9;
+        auto plain = personal;
+        plain.profile.reset();
+        const auto a = generatePattern(style, personal);
+        const auto b = generatePattern(style, plain);
+        REQUIRE((a.success && b.success));
+        personalHits += firstBarSteps(a.pattern.voices[1]) == cellSteps ? 1 : 0;
+        plainHits += firstBarSteps(b.pattern.voices[1]) == cellSteps ? 1 : 0;
+    }
+    CHECK(personalHits >= 8);
+    CHECK(personalHits > plainHits + 5);
+    // with the setting at 0 no draw is made for the cell: the melody is the plain one
+    for (uint64_t seed = 1; seed <= 6; ++seed) {
+        auto zero = requestWith(profile, 0, seed);
+        zero.melodyArchetype = "hypnotic_motif";
+        auto plain = zero;
+        plain.profile.reset();
+        const auto a = generatePattern(style, zero);
+        const auto b = generatePattern(style, plain);
+        REQUIRE((a.success && b.success));
+        CHECK(a.pattern.voices == b.pattern.voices);
+    }
+    // never the cell as it is: the pitches differ from the plain cell realisation in at least one note
+    // (the variation moves a note or the ending), checked through the motif function itself
+}
+
+TEST_CASE("the bass takes the steps of the set as a hint for its rhythm", "[set-profile][steps][generation]") {
+    const auto style = shipped();
+    // the bass lines of the set use the last sixteenth of every beat (3 7 11 15), nothing else
+    std::array<int, 16> steps{};
+    for (const int s : {3, 7, 11, 15}) {
+        steps[static_cast<size_t>(s)] = 1000;
+    }
+    const auto profile = cellProfile(steps);
+    int personal = 0;
+    int plain = 0;
+    int total = 0;
+    for (uint64_t seed = 1; seed <= 50; ++seed) {
+        auto request = requestWith(profile, 100, seed);
+        request.bassArchetype = "rolling16";
+        request.settings.energyPct = 5; // few notes: the order of the steps decides which are kept
+        auto without = request;
+        without.profile.reset();
+        const auto a = generatePattern(style, request);
+        const auto b = generatePattern(style, without);
+        REQUIRE((a.success && b.success));
+        const auto count = [](const Pattern& pattern) {
+            int hits = 0;
+            for (const auto& note : pattern.voices[0].notes) {
+                const int step = static_cast<int>((note.startTick + 120) / 240) % 16;
+                hits += step % 4 == 3 ? 1 : 0;
+            }
+            return hits;
+        };
+        personal += count(a.pattern);
+        plain += count(b.pattern);
+        total += static_cast<int>(a.pattern.voices[0].notes.size());
+    }
+    CHECK(total > 0);
+    CHECK(personal > plain);
+    // 50 to 100 notes of 400 outside the offbeats: the strength of the move shows in the share on the steps of the set
+    CHECK(plain < 220);     // by chance about 46 %
+    CHECK(personal >= 380); // at 100 almost all
+    int half = 0;
+    for (uint64_t seed = 1; seed <= 50; ++seed) {
+        auto request = requestWith(profile, 50, seed);
+        request.bassArchetype = "rolling16";
+        request.settings.energyPct = 5;
+        const auto result = generatePattern(style, request);
+        REQUIRE(result.success);
+        for (const auto& note : result.pattern.voices[0].notes) {
+            half += (static_cast<int>((note.startTick + 120) / 240) % 16) % 4 == 3 ? 1 : 0;
+        }
+    }
+    CHECK(half > plain + 60);
+    CHECK(half < personal - 40);
+    // a set without bass lines gives the bass no hint, whatever steps the profile holds: the same pattern as with no steps
+    auto noBassLines = profile;
+    noBassLines.bass.items = 0;
+    auto noSteps = noBassLines;
+    noSteps.bass.stepPermille = {};
+    for (uint64_t seed = 1; seed <= 5; ++seed) {
+        auto request = requestWith(noBassLines, 100, seed);
+        request.bassArchetype = "rolling16";
+        request.settings.energyPct = 5;
+        auto without = requestWith(noSteps, 100, seed);
+        without.bassArchetype = "rolling16";
+        without.settings.energyPct = 5;
+        CHECK(generatePattern(style, request).pattern.voices[0] == generatePattern(style, without).pattern.voices[0]);
+        // an invalid profile acts as none at all
+        auto invalid = profile;
+        invalid.valid = false;
+        auto invalidRequest = request;
+        invalidRequest.profile = invalid;
+        auto none = request;
+        none.profile.reset();
+        CHECK(generatePattern(style, invalidRequest).pattern == generatePattern(style, none).pattern);
+    }
+    // the setting at 0 changes nothing
+    for (uint64_t seed = 1; seed <= 5; ++seed) {
+        auto request = requestWith(profile, 0, seed);
+        request.bassArchetype = "rolling16";
+        auto without = request;
+        without.profile.reset();
+        CHECK(generatePattern(style, request).pattern.voices == generatePattern(style, without).pattern.voices);
+    }
+}
+
+TEST_CASE("the proximity says how close a pattern is to the set", "[set-profile][proximity]") {
+    // the bass lines of the set: steps 0 4 8 12 in every bar, four notes per bar
+    const auto profile = profileOf(fiveBass());
+    REQUIRE(profile.valid);
+    Pattern pattern = makeEmptyPattern(4, "peak_time");
+    auto bass = [&](const std::vector<uint32_t>& stepsPerBar) {
+        pattern.voices[0].notes.clear();
+        uint32_t id = 1;
+        for (uint32_t bar = 0; bar < 4; ++bar) {
+            for (const uint32_t step : stepsPerBar) {
+                Note note;
+                note.id = id++;
+                note.pitch = 45;
+                note.startTick = bar * kTicksPerBar + step * 240;
+                note.lengthTicks = 120;
+                pattern.voices[0].notes.push_back(note);
+            }
+        }
+    };
+    bass({0, 4, 8, 12});
+    CHECK(proximityScore(pattern, profile) == std::optional<int>(100));
+    // the same density on other steps: no step in common, 16 steps with a distance of 1000 on four of them and 1000 on
+    // four others: mean distance 500, rhythm 50, density 100: (50 * 2 + 100) / 3 = 67
+    bass({2, 6, 10, 14});
+    CHECK(proximityScore(pattern, profile) == std::optional<int>(67));
+    // half of the notes, on right steps: two steps of the profile are empty (distance 2000 / 16 = 125, rhythm 88), density 50:
+    // (88 * 2 + 50 + 1) / 3 = 75
+    bass({0, 8});
+    CHECK(proximityScore(pattern, profile) == std::optional<int>(75));
+    // sixteenths: density 25 %, rhythm: four steps at 1000 hit, twelve at 1000 off: 750 / 10 = 75 off: 25
+    bass({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+    CHECK(proximityScore(pattern, profile) == std::optional<int>((25 * 2 + 25 + 1) / 3));
+    // a voice with no notes does not count; no voice at all, no score
+    pattern.voices[0].notes.clear();
+    CHECK_FALSE(proximityScore(pattern, profile).has_value());
+    // a melody voice counts only when the set has melody lines
+    bass({0, 4, 8, 12});
+    Note melodyNote;
+    melodyNote.id = 100;
+    melodyNote.startTick = 0;
+    melodyNote.lengthTicks = 120;
+    pattern.voices[1].notes = {melodyNote};
+    CHECK(proximityScore(pattern, profile) == std::optional<int>(100)); // fiveBass has no melody lines
+    auto withMelody = profile;
+    withMelody.melody.items = 1;
+    withMelody.melody.notesPerBar100 = 400;
+    withMelody.melody.stepPermille[0] = 1000;
+    // the melody has one note in the first bar only: rhythm 100 - (750 + 0...)/16/10, density 25 / 400 = 6
+    const auto both = proximityScore(pattern, withMelody);
+    REQUIRE(both.has_value());
+    CHECK(*both < 100);
+    // an invalid profile or a pattern without bars gives nothing
+    CHECK_FALSE(proximityScore(pattern, SetProfile{}).has_value());
+}
+
+TEST_CASE("the proximity counts with the weight of the profile times Persönlich over 50", "[set-profile][proximity]") {
+    const auto profile = profileOf(fiveBass());
+    Pattern pattern = makeEmptyPattern(4, "peak_time");
+    for (uint32_t bar = 0; bar < 4; ++bar) {
+        for (const uint32_t step : {2u, 6u, 10u, 14u}) { // all off the steps of the set
+            Note note;
+            note.id = bar * 4 + step;
+            note.pitch = 45;
+            note.startTick = bar * kTicksPerBar + step * 240;
+            note.lengthTicks = 120;
+            pattern.voices[0].notes.push_back(note);
+        }
+    }
+    QualityContext context;
+    // no profile: the criterion is not there
+    auto scores = scoreCriteria(pattern, context);
+    CHECK(scores.proximity == 100);
+    CHECK(scores.proximityPct == 0);
+    context.profile = &profile;
+    context.personalPct = 50;
+    scores = scoreCriteria(pattern, context);
+    CHECK(scores.proximity == 67);
+    CHECK(scores.proximityPct == 100);
+    context.personalPct = 80;
+    CHECK(scoreCriteria(pattern, context).proximityPct == 160);
+    context.personalPct = 0;
+    CHECK(scoreCriteria(pattern, context).proximityPct == 0);
+    // an invalid profile, or one without lines for the voices: not there
+    SetProfile noBass = profile;
+    noBass.bass.items = 0;
+    context.profile = &noBass;
+    context.personalPct = 100;
+    CHECK(scoreCriteria(pattern, context).proximityPct == 0);
+
+    // the weighted mean: only the proximity counts when all other weights are 0
+    QualityProfile weights;
+    weights.motif = weights.range = weights.density = weights.kick = weights.intervals = weights.rhythmVariety = 0;
+    weights.proximity = 2;
+    SoftScores s;
+    s.proximity = 40;
+    s.proximityPct = 100;
+    CHECK(overallScore(s, weights, 0) == 40);
+    s.proximityPct = 0; // not there: all weights 0 gives 100
+    CHECK(overallScore(s, weights, 0) == 100);
+    // together with another criterion: weight 2 * 100 % against weight 2 of the range
+    weights.range = 2;
+    s.range = 80;
+    s.proximityPct = 100;
+    CHECK(overallScore(s, weights, 0) == 60); // (2 * 80 + 2 * 40) / 4
+    s.proximityPct = 200; // Persönlich 100: twice the weight
+    CHECK(overallScore(s, weights, 0) == 53); // (2 * 80 + 4 * 40) / 6 = 53.3
+    s.proximityPct = 0;
+    CHECK(overallScore(s, weights, 0) == 80);
+    weights.proximity = -3; // a negative weight counts as none
+    s.proximityPct = 100;
+    CHECK(overallScore(s, weights, 0) == 80);
+}
+
+TEST_CASE("the selection takes the candidate close to the set, more surely the higher Persönlich is", "[set-profile][proximity][selection]") {
+    const auto profile = profileOf(fiveBass()); // steps 0 4 8 12, four bass notes per bar
+    const auto patternWith = [](const std::vector<uint32_t>& steps) {
+        Pattern pattern = makeEmptyPattern(4, "peak_time");
+        uint32_t id = 1;
+        for (uint32_t bar = 0; bar < 4; ++bar) {
+            for (const uint32_t step : steps) {
+                Note note;
+                note.id = id++;
+                note.pitch = 45;
+                note.startTick = bar * kTicksPerBar + step * 240;
+                note.lengthTicks = 120;
+                pattern.voices[0].notes.push_back(note);
+            }
+        }
+        return pattern;
+    };
+    const uint64_t initial = 77;
+    const uint64_t goodSeed = candidateSeed(initial, 0, 5); // the sixth candidate is the one like the set
+    const CandidateGenerator generate = [&](uint64_t seed) {
+        return seed == goodSeed ? patternWith({0, 4, 8, 12}) : patternWith({2, 6, 10, 14});
+    };
+    QualityProfile weights;
+    weights.motif = weights.range = weights.density = weights.kick = weights.intervals = weights.rhythmVariety = 0;
+    weights.proximity = 2;
+    weights.minScore = 0;
+    QualityContext context;
+    context.profile = &profile;
+    context.personalPct = 50;
+    const auto chosen = selectBest(generate, initial, weights, context);
+    REQUIRE(chosen.success);
+    CHECK(chosen.seed == goodSeed);
+    CHECK(chosen.scores.proximity == 100);
+    CHECK(chosen.scores.proximityPct == 100);
+    // at 0 the criterion is not counted: every weight is 0, every candidate 100, the first one wins
+    context.personalPct = 0;
+    const auto first = selectBest(generate, initial, weights, context);
+    REQUIRE(first.success);
+    CHECK(first.seed == candidateSeed(initial, 0, 0));
+    // without a profile the same
+    context.profile = nullptr;
+    context.personalPct = 100;
+    CHECK(selectBest(generate, initial, weights, context).seed == candidateSeed(initial, 0, 0));
+}
+
+// ---- the motif of a cell (D-242) ---------------------------------------------------------------------------------------
+
+namespace {
+
+MotifRules aMinorRules() {
+    MotifRules rules;
+    rules.scale = findScale("natural_minor");
+    REQUIRE(rules.scale != nullptr);
+    return rules; // A minor, tonic triad A C E, base A3
+}
+
+MotifParams fiveNotes(uint8_t bars = 1) {
+    MotifParams params;
+    params.bars = bars;
+    params.minNotes = 5;
+    params.maxNotes = 5;
+    return params;
+}
+
+} // namespace
+
+TEST_CASE("a motif from the set is a varied cell, drawn by the share of Persönlich", "[set-profile][cells][motif]") {
+    const auto rules = aMinorRules();
+    const auto profile = cellProfile({});
+    const auto plainCell = motifFromCell({0, 2, 4, 6, 8}, {0, 2, 1, 4, -4}, 1, rules);
+    REQUIRE(plainCell.has_value());
+    auto hits = [&](int personalPct) {
+        int hit = 0;
+        Pcg32 rng = Pcg32::fromSeed(99);
+        for (int i = 0; i < 400; ++i) {
+            const auto motif = motifFromProfile(fiveNotes(), rules, &profile, personalPct, rng);
+            if (!motif) {
+                continue;
+            }
+            ++hit;
+            CHECK(isValidMotif(*motif, rules));
+            REQUIRE(motif->notes.size() == 5);
+            CHECK(motif->bars == 1);
+            int sameSteps = 0;
+            for (size_t k = 0; k < 5; ++k) {
+                sameSteps += motif->notes[k].startStep == plainCell->notes[k].startStep ? 1 : 0;
+            }
+            CHECK(sameSteps >= 4); // the rhythm of the cell, but for the one note that the variation may move
+            CHECK(*motif != *plainCell); // never the cell as it is
+        }
+        return hit;
+    };
+    const int full = hits(100);
+    const int half = hits(50);
+    // 60 % at 100, 30 % at 50 (of those drawn, the motif of a cell is always found for this cell)
+    CHECK(full > 400 * 45 / 100);
+    CHECK(full < 400 * 75 / 100);
+    CHECK(half > 400 * 18 / 100);
+    CHECK(half < 400 * 42 / 100);
+    CHECK(half < full);
+    CHECK(hits(1) < half);
+}
+
+TEST_CASE("without cells that fit, nothing is drawn and the random sequence stays as it is", "[set-profile][cells][motif]") {
+    const auto rules = aMinorRules();
+    const auto profile = cellProfile({});
+    const auto untouched = [&](const std::optional<SetProfile>& which, const MotifParams& params, int personalPct) {
+        Pcg32 used = Pcg32::fromSeed(5);
+        Pcg32 reference = Pcg32::fromSeed(5);
+        const SetProfile* pointer = which ? &*which : nullptr;
+        const auto motif = motifFromProfile(params, rules, pointer, personalPct, used);
+        return !motif.has_value() && used.next() == reference.next();
+    };
+    CHECK(untouched(std::nullopt, fiveNotes(), 100));              // no profile
+    CHECK(untouched(SetProfile{}, fiveNotes(), 100));              // an invalid one
+    CHECK(untouched(profile, fiveNotes(), 0));                     // the share is 0
+    CHECK(untouched(profile, fiveNotes(2), 100));                  // the cell has one bar, a motif of two is wanted
+    MotifParams longer = fiveNotes();
+    longer.minNotes = longer.maxNotes = 9;                         // five notes against nine (4 to 11 would fit... 9 - 1 = 8)
+    CHECK(untouched(profile, longer, 100));
+    MotifParams shorter = fiveNotes();
+    shorter.minNotes = shorter.maxNotes = 2;                       // 2 + 2 = 4 < 5
+    CHECK(untouched(profile, shorter, 100));
+    auto bassOnly = profile;
+    bassOnly.cells[0].role = TrackRole::Bass;
+    CHECK(untouched(bassOnly, fiveNotes(), 100));                  // a bass cell is no motif of a melody
+    auto none = profile;
+    none.cells.clear();
+    CHECK(untouched(none, fiveNotes(), 100));
+    // a cell that the rules refuse is not used (a draw may be made, the result is none)
+    auto wide = profile;
+    wide.cells[0].intervals = {0, 12, -12, 12, -12};
+    Pcg32 rng = Pcg32::fromSeed(5);
+    for (int i = 0; i < 40; ++i) {
+        CHECK_FALSE(motifFromProfile(fiveNotes(), rules, &wide, 100, rng).has_value());
+    }
+    // the edges of the note count that still fit: four to seven for five wanted
+    for (const int wanted : {4, 5, 6, 7}) {
+        MotifParams params = fiveNotes();
+        params.minNotes = params.maxNotes = wanted;
+        // 4: min - 1 = 3 <= 5 <= 4 + 2; 7: 7 - 1 = 6 > 5 does not fit
+        Pcg32 draw = Pcg32::fromSeed(11);
+        int found = 0;
+        for (int i = 0; i < 60; ++i) {
+            found += motifFromProfile(params, rules, &profile, 100, draw).has_value() ? 1 : 0;
+        }
+        INFO(wanted);
+        if (wanted <= 6) {
+            CHECK(found > 0);
+        } else {
+            CHECK(found == 0);
+        }
+    }
+}
+
+
+TEST_CASE("a cell that the first position does not allow is shifted", "[motif][cell]") {
+    const MotifRules rules = aMinorRules();
+    // A3 G3 F3: the third note lies below the range of 55 at the start on A3; two scale steps up it fits
+    const auto motif = motifFromCell({0, 2, 4, 6, 8}, {0, -2, -2, 2, 2}, 1, rules);
+    REQUIRE(motif.has_value());
+    CHECK(isValidMotif(*motif, rules));
+    CHECK(motif->notes[0].degree == 2); // C4: shifted by two
+    CHECK(motif->notes[2].degree == 0);
+}
+
+TEST_CASE("a motif from the set tries up to three cells, and only a valid profile counts", "[set-profile][cells][motif]") {
+    const auto rules = aMinorRules();
+    auto profile = cellProfile({});
+    // a second cell that the rules refuse, equally heavy: one try finds a motif half as often as three
+    MotifCell wide = profile.cells[0];
+    wide.intervals = {0, 12, -12, 12, -12};
+    wide.steps = {0, 2, 4, 6, 10}; // another rhythm: no other cell has these steps
+    profile.cells.push_back(wide);
+    int found = 0;
+    Pcg32 rng = Pcg32::fromSeed(3);
+    for (int i = 0; i < 1000; ++i) {
+        found += motifFromProfile(fiveNotes(), rules, &profile, 100, rng).has_value() ? 1 : 0;
+    }
+    // 60 % drawn, of those 1 - 1/8 with three tries (87.5 %): 52 %; with one try 30 %
+    CHECK(found > 470);
+    CHECK(found < 580);
+    // a profile that is not valid acts as none, even with cells
+    auto invalid = cellProfile({});
+    invalid.valid = false;
+    Pcg32 used = Pcg32::fromSeed(5);
+    Pcg32 reference = Pcg32::fromSeed(5);
+    CHECK_FALSE(motifFromProfile(fiveNotes(), rules, &invalid, 100, used).has_value());
+    CHECK(used.next() == reference.next());
+}
+
+TEST_CASE("the quality of a generation counts the proximity with the setting of the instance", "[set-profile][proximity][generation]") {
+    const auto style = shipped();
+    const auto profile = profileOf(fiveBass());
+    for (const int personalPct : {0, 30, 100}) {
+        auto request = requestWith(profile, personalPct, 4);
+        request.bassArchetype = "rolling16";
+        const auto result = generatePattern(style, request);
+        REQUIRE(result.success);
+        CHECK(result.scores.proximityPct == personalPct * 2);
+        CHECK(result.scores.proximity == *proximityScore(result.pattern, profile));
+    }
+    // without a profile the criterion is not there
+    auto plain = requestWith(std::nullopt, 100, 4);
+    const auto result = generatePattern(style, plain);
+    REQUIRE(result.success);
+    CHECK(result.scores.proximityPct == 0);
+    // a variation of a pattern with a snapshot rates it with the snapshot too
+    auto made = generatePattern(style, requestWith(profile, 100, 4));
+    REQUIRE(made.success);
+    Pattern varied = made.pattern;
+    REQUIRE(regenerateVoice(varied, 0, style, requestWith(std::nullopt, 100), 9));
+    auto invalid = profile;
+    invalid.valid = false;
+    CHECK_FALSE(proximityScore(varied, invalid).has_value());
 }

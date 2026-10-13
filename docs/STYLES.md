@@ -105,7 +105,7 @@ Auf betonten Schritten (0, 4, 8, 12) gilt für gleichzeitig klingende Töne von 
 
 ### 1.11 Motivik (gegen beliebig klingende Melodien)
 - **Motiv zuerst:** Erst entsteht ein Motiv (1–2 Takte) mit eigener rhythmischer Identität, dann die Phrase.
-  [v1.1] Mit aktivem Referenz-Set kann das Motiv aus einer Motiv-Zelle des Sets hervorgehen, wird aber immer
+  [v1.1, umgesetzt, D-242] Mit aktivem Referenz-Set kann das Motiv aus einer Motiv-Zelle des Sets hervorgehen, wird aber immer
   variiert (Kopierschutz, SPEC §3.20)
 - Ein Motiv wird mindestens 2×, typischerweise 3× wiederholt, bevor es variiert wird (A A A A')
 - Linien-Archetypen (`hypnotic_motif`, `lead_phrase`, `call_response`, `pluck_seq`, `polymeter_seq`)
@@ -130,7 +130,7 @@ eigene Phrasen-Rolle.
 - Der Algorithmus erzeugt pro Generierung **8 Kandidaten** und wählt den besten gültigen (SPEC §4.4)
 - Weiche Kriterien (je 0–100, gewichtet zum Gesamtwert): Motiv-Wiederholung (§1.11), Tonumfang,
   **erwartete** Dichte im Zielbereich der Energie (Wahrscheinlichkeiten eingerechnet), keine
-  Kick-Kollisionen, Intervallregeln, rhythmische Abwechslung, [v1.1] Abstand zum Verlauf, [v1.1] Nähe zum
+  Kick-Kollisionen, Intervallregeln, rhythmische Abwechslung, [v1.1] Abstand zum Verlauf, [v1.1, umgesetzt, D-242] Nähe zum
   aktiven Referenz-Set (gewichtet mit dem Regler „Persönlich“, SPEC §3.20). Gewichte und
   **Mindestbewertung** stehen im Profil (`quality`, §5) und werden im Hörtest von Phase 1a kalibriert.
 - **Kein gültiger Kandidat:** bis zu 2 weitere Runden, danach bleibt das bisherige Pattern (SPEC §4.4)

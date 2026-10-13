@@ -14,6 +14,8 @@
 
 namespace mm::core {
 
+struct SetProfile;
+
 /// Archetypes (SPEC 3.x, STYLES.md 2-4): the rhythmic and melodic type of a voice. An archetype fills the notes of one
 /// voice for the kick grid, the harmony and the style profile of the pattern. Everything is deterministic for a given
 /// seed (integer arithmetic and `Pcg32` only). Bass archetypes of this module keep off the kick steps and end before
@@ -41,6 +43,9 @@ struct ArchetypeSettings {
     int creativityPct = 40; ///< 0-100: variation bars, unusual (chromatic) tones, scatter of the archetype choice
     int chromaticPct = -1;  ///< 0-100: share of notes that may leave the scale (SPEC 3.8); -1: the style's default
     int personalPct = 50;   ///< 0-100: how strongly the reference set acts (SPEC 3.20, D-241)
+    /// The profile of the reference set that the generation works with (non-owning, null: none, D-242): the bass takes the
+    /// steps of the set as a hint for its rhythm, the melody may start a motif from a typical cell of the set.
+    const SetProfile* profile = nullptr;
 };
 
 /// The style with the chromatic share of `chromaticPct` (0-100, else unchanged): what a generation with the control of
