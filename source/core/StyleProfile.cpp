@@ -176,7 +176,7 @@ std::vector<std::string> validateStyleProfile(const StyleProfile& profile) {
     if (q.minScore < 0 || q.minScore > 100) {
         issues.add("quality.min_score", "must be 0-100");
     }
-    if (q.motif < 0 || q.range < 0 || q.density < 0 || q.kick < 0 || q.intervals < 0 || q.rhythmVariety < 0 || q.proximity < 0 ||
+    if (q.motif < 0 || q.range < 0 || q.density < 0 || q.kick < 0 || q.intervals < 0 || q.rhythmVariety < 0 || q.proximity < 0 || q.historyDistance < 0 ||
         q.motif + q.range + q.density + q.kick + q.intervals + q.rhythmVariety <= 0) {
         issues.add("quality.weights", "must not be negative and at least one must be above 0");
     }
@@ -336,6 +336,7 @@ void readQuality(Reader& r, const json& root, QualityProfile& quality) {
         r.intValue(*weights, "intervals", "quality.weights", true, quality.intervals);
         r.intValue(*weights, "rhythm_variety", "quality.weights", true, quality.rhythmVariety);
         r.intValue(*weights, "proximity", "quality.weights", false, quality.proximity); // [v1.1] absent: 2
+        r.intValue(*weights, "history_distance", "quality.weights", false, quality.historyDistance); // [v1.1] absent: 1
     }
 }
 

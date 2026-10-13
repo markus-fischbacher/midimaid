@@ -452,6 +452,99 @@ TEST_CASE("the repetition protection never blocks a generation", "[generator][re
     CHECK(found);
 }
 
+TEST_CASE("the distance to the history is 100 minus the highest similarity", "[generator][repeat]") {
+    const StyleProfile style = loadShipped("peak_time");
+    const Pattern first = generateCandidate(style, requestFor(4, 6), 11);
+    const auto history = historyEntriesOf({first});
+    REQUIRE(checkCopyProtection(first, history).permille == 1000);
+    CHECK(historyDistanceScore(first, history) == 0); // the same pattern
+    const Pattern other = generateCandidate(style, requestFor(4, 6), 12);
+    const int permille = checkCopyProtection(other, history).permille;
+    CHECK(historyDistanceScore(other, history) == 100 - permille / 10);
+    CHECK(historyDistanceScore(other, history) > 0);
+    CHECK(historyDistanceScore(first, {}) == 100); // nothing to compare
+    auto inactive = history;
+    for (auto& entry : inactive) {
+        entry.active = false;
+    }
+    CHECK(historyDistanceScore(first, inactive) == 100);
+}
+
+TEST_CASE("the soft score has the criterion only with a history", "[generator][repeat]") {
+    const StyleProfile style = loadShipped("peak_time");
+    const Pattern pattern = generateCandidate(style, requestFor(4, 6), 11);
+    QualityContext context;
+    SoftScores scores = scoreCriteria(pattern, context);
+    CHECK(scores.historyDistance == 100);
+    CHECK(scores.historyDistancePct == 0);
+    const std::vector<ReferenceEntry> none;
+    context.history = &none;
+    CHECK(scoreCriteria(pattern, context).historyDistancePct == 0);
+    const auto history = historyEntriesOf({pattern});
+    context.history = &history;
+    scores = scoreCriteria(pattern, context);
+    CHECK(scores.historyDistancePct == 200);
+    CHECK(scores.historyDistance == 0);
+}
+
+TEST_CASE("a heavy weight on the distance chooses winners that are farther from the history", "[generator][repeat]") {
+    StyleProfile light = loadShipped("peak_time");
+    light.quality.historyDistance = 0;
+    StyleProfile heavy = light;
+    heavy.quality.historyDistance = 40;
+    int farther = 0;
+    for (uint64_t seed = 1; seed <= 12; ++seed) {
+        GenerationRequest request = requestFor(4, seed);
+        std::vector<Pattern> results;
+        for (uint64_t earlier = 100; earlier < 106; ++earlier) {
+            results.push_back(generateCandidate(light, requestFor(4, earlier), earlier));
+        }
+        request.history = historyEntriesOf(results);
+        const SelectionResult plain = generatePattern(light, request);
+        const SelectionResult careful = generatePattern(heavy, request);
+        REQUIRE((plain.success && careful.success));
+        CHECK(careful.scores.historyDistancePct == 200);
+        CHECK(careful.scores.historyDistance >= plain.scores.historyDistance);
+        CHECK_FALSE(checkCopyProtection(careful.pattern, request.history).violated);
+        farther += careful.scores.historyDistance > plain.scores.historyDistance ? 1 : 0;
+    }
+    CHECK(farther >= 1);
+}
+
+TEST_CASE("the stored rating of the winner does not depend on the history", "[generator][repeat]") {
+    StyleProfile style = loadShipped("peak_time");
+    style.quality.historyDistance = 40;
+    for (uint64_t seed = 1; seed <= 6; ++seed) {
+        GenerationRequest request = requestFor(4, seed);
+        std::vector<Pattern> results;
+        for (uint64_t earlier = 100; earlier < 104; ++earlier) {
+            results.push_back(generateCandidate(style, requestFor(4, earlier), earlier));
+        }
+        request.history = historyEntriesOf(results);
+        const SelectionResult result = generatePattern(style, request);
+        REQUIRE(result.success);
+        const Pattern replay = replayWinner(style, request, result.seed);
+        CHECK(replay == result.pattern);
+        CHECK(replay.qualityScore == result.pattern.qualityScore);
+    }
+}
+
+TEST_CASE("without a history the new criterion changes nothing", "[generator][repeat]") {
+    StyleProfile light = loadShipped("peak_time");
+    light.quality.historyDistance = 0;
+    StyleProfile heavy = light;
+    heavy.quality.historyDistance = 40;
+    for (uint64_t seed = 1; seed <= 6; ++seed) {
+        const GenerationRequest request = requestFor(4, seed);
+        const SelectionResult a = generatePattern(light, request);
+        const SelectionResult b = generatePattern(heavy, request);
+        REQUIRE((a.success && b.success));
+        CHECK(a.seed == b.seed);
+        CHECK(a.score == b.score);
+        CHECK(b.scores.historyDistancePct == 0);
+    }
+}
+
 TEST_CASE("generation around locks avoids the history for the generated voices", "[generator][repeat]") {
     const StyleProfile style = loadShipped("peak_time");
     GenerationRequest request = requestFor(4, 6);

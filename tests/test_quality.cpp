@@ -382,6 +382,26 @@ TEST_CASE("overallScore: weighted mean (hand computed)", "[quality]") {
     CHECK(overallScore(s, w, 100) == 53); // motif weight 1.5: 100000 / 1900
 }
 
+TEST_CASE("overallScore: the distance to the history counts with its weight only when there is a history", "[quality][repeat]") {
+    SoftScores s;
+    s.historyDistance = 40;
+    const QualityProfile w; // 3 1 2 2 2 1, history 1
+    CHECK(overallScore(s, w, 0) == 100); // no history (pct 0): the criterion is not there
+    s.historyDistancePct = 200;
+    CHECK(overallScore(s, w, 0) == 95); // (2200 * 100 + 200 * 40) / 2400
+    QualityProfile heavy;
+    heavy.historyDistance = 11;
+    CHECK(overallScore(s, heavy, 0) == 70); // (2200 * 100 + 2200 * 40) / 4400
+    heavy.historyDistance = 0;
+    CHECK(overallScore(s, heavy, 0) == 100); // weight 0
+    heavy.historyDistance = -4;
+    SoftScores low;
+    low.range = 0;
+    low.historyDistance = 0;
+    low.historyDistancePct = 200;
+    CHECK(overallScore(low, heavy, 0) == 91); // a negative weight counts as 0: 200000 / 2200
+}
+
 TEST_CASE("overallScore: rounding, zero weights, clamping", "[quality]") {
     QualityProfile two;
     two.motif = 1;

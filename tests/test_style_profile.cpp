@@ -394,3 +394,20 @@ TEST_CASE("the proximity weight is optional, two when absent, and not negative",
     const auto wrong = loadWith([](json& d) { d["quality"]["weights"]["proximity"] = "much"; });
     CHECK_FALSE(wrong.ok());
 }
+
+TEST_CASE("the history distance weight is optional, one when absent, and not negative", "[core][style]") {
+    for (const char* name : {"peak_time", "melodic_techno", "hard_industrial"}) {
+        CHECK(loadShipped(name).quality.historyDistance == 1);
+    }
+    const auto five = loadWith([](json& d) { d["quality"]["weights"]["history_distance"] = 5; });
+    REQUIRE(five.ok());
+    CHECK(five.profile->quality.historyDistance == 5);
+    const auto zero = loadWith([](json& d) { d["quality"]["weights"]["history_distance"] = 0; });
+    REQUIRE(zero.ok());
+    CHECK(zero.profile->quality.historyDistance == 0);
+    const auto negative = loadWith([](json& d) { d["quality"]["weights"]["history_distance"] = -1; });
+    CHECK_FALSE(negative.ok());
+    CHECK(negative.error.find("quality.weights") != std::string::npos);
+    const auto wrong = loadWith([](json& d) { d["quality"]["weights"]["history_distance"] = "much"; });
+    CHECK_FALSE(wrong.ok());
+}

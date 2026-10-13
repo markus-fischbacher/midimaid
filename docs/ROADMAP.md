@@ -254,6 +254,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] „Groove beim Export einrechnen“ und Flam-Hinweis bei Bass-Swing über 56 % (SPEC §3.9, STYLES §1.15, D-243)
 - [x] Chromatik-Regler (SPEC §3.8, D-219)
 - [x] Wiederholungsschutz mit Gewinner-Seed (SPEC §4.3, D-225)
+- [x] Weiches Kriterium „Abstand zum Verlauf“ (STYLES §1.14, D-244)
 
 **Bearbeitung**
 - [x] Sperren pro Dimension und Note (SPEC §3.5, D-231; die KI-Erzeugung beachtet nur ganz gesperrte Stimmen)

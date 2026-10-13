@@ -15,6 +15,7 @@ namespace mm::core {
 
 /// The soft criteria, each 0-100 (a voice without notes does not count; with no voice at all a criterion is 100).
 struct SetProfile;
+struct ReferenceEntry;
 
 struct SoftScores {
     int motif = 100;         ///< repetition of the bars of a voice
@@ -27,6 +28,9 @@ struct SoftScores {
     /// How much the proximity counts, in percent of its weight in the profile: 2 x "Persönlich" with a profile that has
     /// lines for the voices of the pattern, else 0 (the criterion is not there).
     int proximityPct = 0;
+    int historyDistance = 100; ///< distance to the last results of the slot: 100 minus the highest similarity (v1.1, D-244)
+    /// 200 when the generation has a history to keep away from (counts with its full weight), else 0.
+    int historyDistancePct = 0;
 
     bool operator==(const SoftScores&) const = default;
 };
@@ -39,6 +43,8 @@ struct QualityContext {
     std::vector<bool> ignoresKick; ///< per voice (pattern order): the archetype may hold over kicks (`long_tied`)
     const SetProfile* profile = nullptr; ///< the profile of the reference set (non-owning, null: no proximity, D-242)
     int personalPct = 50;                ///< 0-100: the weight of the proximity
+    /// The entries of the history to keep away from (non-owning, null or empty: no criterion, D-244).
+    const std::vector<ReferenceEntry>* history = nullptr;
 
     bool operator==(const QualityContext&) const = default;
 };
@@ -63,6 +69,11 @@ SoftScores scoreCriteria(const Pattern& pattern, const QualityContext& context);
 /// (the smaller of notes per bar and the profile's, over the larger). The mean over these voices. nullopt when the
 /// profile is invalid or has no lines for any voice of the pattern.
 std::optional<int> proximityScore(const Pattern& pattern, const SetProfile& profile);
+
+/// How far the pattern is from the entries of `history`, 0-100 (D-244): 100 minus the highest similarity in percent that
+/// `checkCopyProtection` finds (same metric as the repetition protection: distinctive lines of the same role only, locked
+/// voices left out). 100 when nothing could be compared.
+int historyDistanceScore(const Pattern& pattern, const std::vector<ReferenceEntry>& history);
 
 /// Weighted mean of the criteria with the weights of the profile, rounded half up to 0-100. With high creativity the
 /// weight of the motif criterion shrinks to `(100 - creativity / 2) %` (SPEC 7.6). All weights 0 give 100.
