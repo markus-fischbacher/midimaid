@@ -58,6 +58,9 @@ public:
     /// Changes of the list (message thread, written in the background). False for an unknown id.
     bool remove(const std::string& id);
     bool rename(const std::string& id, const std::string& name);
+    /// Sets the tags, the rating and the tempo range of an entry (sanitized, SPEC 3.12, v1.1, D-237): the list shows
+    /// them at once, the file and the index follow in the background. False for an unknown id.
+    bool setMeta(const std::string& id, const mm::core::LibraryMeta& meta);
 
     /// Called on the message thread after every change of the list. Set it once, before the first use.
     void setOnChanged(std::function<void()> callback);

@@ -1267,6 +1267,71 @@ void ProcessorBase::applyLibraryEntry(size_t index, mm::core::LibraryLoadResult 
                                                 : GenerationStatus::LibraryLoaded;
 }
 
+bool ProcessorBase::previewLibraryEntry(const std::string& id) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    if (!libraryStore().info(id)) {
+        generationStatus_ = GenerationStatus::LibraryLoadFailed;
+        return false;
+    }
+    const auto alive = libraryAlive_;
+    libraryStore().load(id, [this, alive](mm::core::LibraryLoadResult loaded) {
+        if (*alive) {
+            startLibraryPreview(std::move(loaded));
+        }
+    });
+    return true;
+}
+
+void ProcessorBase::startLibraryPreview(mm::core::LibraryLoadResult loaded) {
+    if (!loaded.ok()) {
+        generationStatus_ = GenerationStatus::LibraryLoadFailed;
+        return;
+    }
+    const auto& entry = *loaded.entry;
+    std::optional<mm::core::Pattern> pattern = entry.pattern;
+    for (size_t i = 0; !pattern && entry.set && i < mm::core::kSlotCount; ++i) {
+        if (const auto content = entry.set->copy(i); content && content->pattern) {
+            pattern = content->pattern;
+        }
+    }
+    if (!pattern) {
+        generationStatus_ = GenerationStatus::LibraryLoadFailed;
+        return;
+    }
+    endPreviewOverlay(); // another entry is playing: its slot comes back first
+    const size_t index = static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        publisher_.publishPattern(index, *pattern, 4.0);
+        previewOverlaySlot_ = index;
+    }
+    setPreview(true);
+}
+
+void ProcessorBase::endPreviewOverlay() {
+    if (!previewOverlaySlot_) {
+        return;
+    }
+    const juce::ScopedLock lock(slotsLock_);
+    publisher_.reset(); // what is in the slot comes back (and an empty slot becomes silent again)
+    publisher_.sync(slots_);
+    previewOverlaySlot_.reset();
+}
+
+void ProcessorBase::stopLibraryPreview() {
+    setPreview(false);
+    endPreviewOverlay();
+}
+
+void ProcessorBase::pollPreview() {
+    if (previewOverlaySlot_ && !previewing()) {
+        endPreviewOverlay();
+    }
+}
+
 bool ProcessorBase::exportLibraryEntry(const std::string& id, const juce::File& target) {
     if (!libraryStore().info(id)) {
         generationStatus_ = GenerationStatus::LibraryExportFailed;

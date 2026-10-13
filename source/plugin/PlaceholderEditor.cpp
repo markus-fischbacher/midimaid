@@ -1501,6 +1501,7 @@ void PlaceholderEditor::timerCallback() {
         applyRollHelpers();
     }
     updateStatus();
+    processor_.pollPreview();
     updatePreviewButton();
     processor_.updateExport();
 }

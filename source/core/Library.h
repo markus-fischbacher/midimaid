@@ -22,6 +22,32 @@ constexpr size_t kMaxLibraryEntries = 5000;
 
 enum class LibraryKind { Pattern, Set };
 
+/// What the user adds to an entry (SPEC 3.12, v1.1, D-237): tags, a rating of 1 to 5 stars (0: none) and a tempo range in
+/// BPM (0: none) that says at which tempo the entry fits.
+constexpr size_t kMaxLibraryTags = 12;
+constexpr size_t kMaxLibraryTagBytes = 24;
+constexpr int kMinLibraryBpm = 20;
+constexpr int kMaxLibraryBpm = 300;
+struct LibraryMeta {
+    std::vector<std::string> tags;
+    uint8_t rating = 0;
+    uint16_t bpmLow = 0;
+    uint16_t bpmHigh = 0;
+
+    bool operator==(const LibraryMeta&) const = default;
+};
+
+/// Tags in order: trimmed, without control characters and commas, cut to `kMaxLibraryTagBytes` at a character boundary,
+/// no empty ones, no duplicates (the first spelling stays; case does not count), at most `kMaxLibraryTags`.
+std::vector<std::string> sanitizeLibraryTags(std::vector<std::string> tags);
+/// "dark, rolling; 130 bpm" as tags (commas and semicolons separate); sanitized.
+std::vector<std::string> parseLibraryTags(std::string_view text);
+/// The tags as the text of the editor: "dark, rolling".
+std::string libraryTagsToText(const std::vector<std::string>& tags);
+/// The meta data in order: tags sanitized, the rating 0 to 5, the tempo range inside 20 to 300 BPM and low <= high; a
+/// range with only one end becomes that tempo; both ends zero (or both out of range) is no range.
+LibraryMeta sanitizeLibraryMeta(LibraryMeta meta);
+
 /// What the list shows: name, style, key, seed and prompt (SPEC 3.12). For a set these are the values of its first
 /// filled slot.
 struct LibraryEntryInfo {
@@ -36,9 +62,33 @@ struct LibraryEntryInfo {
     uint32_t lengthBars = 0;
     uint32_t slotCount = 1; ///< slots with a pattern (1 for a pattern)
     int64_t createdUnixMs = 0;
+    std::vector<std::string> tags; ///< (v1.1) see `LibraryMeta`
+    uint8_t rating = 0;            ///< 1 to 5 stars, 0: none
+    uint16_t bpmLow = 0;           ///< tempo range the entry fits, 0: none
+    uint16_t bpmHigh = 0;
 
     bool operator==(const LibraryEntryInfo&) const = default;
 };
+
+LibraryMeta metaOf(const LibraryEntryInfo& info);
+void setMeta(LibraryEntryInfo& info, const LibraryMeta& meta);
+
+/// What the list of the library is narrowed to (SPEC 3.12): a text that is part of the name, the prompt, the style or a
+/// tag (case does not count), a tag, at least that many stars, a tempo that lies in the range of the entry (an entry
+/// without a range does not fit a tempo), a style.
+struct LibraryFilter {
+    std::string text;
+    std::string tag;
+    int minRating = 0;
+    std::optional<int> bpm;
+    std::string styleId;
+
+    bool operator==(const LibraryFilter&) const = default;
+    bool empty() const { return text.empty() && tag.empty() && minRating <= 0 && !bpm.has_value() && styleId.empty(); }
+};
+bool matchesFilter(const LibraryEntryInfo& info, const LibraryFilter& filter);
+/// The entries that match, in their order.
+std::vector<LibraryEntryInfo> filterLibrary(const std::vector<LibraryEntryInfo>& entries, const LibraryFilter& filter);
 
 struct LibraryEntry {
     LibraryEntryInfo info;

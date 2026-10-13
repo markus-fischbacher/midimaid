@@ -268,7 +268,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Melodie „mit/gegen Hats“ (SPEC §3.14, D-228)
 
 **Komfort**
-- [ ] Bibliothek: Tags, BPM, Bewertung, Suche, Filter, Vorhören
+- [x] Bibliothek: Tags, BPM, Bewertung, Suche, Filter, Vorhören (D-237; Host-Prüfung H86)
 - [x] Englische Sprachdatei, Sprachumschaltung (D-224)
 - [x] Notennamen-Konvention wählbar (D-221)
 - [x] Token- und Kostenanzeige, `pricing.json` (D-223)

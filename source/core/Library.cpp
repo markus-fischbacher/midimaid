@@ -7,6 +7,7 @@
 #include "core/SlotBankJson.h"
 
 #include <algorithm>
+#include <cctype>
 #include <nlohmann/json.hpp>
 
 namespace mm::core {
@@ -113,6 +114,142 @@ std::optional<LibraryEntry> makeSetEntry(std::string id, std::string_view name, 
     return entry;
 }
 
+namespace {
+
+std::string lowerCase(std::string_view text) {
+    std::string result(text);
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return result;
+}
+
+} // namespace
+
+std::vector<std::string> sanitizeLibraryTags(std::vector<std::string> tags) {
+    std::vector<std::string> result;
+    for (auto& raw : tags) {
+        std::string tag;
+        for (const char ch : raw) {
+            if (static_cast<unsigned char>(ch) >= 32 && ch != 127 && ch != ',' && ch != ';') {
+                tag += ch;
+            }
+        }
+        const auto first = tag.find_first_not_of(' ');
+        if (first == std::string::npos) {
+            continue;
+        }
+        tag = tag.substr(first, tag.find_last_not_of(' ') - first + 1);
+        if (tag.size() > kMaxLibraryTagBytes) {
+            size_t cut = kMaxLibraryTagBytes;
+            while (cut > 0 && (static_cast<unsigned char>(tag[cut]) & 0xC0) == 0x80) {
+                --cut; // not in the middle of a UTF-8 character
+            }
+            tag = tag.substr(0, cut);
+        }
+        if (tag.empty()) {
+            continue;
+        }
+        const bool duplicate = std::any_of(result.begin(), result.end(), [&](const std::string& other) { return lowerCase(other) == lowerCase(tag); });
+        if (!duplicate && result.size() < kMaxLibraryTags) {
+            result.push_back(std::move(tag));
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> parseLibraryTags(std::string_view text) {
+    std::vector<std::string> parts;
+    std::string current;
+    for (const char ch : text) {
+        if (ch == ',' || ch == ';') {
+            parts.push_back(current);
+            current.clear();
+        } else {
+            current += ch;
+        }
+    }
+    parts.push_back(current);
+    return sanitizeLibraryTags(std::move(parts));
+}
+
+std::string libraryTagsToText(const std::vector<std::string>& tags) {
+    std::string text;
+    for (const auto& tag : tags) {
+        text += (text.empty() ? "" : ", ") + tag;
+    }
+    return text;
+}
+
+LibraryMeta sanitizeLibraryMeta(LibraryMeta meta) {
+    meta.tags = sanitizeLibraryTags(std::move(meta.tags));
+    meta.rating = static_cast<uint8_t>(std::min<int>(meta.rating, 5));
+    const auto inRange = [](int value) { return value >= kMinLibraryBpm && value <= kMaxLibraryBpm; };
+    int low = meta.bpmLow;
+    int high = meta.bpmHigh;
+    if (!inRange(low) && !inRange(high)) {
+        low = high = 0;
+    } else if (!inRange(low)) {
+        low = high;
+    } else if (!inRange(high)) {
+        high = low;
+    }
+    if (low > high) {
+        std::swap(low, high);
+    }
+    meta.bpmLow = static_cast<uint16_t>(low);
+    meta.bpmHigh = static_cast<uint16_t>(high);
+    return meta;
+}
+
+LibraryMeta metaOf(const LibraryEntryInfo& info) {
+    return {info.tags, info.rating, info.bpmLow, info.bpmHigh};
+}
+
+void setMeta(LibraryEntryInfo& info, const LibraryMeta& meta) {
+    const LibraryMeta clean = sanitizeLibraryMeta(meta);
+    info.tags = clean.tags;
+    info.rating = clean.rating;
+    info.bpmLow = clean.bpmLow;
+    info.bpmHigh = clean.bpmHigh;
+}
+
+bool matchesFilter(const LibraryEntryInfo& info, const LibraryFilter& filter) {
+    if (!filter.styleId.empty() && info.styleId != filter.styleId) {
+        return false;
+    }
+    if (info.rating < filter.minRating) {
+        return false;
+    }
+    if (filter.bpm.has_value() && (info.bpmHigh == 0 || *filter.bpm < info.bpmLow || *filter.bpm > info.bpmHigh)) {
+        return false;
+    }
+    if (!filter.tag.empty()) {
+        const std::string wanted = lowerCase(filter.tag);
+        if (std::none_of(info.tags.begin(), info.tags.end(), [&](const std::string& tag) { return lowerCase(tag) == wanted; })) {
+            return false;
+        }
+    }
+    if (!filter.text.empty()) {
+        const std::string wanted = lowerCase(filter.text);
+        const auto has = [&](const std::string& field) { return lowerCase(field).find(wanted) != std::string::npos; };
+        const bool found = has(info.name) || has(info.prompt) || has(info.styleId) ||
+                           std::any_of(info.tags.begin(), info.tags.end(), has);
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<LibraryEntryInfo> filterLibrary(const std::vector<LibraryEntryInfo>& entries, const LibraryFilter& filter) {
+    std::vector<LibraryEntryInfo> result;
+    for (const auto& entry : entries) {
+        if (matchesFilter(entry, filter)) {
+            result.push_back(entry);
+        }
+    }
+    return result;
+}
+
 std::string libraryEntryToString(const LibraryEntry& entry) {
     const auto& i = entry.info;
     json root{{"libraryVersion", kLibraryEntryVersion},
@@ -126,6 +263,16 @@ std::string libraryEntryToString(const LibraryEntry& entry) {
               {"bars", i.lengthBars},
               {"slotCount", i.slotCount},
               {"created", i.createdUnixMs}};
+    if (!i.tags.empty()) { // only when set: entries of before and entries without meta data stay as they are
+        root["tags"] = i.tags;
+    }
+    if (i.rating > 0) {
+        root["rating"] = static_cast<int>(i.rating);
+    }
+    if (i.bpmHigh > 0) {
+        root["bpmLow"] = static_cast<int>(i.bpmLow);
+        root["bpmHigh"] = static_cast<int>(i.bpmHigh);
+    }
     if (i.kind == LibraryKind::Pattern && entry.pattern) {
         root["pattern"] = patternToJson(*entry.pattern);
         root["slotName"] = entry.slotName.value_or("");
@@ -181,6 +328,20 @@ LibraryLoadResult loadLibraryEntry(std::string_view text, std::string_view idFro
     info.lengthBars = static_cast<uint32_t>(std::clamp<int64_t>(number("bars", 0), 0, 16));
     info.slotCount = static_cast<uint32_t>(std::clamp<int64_t>(number("slotCount", 1), 0, kSlotCount));
     info.createdUnixMs = number("created", 0);
+    {
+        LibraryMeta meta;
+        if (const auto it = document.find("tags"); it != document.end() && it->is_array()) {
+            for (const auto& tag : *it) {
+                if (tag.is_string()) {
+                    meta.tags.push_back(tag.get<std::string>());
+                }
+            }
+        }
+        meta.rating = static_cast<uint8_t>(std::clamp<int64_t>(number("rating", 0), 0, 5));
+        meta.bpmLow = static_cast<uint16_t>(std::clamp<int64_t>(number("bpmLow", 0), 0, 65535));
+        meta.bpmHigh = static_cast<uint16_t>(std::clamp<int64_t>(number("bpmHigh", 0), 0, 65535));
+        setMeta(info, meta);
+    }
 
     if (info.kind == LibraryKind::Pattern) {
         const auto it = document.find("pattern");

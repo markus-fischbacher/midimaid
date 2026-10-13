@@ -333,6 +333,34 @@ bool LibraryStore::rename(const std::string& id, const std::string& name) {
     return true;
 }
 
+bool LibraryStore::setMeta(const std::string& id, const mm::core::LibraryMeta& meta) {
+    const auto clean = mm::core::sanitizeLibraryMeta(meta);
+    {
+        const juce::ScopedLock lock(lock_);
+        const auto it = infos_.find(id);
+        if (it == infos_.end()) {
+            return false;
+        }
+        mm::core::setMeta(it->second, clean);
+        if (!enabled()) {
+            mm::core::setMeta(memory_.at(id).info, clean);
+        }
+    }
+    if (enabled()) {
+        pool_.addJob([this, id, clean] {
+            const auto file = fileFor(id);
+            auto loaded = mm::core::loadLibraryEntry(file.loadFileAsString().toStdString(), id);
+            if (loaded.ok()) {
+                mm::core::setMeta(loaded.entry->info, clean);
+                writeFileAtomically(file, mm::core::libraryEntryToString(*loaded.entry));
+            }
+        });
+        scheduleIndex();
+    }
+    changed();
+    return true;
+}
+
 void LibraryStore::waitForIdle() {
     pool_.addJob([] {}); // one worker: when this has run, everything before it has
     while (pool_.getNumJobs() > 0) {
