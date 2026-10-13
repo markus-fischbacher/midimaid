@@ -4,6 +4,7 @@
 #include "core/TextKeys.h"
 #include "core/Theory.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
 #include "plugin/ProcessorBase.h"
 
@@ -243,6 +244,40 @@ TEST_CASE("the export holds the resolved passes when notes have conditions", "[p
     const std::vector<int> expected{480, 2400, 3360, 3840 + 480, 3840 + 1440, 3840 + 3360};
     CHECK(starts == expected);
     CHECK(lastEnd <= 2 * 3840);
+}
+
+TEST_CASE("with the export of all notes the conditions are not evaluated", "[plugin][export][probability]") {
+    juce::TemporaryFile settingsFile;
+    mm::plugin::GlobalSettingsStore store(settingsFile.getFile());
+    for (int i = 0; i < 400 && !store.ready(); ++i) {
+        juce::Thread::sleep(5);
+    }
+    REQUIRE(store.ready());
+    store.update([](mm::core::GlobalSettings& settings) { settings.exportAllNotes = true; });
+    mm::plugin::overrideGlobalSettings(&store);
+    struct Restore {
+        ~Restore() { mm::plugin::overrideGlobalSettings(nullptr); }
+    } restore;
+    mm::plugin::InstrumentProcessor processor("Test");
+    mm::core::Pattern pattern = offbeatBass(45);
+    pattern.voices[0].notes[1].condA = 2;
+    pattern.voices[0].notes[1].condB = 2;
+    fillSlot(processor, 0, pattern);
+    FakePlayHead head;
+    setHostTempo(processor, head, 120.0);
+    processor.updateExport();
+    REQUIRE(waitForExport(processor.midiExporter(), 120.0));
+    juce::MidiFile midi;
+    juce::FileInputStream stream(processor.midiExporter().readyFile());
+    REQUIRE(midi.readFrom(stream));
+    int notes = 0;
+    double lastEnd = 0.0;
+    for (const auto* event : *midi.getTrack(0)) {
+        notes += event->message.isNoteOn() ? 1 : 0;
+        lastEnd = std::max(lastEnd, event->message.getTimeStamp());
+    }
+    CHECK(notes == 4);             // all of them, in one pass
+    CHECK(lastEnd <= 3840);
 }
 
 TEST_CASE("a pattern without chances is exported as it is", "[plugin][export][probability]") {
@@ -1507,4 +1542,129 @@ TEST_CASE("the export carries the live transposition and follows it, and it can 
     setHostTempo(processor, head, 120.0);
     processor.updateExport();
     CHECK(waitFor(45) == 45);
+}
+
+namespace {
+
+std::unique_ptr<mm::engine::OwnedPattern> twoBarPattern(std::vector<std::pair<uint32_t, uint8_t>> notes) {
+    auto pattern = std::make_unique<mm::engine::OwnedPattern>();
+    for (const auto& [start, pitch] : notes) {
+        mm::core::PatternNote note{start, 240, 1, pitch, 100};
+        pattern->notes.push_back(note);
+    }
+    pattern->lengthTicks = 8 * 960;
+    return pattern;
+}
+
+/// The note-ons (song position in PPQ, pitch) of a run in which the second pattern is handed over at PPQ 9.
+std::vector<std::pair<double, int>> switchRun(bool legato) {
+    constexpr double kSampleRate = 48000.0;
+    constexpr int kBlock = 512;
+    mm::plugin::InstrumentProcessor processor("Test");
+    auto settings = processor.instanceSettings();
+    settings.legato = legato;
+    processor.setInstanceSettings(settings);
+    processor.switchPattern(twoBarPattern({{0, 40}}));
+    FakePlayHead head;
+    processor.setRateAndBufferSizeDetails(kSampleRate, kBlock);
+    processor.setPlayHead(&head);
+    processor.prepareToPlay(kSampleRate, kBlock);
+    std::vector<std::pair<double, int>> result;
+    juce::AudioBuffer<float> audio(2, kBlock);
+    juce::MidiBuffer midi;
+    long long clock = 0;
+    bool handedOver = false;
+    while (clock < static_cast<long long>(26.0 * kSampleRate / 2.0)) {
+        const double ppq = static_cast<double>(clock) / kSampleRate * 2.0;
+        if (!handedOver && ppq >= 9.0) {
+            processor.switchPattern(twoBarPattern({{0, 50}, {4 * 960, 51}}), 4.0); // takes effect at 12.0
+            handedOver = true;
+        }
+        head.info.setIsPlaying(true);
+        head.info.setBpm(120.0);
+        head.info.setPpqPosition(ppq);
+        audio.clear();
+        midi.clear();
+        processor.processBlock(audio, midi);
+        for (const auto metadata : midi) {
+            const auto message = metadata.getMessage();
+            if (message.isNoteOn()) {
+                result.emplace_back(std::round((static_cast<double>(clock + metadata.samplePosition) / kSampleRate * 2.0) * 100.0) / 100.0,
+                                    message.getNoteNumber());
+            }
+        }
+        clock += kBlock;
+    }
+    return result;
+}
+
+std::vector<double> startsOfPitch(const std::vector<std::pair<double, int>>& events, int pitch) {
+    std::vector<double> starts;
+    for (const auto& [ppq, p] : events) {
+        if (p == pitch) {
+            starts.push_back(ppq);
+        }
+    }
+    return starts;
+}
+
+} // namespace
+
+TEST_CASE("the start setting of the instance decides where a new pattern begins", "[plugin][legato]") {
+    const auto restart = switchRun(false);
+    const auto first = startsOfPitch(restart, 50);
+    const auto second = startsOfPitch(restart, 51);
+    REQUIRE_FALSE(first.empty());
+    REQUIRE_FALSE(second.empty());
+    CHECK(std::abs(first.front() - 12.0) < 0.05);  // position 0 at the switch point
+    CHECK(std::abs(second.front() - 16.0) < 0.05);
+
+    const auto legato = switchRun(true);
+    const auto lFirst = startsOfPitch(legato, 50);
+    const auto lSecond = startsOfPitch(legato, 51);
+    REQUIRE_FALSE(lFirst.empty());
+    REQUIRE_FALSE(lSecond.empty());
+    CHECK(std::abs(lSecond.front() - 12.0) < 0.05); // song position 12 is position 4 of the two bars
+    CHECK(std::abs(lFirst.front() - 16.0) < 0.05);
+}
+
+TEST_CASE("the preview runs at 125 BPM when the host never reported a tempo, else at the last one", "[plugin][preview]") {
+    constexpr double kSampleRate = 48000.0;
+    constexpr int kBlock = 512;
+    for (const double hostBpm : {0.0, 90.0}) {
+        mm::plugin::InstrumentProcessor processor("Test");
+        useOffbeatPattern(processor); // the first note starts at 0.5 PPQ
+        FakePlayHead head;
+        processor.setRateAndBufferSizeDetails(kSampleRate, kBlock);
+        processor.setPlayHead(&head);
+        processor.prepareToPlay(kSampleRate, kBlock);
+        juce::AudioBuffer<float> audio(2, kBlock);
+        juce::MidiBuffer midi;
+        if (hostBpm > 0.0) { // one block of a host that stands still but knows its tempo
+            head.info.setIsPlaying(false);
+            head.info.setBpm(hostBpm);
+            head.info.setPpqPosition(0.0);
+            processor.processBlock(audio, midi);
+        } else {
+            head.available = false;
+        }
+        processor.setPreview(true);
+        long long clock = 0;
+        long long firstOn = -1;
+        for (int block = 0; block < 60 && firstOn < 0; ++block) {
+            audio.clear();
+            midi.clear();
+            processor.processBlock(audio, midi);
+            for (const auto metadata : midi) {
+                if (metadata.getMessage().isNoteOn() && firstOn < 0) {
+                    firstOn = clock + metadata.samplePosition;
+                }
+            }
+            clock += kBlock;
+        }
+        const double bpm = hostBpm > 0.0 ? hostBpm : 125.0;
+        INFO("tempo " << bpm);
+        REQUIRE(firstOn >= 0);
+        CHECK(std::abs(firstOn - std::llround(0.5 * 60.0 / bpm * kSampleRate)) <= 1);
+    }
 }

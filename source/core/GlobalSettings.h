@@ -50,6 +50,7 @@ struct GlobalSettings {
     std::string language = "auto";              ///< the UI language: "auto" (system), "de" or "en" (SPEC 8.2)
     int middleC = 3;                            ///< octave number of MIDI note 60: 3 (Live, Logic) or 4
     bool snapChromatic = false;                 ///< pitch snapping: chromatic instead of to the scale
+    bool exportAllNotes = false; ///< the MIDI export holds every note, chances and conditions not evaluated (SPEC 3.4)
     bool rollFold = false;    ///< the roll shows only the tones of the scale as rows (SPEC 3.5, D-232)
     bool rollGuides = true;   ///< the roll draws the phrase borders and the kick grid in the background
     bool rollMarkers = false; ///< the roll has a row for the accent and slide marks of the notes

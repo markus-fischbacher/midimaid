@@ -1767,3 +1767,151 @@ TEST_CASE("deciding the passes allocates nothing", "[engine][probability][realti
     CHECK(gAllocations.load() == 0);
     CHECK(events > 100);
 }
+
+// -- where a new pattern starts: restart or legato (SPEC 3.4, 6.1, D-236) -------------------------------------------
+
+namespace {
+
+// Two bars (8 PPQ): the old pattern has one note at 0, the new one a note at the start (50) and one a bar later (51).
+const PatternNote kOldTwoBars[] = {{0, 240, 1, 40, 100}};
+const PatternNote kNewTwoBars[] = {{0, 240, 1, 50, 100}, {4 * kTicksPerQuarter, 240, 1, 51, 100}};
+
+PatternView twoBars(const PatternNote* notes, size_t count) {
+    return {notes, count, 8 * kTicksPerQuarter};
+}
+
+/// The song positions (PPQ) of the note-ons of `pitch`, rounded to a hundredth.
+std::vector<double> startsOf(const std::vector<Event>& events, uint8_t pitch) {
+    std::vector<double> result;
+    for (const auto& e : ofPitch(events, pitch, true)) {
+        result.push_back(std::round(e.ppq * 100.0) / 100.0);
+    }
+    return result;
+}
+
+std::vector<Event> runSwitch(bool legato, double point) {
+    Simulation sim(twoBars(kOldTwoBars, 1));
+    sim.player().setLegato(legato);
+    sim.setPpq(1.0);
+    sim.block(512);
+    sim.player().requestSwitchAt(twoBars(kNewTwoBars, 2), point, 4.0);
+    while (sim.clock() < 26 * 24000) { // 1 PPQ = 24000 samples at 120 BPM
+        sim.block(256);
+    }
+    return sim.events();
+}
+
+} // namespace
+
+TEST_CASE("a pattern of two bars restarts at the switch point", "[engine][switch][legato]") {
+    const auto events = runSwitch(false, 12.0); // not on a multiple of the pattern length
+    // the new pattern begins at 12.0 with its position 0, its second note a bar (4 PPQ) later
+    const auto first = startsOf(events, 50);
+    const auto second = startsOf(events, 51);
+    REQUIRE_FALSE(first.empty());
+    REQUIRE_FALSE(second.empty());
+    CHECK(first.front() == Catch::Approx(12.0).margin(0.02));
+    CHECK(second.front() == Catch::Approx(16.0).margin(0.02));
+    CHECK(first.size() >= 1);
+    // the pattern repeats from there: 12 + 8 = 20 is the next start of the first note
+    if (first.size() >= 2) {
+        CHECK(first[1] == Catch::Approx(20.0).margin(0.02));
+    }
+}
+
+TEST_CASE("in legato the position runs on across the switch", "[engine][switch][legato]") {
+    const auto events = runSwitch(true, 12.0);
+    // song position 12 is position 4 of a pattern of two bars that started at 0: the second note comes first
+    const auto first = startsOf(events, 50);
+    const auto second = startsOf(events, 51);
+    REQUIRE_FALSE(second.empty());
+    REQUIRE_FALSE(first.empty());
+    CHECK(second.front() == Catch::Approx(12.0).margin(0.02));
+    CHECK(first.front() == Catch::Approx(16.0).margin(0.02));
+}
+
+TEST_CASE("a switch on a multiple of the pattern length is the same in both modes", "[engine][switch][legato]") {
+    for (const bool legato : {false, true}) {
+        const auto events = runSwitch(legato, 16.0);
+        const auto first = startsOf(events, 50);
+        REQUIRE_FALSE(first.empty());
+        CHECK(first.front() == Catch::Approx(16.0).margin(0.02));
+    }
+}
+
+TEST_CASE("after a start or a jump the song grid decides in both modes", "[engine][switch][legato]") {
+    for (const bool legato : {false, true}) {
+        Simulation sim(twoBars(kNewTwoBars, 2));
+        sim.player().setLegato(legato);
+        sim.setPpq(10.0); // a start in the middle: position 2 of a pattern that started at 0
+        for (int i = 0; i < 6 * 24000 / 256; ++i) {
+            sim.block(256);
+        }
+        const auto second = startsOf(sim.events(), 51);
+        REQUIRE_FALSE(second.empty());
+        CHECK(second.front() == Catch::Approx(12.0).margin(0.02)); // the note at position 4, from the grid of the song
+        // a jump back to 3.0: the position is 3 modulo 8
+        sim.blockAt(3.0, 256);
+        for (int i = 0; i < 6 * 24000 / 256; ++i) {
+            sim.block(256);
+        }
+        const auto after = startsOf(sim.events(), 51);
+        CHECK(after.back() == Catch::Approx(4.0).margin(0.02)); // the second note at song position 4.0
+    }
+}
+
+TEST_CASE("the passes of a restarted pattern count from the switch", "[engine][switch][legato][probability]") {
+    PatternNote sometimes{0, 240, 1, 60, 100};
+    sometimes.noteId = 1;
+    sometimes.condA = 1;
+    sometimes.condB = 2; // every other pass, starting with the first
+    const PatternNote notes[] = {sometimes};
+    PatternView view{notes, 1, 4 * kTicksPerQuarter};
+    view.seed = 1;
+    Simulation sim(twoBars(kOldTwoBars, 1));
+    sim.setPpq(1.0);
+    sim.block(512);
+    sim.player().requestSwitchAt(view, 12.0, 4.0); // a bar of 4 PPQ: pass 0 is at 12, pass 1 at 16, pass 2 at 20 ...
+    while (sim.clock() < 26 * 24000) { // 1 PPQ = 24000 samples at 120 BPM
+        sim.block(256);
+    }
+    const auto starts = startsOf(sim.events(), 60);
+    REQUIRE(starts.size() >= 2);
+    CHECK(starts[0] == Catch::Approx(12.0).margin(0.02));
+    CHECK(starts[1] == Catch::Approx(20.0).margin(0.02));
+}
+
+TEST_CASE("a jump after a restart brings the position back to the song grid", "[engine][switch][legato]") {
+    Simulation sim(twoBars(kOldTwoBars, 1));
+    sim.setPpq(1.0);
+    sim.block(512);
+    sim.player().requestSwitchAt(twoBars(kNewTwoBars, 2), 12.0, 4.0); // a restart: position 0 lies at 12.0
+    while (sim.clock() < 15 * 24000) {
+        sim.block(256);
+    }
+    // a jump back to 1.0: the song grid decides again, so the note at position 4 sounds at song position 4.0
+    sim.blockAt(1.0, 256);
+    while (sim.clock() < 15 * 24000 + 6 * 24000) {
+        sim.block(256);
+    }
+    const auto second = startsOf(sim.events(), 51);
+    REQUIRE_FALSE(second.empty());
+    CHECK(second.back() == Catch::Approx(4.0).margin(0.02));
+}
+
+TEST_CASE("a loop wrap after a restart brings the position back to the song grid", "[engine][switch][legato]") {
+    Simulation sim(twoBars(kOldTwoBars, 1));
+    sim.setLoop(0.0, 16.0);
+    sim.setPpq(1.0);
+    sim.block(512);
+    sim.player().requestSwitchAt(twoBars(kNewTwoBars, 2), 12.0, 4.0);
+    while (sim.clock() < 22 * 24000) {
+        sim.blockWithLoopWrap(256);
+    }
+    // after the wrap (at 16.0) the song position starts at 0 again, which is position 0 of the pattern: its first note
+    // sounds in the sample of the wrap (the restart at 12.0 gave the first one)
+    const auto first = startsOf(sim.events(), 50);
+    REQUIRE(first.size() >= 2);
+    CHECK(first[0] == Catch::Approx(12.0).margin(0.02));
+    CHECK(first[1] == Catch::Approx(16.0).margin(0.05));
+}

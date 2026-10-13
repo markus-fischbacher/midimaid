@@ -171,6 +171,8 @@ Jede Stimme hat einen **Griff**, den du in die DAW ziehst: Das ergibt eine `.mid
 mit der Oktave der Instanz. Zum **Aufnehmen** auf die Synth-Spur siehe `docs/SETUP-HILFE.md` (Routing, Monitoring,
 Aufnahme, Freeze, Arrangement).
 
+**Einsatz und Vorhören:** Wechselt ein Slot beim Spielen, beginnt das neue Pattern beim nächsten Takt mit seinem ersten Takt (*Einsatz: Neustart*). Im Experten-Modus stellst du *Einsatz: Legato* ein: Dann läuft die Position weiter, wie in Lives Legato-Modus. Stell das bei Hub und Voices gleich ein. Mit **Vorhören** (rechts in der Leiste des Hubs) spielt der gewählte Slot auch bei stehendem Transport, im Tempo der DAW (sonst mit 125 BPM); die Voices spielen mit. Der Start des Transports beendet das Vorhören. Beim Herausziehen als MIDI kannst du in den Einstellungen *alle Noten* wählen (ohne die Auswertung von Wahrscheinlichkeit und Bedingungen).
+
 **Tastenkürzel:** MidiMaid belegt von sich aus keine Taste, damit es nicht mit dem Host kollidiert. In den Einstellungen unter *Tastenkürzel* wählst du eine Aktion (Erzeugen, Rückgängig, Variation, Raster enger, Noten eine Oktave hoch, Spurfokus und weitere), drückst *Taste zuweisen* und dann die Taste, die du willst. *Entfernen* löscht die Belegung, *Standard wiederherstellen* alle. Die Leertaste bleibt immer bei der DAW. Ein Kürzel gilt nur, wenn das Plugin-Fenster den Fokus hat (ein Klick ins Fenster genügt); eine Taste ohne Umschalt-, Cmd/Strg- oder Alt-Taste wirkt nicht, solange du in ein Textfeld tippst. Manche Hosts verarbeiten einzelne Tasten selbst (Esc in Live, Cmd+Z in Logic).
 
 ## 10. Automation

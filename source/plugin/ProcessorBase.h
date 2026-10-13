@@ -296,6 +296,11 @@ public:
     /// Message thread: locks or unlocks a voice of the slot (0-based indices, SPEC 3.5). An undo step like a note edit.
     /// False in a voice, for an empty slot or when the lock is already as asked.
     bool setVoiceLocked(size_t slotIndex, size_t voice, bool locked);
+    /// The preview (SPEC 3.11, v1.1, D-236): plays the selected slot with an internal clock while the host transport stands
+    /// still, at the tempo of the host (the last known one, else 125 BPM), from position 0. A hub takes its voices along.
+    /// It ends by itself when the transport of the host starts. Message thread.
+    void setPreview(bool on) { previewRequested_.store(on, std::memory_order_release); }
+    bool previewing() const { return previewRequested_.load(std::memory_order_acquire); }
     /// Message thread: locks or unlocks one dimension of a voice (v1.1, D-231). Same rules as `setVoiceLocked`.
     bool setVoiceLock(size_t slotIndex, size_t voice, mm::core::LockDimension dimension, bool locked);
     bool redo();
@@ -512,6 +517,11 @@ private:
     std::atomic<float>* transposeValue_ = nullptr;                       // the `transpose` parameter, raw
     std::atomic<float>* slotValue_ = nullptr;                            // raw values, read in the audio thread
     std::array<std::atomic<float>*, mm::core::kMaxVoices> muteValues_{}; // raw values, read in the audio thread
+    // The preview with the internal clock while the host stands still (SPEC 3.11, D-236).
+    std::atomic<bool> previewRequested_{false}; // the Play button (message thread) and the first block of the host
+    bool previewRunning_ = false;               // audio thread: the internal clock runs
+    double previewPpq_ = 0.0;                   // audio thread: its position
+    std::atomic<bool> legato_{false};                                    // how a new pattern starts (SPEC 3.4, D-236)
     std::atomic<int> outputVoice_{1};                                    // the voice this instance plays (1 = first)
     const mm::core::StyleLibrary& styles_;
     mm::core::UndoStack undo_;                // under `slotsLock_`
@@ -556,6 +566,7 @@ private:
     ReturnCollector returnCollector_;
     mm::engine::MidiEventList events_;
     std::atomic<double> lastBpm_{120.0};
+    std::atomic<bool> hostBpmSeen_{false}; // the host reported a tempo at least once (the preview needs a real one)
     mm::engine::PlayheadMeter playhead_;
     MidiExporter exporter_;
     struct ExportKey {
@@ -566,6 +577,7 @@ private:
         int octave = 0;
         long long bpmCentis = 0;
         bool all = false; ///< every voice is exported (Solo and Hub), not only the own one
+        bool allNotes = false; ///< chances and conditions are not evaluated (SPEC 3.4)
         int transpose = 0;       ///< the transposition the notes carry (0: none or not exported)
         int mode = 0;
         bool empty = true;

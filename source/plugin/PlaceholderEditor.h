@@ -73,6 +73,7 @@ private:
     /// state of Undo, Redo and the history browser.
     void varyVoice(std::optional<size_t> voice, std::optional<size_t> slot);
     void updateActionButtons();
+    void updatePreviewButton();
     /// The levels of the hub UI (SPEC 8.1, D-162): shows or hides the expert controls.
     void applyLevel();
     /// Takes the values of the user's settings file once it is read (level, strength, grid, snapping).
@@ -100,6 +101,7 @@ private:
     juce::TextButton varyAllButton_;
     juce::Label strengthLabel_;
     juce::Slider strengthSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
+    juce::TextButton previewButton_; // hub and solo: plays the slot with the internal clock while the host stands still
     juce::TextButton undoButton_;
     juce::TextButton redoButton_;
     juce::TextButton referencesButton_;
@@ -119,6 +121,7 @@ private:
     juce::ToggleButton autoOfflineButton_;
     juce::TextEditor seedEditor_;
     juce::TextButton randomButton_;
+    juce::ComboBox startBox_; // expert level: a new pattern restarts at the switch or continues the position (SPEC 3.4)
     juce::Label hatModeLabel_;
     juce::ComboBox hatModeBox_; // expert level: melody rhythm relative to the hats (SPEC 3.14)
     juce::Label chromaticLabel_;

@@ -58,6 +58,7 @@ private:
         std::optional<mm::core::EditGrid> grid;
         std::optional<bool> snapChromatic;
         std::optional<bool> rollFold;
+        std::optional<bool> exportAllNotes;
         std::optional<bool> rollGuides;
         std::optional<bool> rollMarkers;
         std::optional<int> middleC;
