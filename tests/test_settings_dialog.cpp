@@ -850,3 +850,20 @@ TEST_CASE("the language box saves the choice and switches the texts", "[settings
     CHECK(part<juce::ComboBox>(*reopened, "language").getSelectedId() == 2);
     setUiLanguage("de");
 }
+
+TEST_CASE("the favorites toggle is on by default, switched here and saved", "[settings-dialog][favorites]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    auto& toggle = part<juce::ToggleButton>(*dialog, "favoritesToActiveSet");
+    CHECK(toggle.isVisible());
+    CHECK(toggle.getToggleState());
+    toggle.setToggleState(false, juce::dontSendNotification);
+    toggle.onClick();
+    CHECK_FALSE(env.store.get().favoritesToActiveSet);
+    const auto later = env.dialog();
+    CHECK_FALSE(part<juce::ToggleButton>(*later, "favoritesToActiveSet").getToggleState());
+    toggle.setToggleState(true, juce::dontSendNotification);
+    toggle.onClick();
+    CHECK(env.store.get().favoritesToActiveSet);
+}

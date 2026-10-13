@@ -243,3 +243,100 @@ TEST_CASE("snapshot of the references", "[.snapshot]") {
     env.importAndWait({files.write("a.mid", bassFile()), files.write("b.mid", bassFile(2))});
     writeSnapshot(*env.dialog, "references.png");
 }
+
+// ---- named sets (SPEC 3.20, v1.1, D-238) --------------------------------------------------------------------------
+
+TEST_CASE("the view offers the favorites and makes, renames and deletes sets", "[references-dialog][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    auto& box = part<juce::ComboBox>(*env.dialog, "set");
+    auto& name = part<juce::TextEditor>(*env.dialog, "setName");
+    auto& create = part<juce::TextButton>(*env.dialog, "newSet");
+    auto& rename = part<juce::TextButton>(*env.dialog, "renameSet");
+    auto& remove = part<juce::TextButton>(*env.dialog, "deleteSet");
+    // at first only the automatic set, which can be neither renamed nor deleted
+    CHECK(box.getNumItems() == 1);
+    CHECK(box.getText() == "Favoriten");
+    CHECK_FALSE(rename.isEnabled());
+    CHECK_FALSE(remove.isEnabled());
+    // a name makes a set, which is active at once
+    create.onClick(); // no name: nothing happens
+    CHECK(box.getNumItems() == 1);
+    name.setText("Warehouse", juce::dontSendNotification);
+    create.onClick();
+    CHECK(box.getNumItems() == 2);
+    CHECK(box.getText() == "Warehouse");
+    CHECK(name.getText().isEmpty());
+    CHECK(env.store.collection("peak_time").activeSetId == "s1");
+    CHECK(rename.isEnabled());
+    CHECK(remove.isEnabled());
+    // the same name again: refused, the text stays
+    name.setText("warehouse", juce::dontSendNotification);
+    create.onClick();
+    CHECK(box.getNumItems() == 2);
+    CHECK(name.getText() == "warehouse");
+    // rename
+    name.setText("Berlin", juce::dontSendNotification);
+    rename.onClick();
+    CHECK(box.getText() == "Berlin");
+    CHECK(env.store.get("peak_time").setName == "Berlin");
+    // switching the box switches the active set of the style
+    box.setSelectedId(1, juce::sendNotificationSync);
+    CHECK(env.store.collection("peak_time").activeSetId == kFavoritesSetId);
+    CHECK_FALSE(remove.isEnabled());
+    box.setSelectedId(2, juce::sendNotificationSync);
+    CHECK(env.store.collection("peak_time").activeSetId == "s1");
+    // deleting asks once, a click elsewhere takes the question back
+    remove.onClick();
+    CHECK(env.store.collection("peak_time").sets.size() == 2);
+    CHECK(remove.getButtonText() == "Wirklich löschen?");
+    box.setSelectedId(1, juce::sendNotificationSync);
+    box.setSelectedId(2, juce::sendNotificationSync);
+    CHECK(remove.getButtonText() == "Set löschen");
+    remove.onClick();
+    remove.onClick();
+    CHECK(env.store.collection("peak_time").sets.size() == 1);
+    CHECK(box.getNumItems() == 1);
+    CHECK(box.getText() == "Favoriten");
+}
+
+TEST_CASE("an item has its tags in the set and the pool menu lists the items of other sets", "[references-dialog][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    env.store.createSet("peak_time", "A");
+    env.importAndWait({env.data.write("a.mid", bassFile()), env.data.write("b.mid", bassFile(2))});
+    REQUIRE(env.list().getListBoxModel()->getNumRows() == 2);
+    // tags are typed in the row and saved with Enter, cleaned like the tags of the library
+    auto& tags = part<juce::TextEditor>(env.row(0), "tags");
+    tags.setText("dark; Rolling, dark", juce::dontSendNotification);
+    tags.onReturnKey();
+    CHECK(env.store.get("peak_time").items[0].tags == std::vector<std::string>{"dark", "Rolling"});
+    CHECK(pumpUntil([&] { return part<juce::TextEditor>(env.row(0), "tags").getText() == "dark, Rolling"; }));
+    // a second set: its view is empty, the items are one click away
+    env.store.createSet("peak_time", "B");
+    CHECK(pumpUntil([&] { return env.list().getListBoxModel()->getNumRows() == 0; }));
+    CHECK(part<juce::TextButton>(*env.dialog, "fromPool").isEnabled());
+    const auto pool = env.store.collection("peak_time").pool;
+    REQUIRE(pool.size() == 2);
+    env.store.addToSet("peak_time", "s2", pool[0].id);
+    CHECK(pumpUntil([&] { return env.list().getListBoxModel()->getNumRows() == 1; }));
+    CHECK(part<juce::Label>(*env.dialog, "summary").getText().startsWith("1 Eintr"));
+    // the first set still has both
+    part<juce::ComboBox>(*env.dialog, "set").setSelectedId(2, juce::sendNotificationSync);
+    CHECK(env.list().getListBoxModel()->getNumRows() == 2);
+}
+
+TEST_CASE("a row of another set does not show the typed tags of the first", "[references-dialog][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    env.store.createSet("peak_time", "A");
+    env.importAndWait({env.data.write("a.mid", bassFile())});
+    const auto id = env.store.get("peak_time").items[0].id;
+    env.store.setTags("peak_time", id, {"one"});
+    env.store.createSet("peak_time", "B");
+    env.store.addToSet("peak_time", "s2", id);
+    env.store.setTags("peak_time", id, {"two"});
+    CHECK(pumpUntil([&] { return env.list().getListBoxModel()->getNumRows() == 1 && part<juce::TextEditor>(env.row(0), "tags").getText() == "two"; }));
+    part<juce::ComboBox>(*env.dialog, "set").setSelectedId(2, juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return part<juce::TextEditor>(env.row(0), "tags").getText() == "one"; }));
+}

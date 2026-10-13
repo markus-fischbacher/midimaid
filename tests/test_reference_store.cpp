@@ -1,4 +1,6 @@
 #include "core/MidiFile.h"
+#include "core/PatternGenerator.h"
+#include "core/ReferenceProfile.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/ReferenceStore.h"
 
@@ -244,4 +246,169 @@ TEST_CASE("a file over the size limit is not read", "[reference-store]") {
     importAndWait(store, "peak_time", {huge});
     CHECK(store.progress().report.unreadable == 1);
     CHECK(store.get("peak_time").items.empty());
+}
+
+// ---- named sets and favorites (SPEC 3.20, v1.1, D-238) ------------------------------------------------------------
+
+TEST_CASE("files go into the active set, and into a set Standard when the favorites are active", "[reference-store][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder data;
+    const auto a = data.write("a.mid", bassFile());
+    const auto b = data.write("b.mid", bassFile(2));
+    ReferenceStore store(data.folder.getChildFile("refs"), embeddedStyles());
+    REQUIRE(pumpUntil([&] { return store.ready(); }));
+    CHECK(store.collection("peak_time").activeSetId == kFavoritesSetId); // nothing set up yet
+    importAndWait(store, "peak_time", {a});
+    auto c = store.collection("peak_time");
+    REQUIRE(c.sets.size() == 2);
+    CHECK(c.sets[1].name == "Standard");
+    CHECK(c.activeSetId == c.sets[1].id);
+    CHECK(store.get("peak_time").items.size() == 1);
+    CHECK(store.get("peak_time").setName == "Standard");
+    // another set: the next file goes there, the first stays where it was
+    const auto id = store.createSet("peak_time", "Warehouse");
+    REQUIRE_FALSE(id.empty());
+    CHECK(store.collection("peak_time").activeSetId == id);
+    importAndWait(store, "peak_time", {b});
+    CHECK(store.get("peak_time").items.size() == 1);
+    CHECK(store.view("peak_time", c.sets[1].id).items.size() == 1);
+    // a file that the pool has already only joins the set: no new analysis, and one item in the pool
+    importAndWait(store, "peak_time", {a});
+    CHECK(store.progress().report.added == 1);
+    CHECK(store.progress().report.duplicates == 0);
+    CHECK(store.get("peak_time").items.size() == 2);
+    CHECK(store.collection("peak_time").pool.size() == 2);
+    importAndWait(store, "peak_time", {a});
+    CHECK(store.progress().report.duplicates == 1);
+    // it is all there after a restart: sets, members, the active set
+    store.waitForIdle();
+    ReferenceStore again(data.folder.getChildFile("refs"), embeddedStyles());
+    REQUIRE(pumpUntil([&] { return again.ready(); }));
+    CHECK(again.collection("peak_time") == store.collection("peak_time"));
+    CHECK(again.get("peak_time").setName == "Warehouse");
+}
+
+TEST_CASE("the sets are made, renamed, switched and deleted through the store", "[reference-store][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ReferenceStore store(juce::File(), embeddedStyles());
+    std::atomic<int> notified{0};
+    store.setOnChanged([&] { ++notified; });
+    const auto before = store.revision();
+    const auto a = store.createSet("peak_time", "A");
+    const auto b = store.createSet("peak_time", "B");
+    REQUIRE((!a.empty() && !b.empty()));
+    CHECK(store.revision() > before);
+    CHECK(store.createSet("peak_time", "a").empty());
+    CHECK(store.createSet("not a style!", "x").empty());
+    CHECK(store.collection("peak_time").activeSetId == b);
+    CHECK(store.setActiveSet("peak_time", a));
+    CHECK(store.get("peak_time").setId == a);
+    CHECK_FALSE(store.setActiveSet("peak_time", "nope"));
+    CHECK(store.renameSet("peak_time", a, "Alpha"));
+    CHECK_FALSE(store.renameSet("peak_time", kFavoritesSetId, "Alpha"));
+    CHECK_FALSE(store.renameSet("peak_time", "nope", "Alpha"));
+    CHECK(store.view("peak_time", a).setName == "Alpha");
+    CHECK_FALSE(store.deleteSet("peak_time", kFavoritesSetId));
+    CHECK(store.deleteSet("peak_time", a));
+    CHECK(store.collection("peak_time").activeSetId == b); // the active set was a: it falls back
+    CHECK_FALSE(store.deleteSet("peak_time", a));
+    CHECK_FALSE(store.deleteSet("melodic_techno", a)); // a style without sets
+    CHECK(pumpUntil([&] { return notified.load() > 0; }));
+    // switching the set of a style that has none yet works and is remembered
+    CHECK(store.setActiveSet("melodic_techno", kFavoritesSetId));
+}
+
+TEST_CASE("the switches of an item are those of the active set", "[reference-store][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder data;
+    ReferenceStore store(juce::File(), embeddedStyles());
+    const auto a = store.createSet("peak_time", "A");
+    ReferenceCollection c = store.collection("peak_time");
+    // two sets share an item: put it in through the pool
+    const auto file = data.write("a.mid", bassFile());
+    importAndWait(store, "peak_time", {file});
+    const auto itemId = store.get("peak_time").items[0].id;
+    const auto b = store.createSet("peak_time", "B");
+    REQUIRE(store.addToSet("peak_time", b, itemId));
+    CHECK_FALSE(store.addToSet("peak_time", b, itemId));
+    CHECK(store.setWeight("peak_time", itemId, 5)); // in B
+    CHECK(store.setActive("peak_time", itemId, false));
+    CHECK(store.setTags("peak_time", itemId, {"dark", "peak"}));
+    CHECK(store.get("peak_time").items[0].weight == 5);
+    CHECK_FALSE(store.get("peak_time").items[0].active);
+    CHECK(store.get("peak_time").items[0].tags == std::vector<std::string>{"dark", "peak"});
+    CHECK(store.setActiveSet("peak_time", a)); // in A: untouched
+    CHECK(store.get("peak_time").items[0].weight == kDefaultReferenceWeight);
+    CHECK(store.get("peak_time").items[0].active);
+    CHECK(store.get("peak_time").items[0].tags.empty());
+    // the role counts in both
+    CHECK(store.setRole("peak_time", itemId, TrackRole::Melody));
+    CHECK(store.view("peak_time", b).items[0].role == TrackRole::Melody);
+    // removing takes it out of the active set only
+    CHECK(store.remove("peak_time", itemId));
+    CHECK(store.get("peak_time").items.empty());
+    CHECK(store.view("peak_time", b).items.size() == 1);
+    CHECK_FALSE(store.remove("peak_time", itemId));
+    CHECK_FALSE(store.setTags("peak_time", itemId, {"x"}));
+    (void)c;
+}
+
+TEST_CASE("a file of the first version is read as the set Standard", "[reference-store][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder data;
+    const auto file = data.write("a.mid", bassFile());
+    ReferenceSet old;
+    old.styleId = "peak_time";
+    {
+        ReferenceStore store(juce::File(), embeddedStyles());
+        importAndWait(store, "peak_time", {file});
+        old = store.get("peak_time");
+        old.items[0].weight = 4;
+    }
+    const auto folder = data.folder.getChildFile("refs");
+    folder.createDirectory();
+    folder.getChildFile("peak_time.json").replaceWithText(juce::String::fromUTF8(referenceSetToJson(old).c_str()));
+    ReferenceStore store(folder, embeddedStyles());
+    REQUIRE(pumpUntil([&] { return store.ready(); }));
+    const auto view = store.get("peak_time");
+    CHECK(view.setId == "default");
+    REQUIRE(view.items.size() == 1);
+    CHECK(view.items[0].weight == 4);
+    CHECK(referenceEffectOf(view).setId == "default"); // the patterns of v1.0 name this set
+    // the first change writes the new format
+    CHECK(store.setWeight("peak_time", view.items[0].id, 2));
+    store.waitForIdle();
+    const auto text = folder.getChildFile("peak_time.json").loadFileAsString().toStdString();
+    CHECK(text.find("\"version\": 2") != std::string::npos);
+}
+
+TEST_CASE("favorites come from a pattern, replace themselves and go with removeFavorite", "[reference-store][favorites]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ReferenceStore store(juce::File(), embeddedStyles());
+    const auto* style = embeddedStyles().findOrFallback("peak_time");
+    mm::core::GenerationRequest request;
+    request.lengthBars = 4;
+    request.seed = 5;
+    const auto result = mm::core::generatePattern(*style, request);
+    REQUIRE(result.success);
+    const auto set = store.createSet("peak_time", "Mine");
+    REQUIRE_FALSE(set.empty());
+    CHECK(store.setFavorite("peak_time", "entry1", "Rolling", result.pattern, true));
+    CHECK(store.view("peak_time", kFavoritesSetId).items.size() >= 1);
+    CHECK(store.get("peak_time").items.size() == store.view("peak_time", kFavoritesSetId).items.size()); // active too
+    CHECK(store.view("peak_time", kFavoritesSetId).items[0].name.find("Rolling") == 0);
+    // not into the active set when the option is off; saving again does not double the items
+    CHECK(store.setFavorite("peak_time", "entry2", "Second", result.pattern, false));
+    const auto favorites = store.view("peak_time", kFavoritesSetId).items.size();
+    CHECK(store.setFavorite("peak_time", "entry2", "Second", result.pattern, false));
+    CHECK(store.view("peak_time", kFavoritesSetId).items.size() == favorites);
+    CHECK(store.get("peak_time").items.size() < favorites);
+    CHECK_FALSE(store.setFavorite("not a style!", "entry3", "x", result.pattern, true));
+    // taken out of every set, in every style
+    store.removeFavorite("entry1");
+    store.removeFavorite("entry2");
+    store.removeFavorite("nobody");
+    CHECK(store.view("peak_time", kFavoritesSetId).items.empty());
+    CHECK(store.get("peak_time").items.empty());
+    CHECK(store.collection("peak_time").pool.empty());
 }

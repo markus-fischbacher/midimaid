@@ -74,18 +74,18 @@ ReferenceStore::~ReferenceStore() {
 }
 
 void ReferenceStore::readAll() {
-    std::map<std::string, mm::core::ReferenceSet> loaded;
+    std::map<std::string, mm::core::ReferenceCollection> loaded;
     for (const auto& file : folder_.findChildFiles(juce::File::findFiles, false, "*.json")) {
         const auto styleId = file.getFileNameWithoutExtension().toStdString();
         if (validStyleId(styleId)) {
-            loaded[styleId] = mm::core::referenceSetFromJson(file.loadFileAsString().toStdString(), styleId);
+            loaded[styleId] = mm::core::referenceCollectionFromJson(file.loadFileAsString().toStdString(), styleId);
         }
     }
     {
         const juce::ScopedLock lock(lock_);
-        for (auto& [styleId, set] : loaded) {
-            if (sets_.find(styleId) == sets_.end()) { // a change made before the files were read wins
-                sets_[styleId] = std::move(set);
+        for (auto& [styleId, collection] : loaded) {
+            if (collections_.find(styleId) == collections_.end()) { // a change made before the files were read wins
+                collections_[styleId] = std::move(collection);
             }
         }
         ready_ = true;
@@ -93,19 +93,20 @@ void ReferenceStore::readAll() {
     changed();
 }
 
-void ReferenceStore::write(const std::string& styleId, const mm::core::ReferenceSet& set) {
+void ReferenceStore::write(const std::string& styleId, const mm::core::ReferenceCollection& collection) {
     if (!enabled() || !validStyleId(styleId)) {
         return;
     }
     folder_.createDirectory();
     const auto target = fileFor(styleId);
     juce::TemporaryFile temporary(target); // written next to the file and moved over it: never a half file
-    if (temporary.getFile().replaceWithText(juce::String::fromUTF8(mm::core::referenceSetToJson(set).c_str()))) {
+    if (temporary.getFile().replaceWithText(juce::String::fromUTF8(mm::core::referenceCollectionToJson(collection).c_str()))) {
         temporary.overwriteTargetFileWithTemporary();
     }
 }
 
 void ReferenceStore::changed() {
+    ++revision_;
     const auto alive = alive_;
     juce::MessageManager::callAsync([this, alive] {
         if (*alive && onChanged_) {
@@ -118,15 +119,24 @@ void ReferenceStore::setOnChanged(std::function<void()> callback) {
     onChanged_ = std::move(callback);
 }
 
-mm::core::ReferenceSet ReferenceStore::get(const std::string& styleId) const {
+mm::core::ReferenceCollection ReferenceStore::collection(const std::string& styleId) const {
     const juce::ScopedLock lock(lock_);
-    const auto it = sets_.find(styleId);
-    if (it != sets_.end()) {
+    const auto it = collections_.find(styleId);
+    if (it != collections_.end()) {
         return it->second;
     }
-    mm::core::ReferenceSet empty;
+    mm::core::ReferenceCollection empty;
     empty.styleId = styleId;
+    mm::core::normalize(empty);
     return empty;
+}
+
+mm::core::ReferenceSet ReferenceStore::get(const std::string& styleId) const {
+    return mm::core::activeView(collection(styleId));
+}
+
+mm::core::ReferenceSet ReferenceStore::view(const std::string& styleId, const std::string& setId) const {
+    return mm::core::viewOf(collection(styleId), setId);
 }
 
 ReferenceStore::Progress ReferenceStore::progress() const {
@@ -134,17 +144,27 @@ ReferenceStore::Progress ReferenceStore::progress() const {
     return progress_;
 }
 
-bool ReferenceStore::edit(const std::string& styleId, const std::function<bool(mm::core::ReferenceSet&)>& change) {
+bool ReferenceStore::edit(const std::string& styleId, const std::function<bool(mm::core::ReferenceCollection&)>& change,
+                          bool create) {
     if (!validStyleId(styleId)) {
         return false;
     }
-    mm::core::ReferenceSet copy;
+    mm::core::ReferenceCollection copy;
     {
         const juce::ScopedLock lock(lock_);
-        const auto it = sets_.find(styleId);
-        if (it == sets_.end() || !change(it->second)) {
+        auto it = collections_.find(styleId);
+        if (it == collections_.end()) {
+            if (!create) {
+                return false;
+            }
+            it = collections_.emplace(styleId, mm::core::ReferenceCollection{}).first;
+            it->second.styleId = styleId;
+            mm::core::normalize(it->second);
+        }
+        if (!change(it->second)) {
             return false;
         }
+        mm::core::normalize(it->second);
         copy = it->second;
     }
     pool_.addJob([this, styleId, copy] { write(styleId, copy); });
@@ -153,19 +173,84 @@ bool ReferenceStore::edit(const std::string& styleId, const std::function<bool(m
 }
 
 bool ReferenceStore::setActive(const std::string& styleId, const std::string& id, bool active) {
-    return edit(styleId, [&](mm::core::ReferenceSet& set) { return mm::core::setItemActive(set, id, active); });
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::setMemberActive(c, c.activeSetId, id, active); });
 }
 
 bool ReferenceStore::setWeight(const std::string& styleId, const std::string& id, int weight) {
-    return edit(styleId, [&](mm::core::ReferenceSet& set) { return mm::core::setItemWeight(set, id, weight); });
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::setMemberWeight(c, c.activeSetId, id, weight); });
+}
+
+bool ReferenceStore::setTags(const std::string& styleId, const std::string& id, std::vector<std::string> tags) {
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::setMemberTags(c, c.activeSetId, id, std::move(tags)); });
 }
 
 bool ReferenceStore::setRole(const std::string& styleId, const std::string& id, mm::core::TrackRole role) {
-    return edit(styleId, [&](mm::core::ReferenceSet& set) { return mm::core::setItemRole(set, id, role); });
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::setItemRole(c, id, role); });
 }
 
 bool ReferenceStore::remove(const std::string& styleId, const std::string& id) {
-    return edit(styleId, [&](mm::core::ReferenceSet& set) { return mm::core::removeItem(set, id); });
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::removeMember(c, c.activeSetId, id); });
+}
+
+std::string ReferenceStore::createSet(const std::string& styleId, const std::string& name) {
+    std::string id;
+    edit(
+        styleId,
+        [&](mm::core::ReferenceCollection& c) {
+            id = mm::core::createSet(c, name);
+            return !id.empty() && mm::core::setActiveSet(c, id);
+        },
+        true);
+    return id;
+}
+
+bool ReferenceStore::renameSet(const std::string& styleId, const std::string& setId, const std::string& name) {
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::renameSet(c, setId, name); });
+}
+
+bool ReferenceStore::deleteSet(const std::string& styleId, const std::string& setId) {
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::deleteSet(c, setId); });
+}
+
+bool ReferenceStore::setActiveSet(const std::string& styleId, const std::string& setId) {
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::setActiveSet(c, setId); }, true);
+}
+
+bool ReferenceStore::addToSet(const std::string& styleId, const std::string& setId, const std::string& itemId) {
+    return edit(styleId, [&](mm::core::ReferenceCollection& c) { return mm::core::addMember(c, setId, itemId); });
+}
+
+bool ReferenceStore::setFavorite(const std::string& styleId, const std::string& entryId, const std::string& name,
+                                 const mm::core::Pattern& pattern, bool alsoActive) {
+    const auto* style = styles_.findOrFallback(styleId);
+    if (style == nullptr || !validStyleId(styleId)) {
+        return false;
+    }
+    auto items = mm::core::favoriteItemsOf(pattern, entryId, name, *style);
+    return edit(
+        styleId,
+        [&](mm::core::ReferenceCollection& c) {
+            mm::core::setFavorite(c, entryId, std::move(items), alsoActive);
+            return true;
+        },
+        true);
+}
+
+void ReferenceStore::removeFavorite(const std::string& entryId) {
+    std::vector<std::string> styleIds;
+    {
+        const juce::ScopedLock lock(lock_);
+        for (const auto& [styleId, collection] : collections_) {
+            styleIds.push_back(styleId);
+        }
+    }
+    for (const auto& styleId : styleIds) {
+        edit(styleId, [&](mm::core::ReferenceCollection& c) {
+            const auto before = c;
+            mm::core::removeFavorite(c, entryId);
+            return !(before == c);
+        });
+    }
 }
 
 void ReferenceStore::importFiles(const std::string& styleId, std::vector<juce::File> paths) {
@@ -210,16 +295,19 @@ void ReferenceStore::runImport(const std::string& styleId, std::vector<juce::Fil
             bool known;
             {
                 const juce::ScopedLock lock(lock_);
-                known = mm::core::containsFile(sets_[styleId], hash);
+                known = mm::core::poolContainsFile(collectionLocked(styleId), hash);
             }
-            if (known) {
-                ++report.duplicates; // the cache: the analysis of this file is in the set
+            if (known) { // the cache: the analysis of this file is in the pool, it only goes into the set
+                const juce::ScopedLock lock(lock_);
+                auto& collection = collectionLocked(styleId);
+                mm::core::addKnownFile(collection, importTargetLocked(collection), hash, report);
+                mm::core::normalize(collection);
             } else {
                 auto items = mm::core::itemsFromMidiFile(file.getFileName().toStdString(), bytes, *style, report);
                 const juce::ScopedLock lock(lock_);
-                auto& set = sets_[styleId];
-                set.styleId = styleId;
-                mm::core::addItems(set, std::move(items), report);
+                auto& collection = collectionLocked(styleId);
+                mm::core::addItems(collection, importTargetLocked(collection), std::move(items), report);
+                mm::core::normalize(collection);
             }
         }
         {
@@ -229,14 +317,41 @@ void ReferenceStore::runImport(const std::string& styleId, std::vector<juce::Fil
         }
         changed();
     }
-    mm::core::ReferenceSet copy;
+    mm::core::ReferenceCollection copy;
     {
         const juce::ScopedLock lock(lock_);
-        copy = sets_[styleId];
+        copy = collectionLocked(styleId);
         progress_.running = false;
     }
     write(styleId, copy);
     changed();
+}
+
+mm::core::ReferenceCollection& ReferenceStore::collectionLocked(const std::string& styleId) {
+    auto it = collections_.find(styleId);
+    if (it == collections_.end()) {
+        it = collections_.emplace(styleId, mm::core::ReferenceCollection{}).first;
+        it->second.styleId = styleId;
+        mm::core::normalize(it->second);
+    }
+    return it->second;
+}
+
+std::string ReferenceStore::importTargetLocked(mm::core::ReferenceCollection& collection) {
+    // files go into the active set; the automatic favorites are not one to import into: a set "Standard" takes them
+    if (collection.activeSetId != mm::core::kFavoritesSetId) {
+        return collection.activeSetId;
+    }
+    auto id = mm::core::createSet(collection, "Standard");
+    if (id.empty()) { // the name is taken (it is a set the musician made): use it
+        for (const auto& set : collection.sets) {
+            if (set.name == "Standard") {
+                id = set.id;
+            }
+        }
+    }
+    mm::core::setActiveSet(collection, id);
+    return id;
 }
 
 void ReferenceStore::waitForIdle() {

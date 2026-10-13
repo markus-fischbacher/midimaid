@@ -150,8 +150,14 @@ MIDI ab, stellst du sie in den Einstellungen unter *Drum-Belegung* ein. Im Exper
 
 **Referenzen (dein Stil):** Mit *Referenzen* öffnest du ein Fenster je Stil. Ziehe `.mid`-Dateien oder Ordner hinein: MidiMaid
 liest Tonart, Skala, Rolle (Bass, Melodie, Akkorde, Schlagzeug) und Akkordfolge. Je Eintrag kannst du *an/aus* schalten,
-das *Gewicht* ändern und *Entfernen*. Es wirkt in dieser Form:
+das *Gewicht* ändern, *Tags* vergeben und *Entfernen*. Es wirkt in dieser Form:
 
+- **Sets:** Je Stil kannst du mehrere benannte Sets führen (z. B. „Warehouse“, „Live-Set Berlin“). Oben im Fenster wählst du das Set,
+  legst mit dem Namensfeld ein neues an, benennst um oder löschst es. Eine Datei liegt nur einmal in deiner Sammlung und kann in
+  mehreren Sets stecken (*Aus anderem Set …*); *an/aus*, *Gewicht* und *Tags* gelten je Set. Das **aktive Set** wählst du auch im Hub
+  neben dem Stil; es gilt für alle Instanzen und jedes Pattern merkt sich, mit welchem Set es entstand. Das Set **Favoriten**
+  gibt es immer: Patterns, die du in der Bibliothek mit 4 Sternen oder mehr bewertest, landen dort (in den Einstellungen auch im
+  aktiven Set).
 - Ab **5 aktiven Einträgen** mischt MidiMaid deren Akkordfolgen in die des Stils (höchstens zur Hälfte).
 - **Kopierschutz:** Ein Ergebnis, das einem aktiven Bass- oder Melodie-Eintrag zu ähnlich ist, wird gekennzeichnet
   und nach unten gewertet.

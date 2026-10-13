@@ -7,7 +7,10 @@
 #include "plugin/AtomicFile.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/LibraryDialog.h"
+#include "plugin/Favorites.h"
+#include "plugin/GlobalSettingsStore.h"
 #include "plugin/LibraryStore.h"
+#include "plugin/ReferenceStore.h"
 #include "plugin/ProcessorBase.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -1412,4 +1415,153 @@ TEST_CASE("the window starts and stops the preview and gives the slot back when 
     }
     CHECK_FALSE(processor.libraryPreviewing()); // the window is gone: the slot is back
     CHECK_FALSE(processor.previewing());
+}
+
+// ---- favorites: the rating puts the voices into the reference set "Favoriten" (SPEC 3.20, D-238) ----------------------
+
+namespace {
+
+struct ScopedReferences {
+    ScopedReferences() : previous(&referenceStore()) {
+        overrideReferenceStore(&store);
+        REQUIRE(pumpUntil([&] { return store.ready(); }));
+    }
+    ~ScopedReferences() { overrideReferenceStore(previous); }
+    ReferenceStore store{juce::File(), embeddedStyles()};
+    ReferenceStore* previous;
+};
+
+size_t favoritesOf(ReferenceStore& store) {
+    return store.view("peak_time", mm::core::kFavoritesSetId).items.size();
+}
+
+} // namespace
+
+TEST_CASE("a rating of four stars makes a favorite, a lower one or a removal takes it back", "[library-plugin][favorites]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    const auto saved = scoped.store.savePattern("Rolling", made(21), "", 0);
+    scoped.store.setMeta(saved.id, {{}, 3, 0, 0});
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    CHECK(favoritesOf(references.store) == 0); // three stars: no favorite
+    scoped.store.setMeta(saved.id, {{}, 4, 0, 0});
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    REQUIRE(pumpUntil([&] { return favoritesOf(references.store) > 0; }));
+    const auto count = favoritesOf(references.store);
+    CHECK(references.store.view("peak_time", mm::core::kFavoritesSetId).items[0].name.find("Rolling") == 0);
+    // saved again: replaced, not doubled
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    REQUIRE(pumpUntil([&] { return references.store.revision() > 0; }));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    CHECK(favoritesOf(references.store) == count);
+    // five stars stay one, three take them out
+    scoped.store.setMeta(saved.id, {{}, 5, 0, 0});
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    CHECK(favoritesOf(references.store) == count);
+    scoped.store.setMeta(saved.id, {{}, 3, 0, 0});
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    CHECK(favoritesOf(references.store) == 0);
+    // an entry that is not there any more is no favorite
+    scoped.store.setMeta(saved.id, {{}, 5, 0, 0});
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    REQUIRE(pumpUntil([&] { return favoritesOf(references.store) > 0; }));
+    updateFavorite(scoped.store, references.store, "gone", true);
+    CHECK(favoritesOf(references.store) == count); // another id: the entry stays
+    scoped.store.remove(saved.id);
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    CHECK(favoritesOf(references.store) == 0);
+}
+
+TEST_CASE("the favorites also go into the active set unless that is switched off", "[library-plugin][favorites]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    const auto set = references.store.createSet("peak_time", "Mine");
+    const auto a = scoped.store.savePattern("A", made(22), "", 0);
+    const auto b = scoped.store.savePattern("B", made(23), "", 0);
+    scoped.store.setMeta(a.id, {{}, 4, 0, 0});
+    scoped.store.setMeta(b.id, {{}, 4, 0, 0});
+    updateFavorite(scoped.store, references.store, a.id, true);
+    REQUIRE(pumpUntil([&] { return references.store.get("peak_time").items.size() > 0; }));
+    const auto inActive = references.store.get("peak_time").items.size();
+    CHECK(references.store.get("peak_time").setId == set);
+    updateFavorite(scoped.store, references.store, b.id, false);
+    REQUIRE(pumpUntil([&] { return favoritesOf(references.store) > inActive; }));
+    CHECK(references.store.get("peak_time").items.size() == inActive); // B only in the favorites
+}
+
+TEST_CASE("a set of slots is no favorite, whatever its rating", "[library-plugin][favorites]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    SlotBank bank;
+    bank.setResult(0, made(24));
+    const auto saved = scoped.store.saveSet("Whole", bank);
+    scoped.store.setMeta(saved.id, {{}, 5, 0, 0});
+    updateFavorite(scoped.store, references.store, saved.id, true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    CHECK(favoritesOf(references.store) == 0);
+}
+
+TEST_CASE("the window follows the rating, the name and the removal into the favorites", "[library-plugin][dialog][favorites]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    InstrumentProcessor processor("Test");
+    const auto saved = scoped.store.savePattern("Line", made(25), "", 0);
+    LibraryDialog dialog(processor, processor.libraryAliveFlag(), [&]() -> LibraryStore& { return scoped.store; });
+    auto& list = *dynamic_cast<juce::ListBox*>(find(dialog, "list"));
+    auto& stars = *dynamic_cast<juce::ComboBox*>(find(dialog, "stars"));
+    auto& name = *dynamic_cast<juce::TextEditor*>(find(dialog, "name"));
+    auto& rename = *dynamic_cast<juce::TextButton*>(find(dialog, "rename"));
+    auto& remove = *dynamic_cast<juce::TextButton*>(find(dialog, "remove"));
+    list.selectRow(0);
+    stars.setSelectedId(4, juce::sendNotificationSync); // three stars
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    CHECK(favoritesOf(references.store) == 0);
+    stars.setSelectedId(5, juce::sendNotificationSync); // four stars: a favorite
+    REQUIRE(pumpUntil([&] { return favoritesOf(references.store) > 0; }));
+    name.setText("Renamed", juce::dontSendNotification);
+    rename.onClick();
+    REQUIRE(pumpUntil([&] { return references.store.view("peak_time", mm::core::kFavoritesSetId).items[0].name.find("Renamed") == 0; }));
+    stars.setSelectedId(3, juce::sendNotificationSync); // two stars: gone
+    CHECK(favoritesOf(references.store) == 0);
+    stars.setSelectedId(6, juce::sendNotificationSync);
+    REQUIRE(pumpUntil([&] { return favoritesOf(references.store) > 0; }));
+    remove.onClick();
+    remove.onClick(); // the second click removes the entry
+    CHECK(scoped.store.list().empty());
+    CHECK(favoritesOf(references.store) == 0);
+    (void)saved;
+}
+
+TEST_CASE("the window puts a favorite into the active set only when the setting says so", "[library-plugin][dialog][favorites]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    juce::TemporaryFile file;
+    GlobalSettingsStore settings(file.getFile());
+    REQUIRE(pumpUntil([&] { return settings.ready(); }));
+    overrideGlobalSettings(&settings);
+    struct Restore {
+        ~Restore() { overrideGlobalSettings(&mmtest::disabledSettings()); }
+    } restore;
+    InstrumentProcessor processor("Test");
+    references.store.createSet("peak_time", "Mine");
+    scoped.store.savePattern("One", made(26), "", 0);
+    LibraryDialog dialog(processor, processor.libraryAliveFlag(), [&]() -> LibraryStore& { return scoped.store; });
+    auto& list = *dynamic_cast<juce::ListBox*>(find(dialog, "list"));
+    auto& stars = *dynamic_cast<juce::ComboBox*>(find(dialog, "stars"));
+    list.selectRow(0);
+    settings.update([](mm::core::GlobalSettings& s) { s.favoritesToActiveSet = false; });
+    stars.setSelectedId(5, juce::sendNotificationSync);
+    REQUIRE(pumpUntil([&] { return favoritesOf(references.store) > 0; }));
+    CHECK(references.store.get("peak_time").items.empty()); // the setting is off: only the favorites
+    stars.setSelectedId(2, juce::sendNotificationSync);
+    CHECK(favoritesOf(references.store) == 0);
+    settings.update([](mm::core::GlobalSettings& s) { s.favoritesToActiveSet = true; });
+    stars.setSelectedId(5, juce::sendNotificationSync);
+    REQUIRE(pumpUntil([&] { return !references.store.get("peak_time").items.empty(); }));
 }

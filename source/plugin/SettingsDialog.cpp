@@ -416,6 +416,14 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     setWantsKeyboardFocus(true);
     updateShortcut();
 
+    favoritesToggle_.setComponentID("favoritesToActiveSet");
+    favoritesToggle_.setButtonText(tr(keys::kToggleFavoritesToActiveSet));
+    favoritesToggle_.setToggleState(settings_().get().favoritesToActiveSet, juce::dontSendNotification);
+    favoritesToggle_.onClick = [this] {
+        const bool on = favoritesToggle_.getToggleState();
+        settings_().update([&](mm::core::GlobalSettings& settings) { settings.favoritesToActiveSet = on; });
+    };
+    addAndMakeVisible(favoritesToggle_);
     exportAllNotesToggle_.setComponentID("exportAllNotes");
     exportAllNotesToggle_.setButtonText(tr(keys::kToggleExportAllNotes));
     exportAllNotesToggle_.setToggleState(settings_().get().exportAllNotes, juce::dontSendNotification);
@@ -524,6 +532,7 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {&shortcutsLabel_, {&shortcutActionBox_, &shortcutKeyLabel_}, {320}, kControl, false, true},
              {nullptr, {&shortcutAssignButton_, &shortcutRemoveButton_, &shortcutResetButton_}, {150, 120}, kControl, true},
              {nullptr, {&shortcutHint_}, {}, 56, true},
+             {nullptr, {&favoritesToggle_}, {}, kControl, true},
              {nullptr, {&exportAllNotesToggle_}, {}, kControl, true},
              {&rollViewLabel_, {&rollFoldToggle_, &rollGuidesToggle_}, {230}, kControl},
              {nullptr, {&rollMarkersToggle_}, {}, kControl, true},

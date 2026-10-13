@@ -42,6 +42,8 @@ public:
 
 private:
     void timerCallback() override;
+    void refreshReferenceSets();
+    std::string referenceStyleId() const;
 
     void updateStatus();
     /// Switches between the voice UI and the placeholder layout (size and visible controls).
@@ -91,6 +93,9 @@ private:
     juce::ComboBox followBox_;
     juce::ComboBox outputBox_; // hub only: plays a voice or nothing
     juce::ComboBox styleBox_;
+    juce::ComboBox referenceSetBox_; ///< the active reference set of the style (SPEC 3.20), hub and solo
+    std::vector<std::string> referenceSetIds_;
+    std::string referenceSetKey_;    ///< style and store revision the box shows
     juce::ComboBox keyBox_;
     juce::ComboBox scaleBox_;
     juce::ComboBox barsBox_;

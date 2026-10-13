@@ -4,11 +4,13 @@
 #include "engine/GroupChannel.h"
 #include "plugin/EditableRoll.h"
 #include "plugin/EditorParts.h"
+#include "plugin/EmbeddedStyles.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
 #include "plugin/KeyChords.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ProcessorBase.h"
+#include "plugin/ReferenceStore.h"
 
 #include <algorithm>
 #include <catch2/catch_approx.hpp>
@@ -7091,4 +7093,46 @@ TEST_CASE("evolve parameters: what the host wrote is not written back, the toggl
     CHECK(evolve->getValue() == 1.0f);
     hub.processor.setEvolve(false);
     CHECK(evolve->getValue() == 0.0f);
+}
+
+TEST_CASE("the hub shows the reference sets of its style and switches the active one", "[group-wiring][editor][sets]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::ReferenceStore references{juce::File(), mm::plugin::embeddedStyles()};
+    auto* previous = &mm::plugin::referenceStore();
+    mm::plugin::overrideReferenceStore(&references);
+    struct Restore {
+        mm::plugin::ReferenceStore* previous;
+        ~Restore() { mm::plugin::overrideReferenceStore(previous); }
+    } restore{previous};
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* box = child<juce::ComboBox>(*editor, "referenceSet");
+    REQUIRE(box != nullptr);
+    CHECK(box->isVisible());
+    CHECK(box->getNumItems() == 1);
+    CHECK(box->getText() == "Favoriten");
+    // a set that is made elsewhere (the references window) shows up at the next tick and is the active one
+    const auto id = references.createSet("peak_time", "Warehouse");
+    REQUIRE_FALSE(id.empty());
+    CHECK(waitFor([&] { return box->getNumItems() == 2 && box->getText() == "Warehouse"; }));
+    // the choice in the hub is the active set of the style, which every instance of the process uses
+    box->setSelectedId(1, juce::sendNotificationSync);
+    CHECK(references.collection("peak_time").activeSetId == mm::core::kFavoritesSetId);
+    CHECK(references.get("peak_time").setId == mm::core::kFavoritesSetId);
+    box->setSelectedId(2, juce::sendNotificationSync);
+    CHECK(references.collection("peak_time").activeSetId == id);
+    // another style has its own sets: the box follows the style (after the box has caught up with the store)
+    pumpMessages(300);
+    auto settings = hub.processor.instanceSettings();
+    settings.generation.styleId = "melodic_techno";
+    hub.processor.setInstanceSettings(settings);
+    CHECK(waitFor([&] { return box->getNumItems() == 1; }));
+    CHECK(box->getText() == "Favoriten");
+    // a voice window has no set box
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> voiceEditor(voice.processor.createEditor());
+    CHECK_FALSE(child<juce::ComboBox>(*voiceEditor, "referenceSet")->isVisible());
 }
