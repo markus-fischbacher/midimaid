@@ -93,6 +93,64 @@ void EditableRoll::setHelpers(bool fold, bool guides, bool markers) {
     repaint();
 }
 
+const std::array<int, 6>& EditableRoll::chanceChoices() {
+    static const std::array<int, 6> choices{100, 75, 50, 25, 10, 0};
+    return choices;
+}
+
+const std::array<std::array<int, 2>, 9>& EditableRoll::conditionChoices() {
+    static const std::array<std::array<int, 2>, 9> choices{
+        {{1, 1}, {1, 2}, {2, 2}, {1, 4}, {2, 4}, {3, 4}, {4, 4}, {1, 8}, {8, 8}}};
+    return choices;
+}
+
+void EditableRoll::setLaneMode(LaneMode mode) {
+    if (mode != laneMode_) {
+        endGesture();
+        laneMode_ = mode;
+        repaint();
+    }
+}
+
+void EditableRoll::setChanceOfSelection(int percent) {
+    if (selection_.empty() || !haveView_) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        return mm::core::setChance(pattern, voice, ids, percent);
+    });
+}
+
+void EditableRoll::setConditionOfSelection(int a, int b) {
+    if (selection_.empty() || !haveView_) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        return mm::core::setCondition(pattern, voice, ids, a, b);
+    });
+}
+
+void EditableRoll::stepChance(double y) {
+    const int target = mm::core::chanceAtY(laneHeight(), y);
+    const int delta = target - velocityStart_[anchor_.id];
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    std::vector<mm::core::ChanceChange> changes;
+    for (const auto& [id, chance] : velocityStart_) { // the start values of the selection (here the chances)
+        changes.push_back({id, static_cast<uint8_t>(std::clamp(chance + delta, 0, 100))});
+    }
+    const bool ok = processor_.editNotes(
+        static_cast<size_t>(slotIndex_),
+        [&](mm::core::Pattern& pattern) -> size_t { return mm::core::setChances(pattern, voice, changes); }, stepped_);
+    stepped_ = stepped_ || ok;
+    hintId_ = anchor_.id;
+    hintValue_ = std::clamp(velocityStart_[anchor_.id] + delta, 0, 100);
+    repaint();
+}
+
 void EditableRoll::pressMarker(juce::Point<double> point) {
     if (!haveView_ || !markers_) {
         return;
@@ -317,7 +375,7 @@ void EditableRoll::pressLane(juce::Point<double> point, juce::ModifierKeys mods)
         velocityStart_.clear();
         for (const uint32_t selected : selection_) {
             if (const auto* note = find(selected)) {
-                velocityStart_[selected] = note->velocity;
+                velocityStart_[selected] = laneMode_ == LaneMode::Chance ? note->chance : note->velocity;
             }
         }
         mode_ = Mode::Velocity;
@@ -330,6 +388,10 @@ void EditableRoll::pressLane(juce::Point<double> point, juce::ModifierKeys mods)
 }
 
 void EditableRoll::stepVelocity(double y) {
+    if (laneMode_ == LaneMode::Chance) {
+        stepChance(y);
+        return;
+    }
     const int target = mm::core::velocityAtY(laneHeight(), y);
     const int delta = target - velocityStart_[anchor_.id];
     const size_t voice = static_cast<size_t>(voice_ - 1);
@@ -379,13 +441,26 @@ void EditableRoll::stepDraw(juce::Point<double> point) {
         const double middle = mm::core::velocityBarBox(geometry(), *note, 1.0).x + 2.0;
         const double share = std::abs(dx) < 1e-9 ? 1.0 : std::clamp((middle - lastLanePoint_.x) / dx, 0.0, 1.0);
         const double y = lastLanePoint_.y + (point.y - lastLanePoint_.y) * share;
-        changes.push_back({id, mm::core::velocityAtY(laneHeight(), y)});
+        changes.push_back({id, laneMode_ == LaneMode::Chance ? mm::core::chanceAtY(laneHeight(), y)
+                                                              : mm::core::velocityAtY(laneHeight(), y)});
     }
     lastLanePoint_ = point;
     if (changes.empty()) {
         return;
     }
     const size_t voice = static_cast<size_t>(voice_ - 1);
+    if (laneMode_ == LaneMode::Chance) {
+        std::vector<mm::core::ChanceChange> chances;
+        for (const auto& change : changes) {
+            chances.push_back({change.id, change.velocity});
+        }
+        const bool done = processor_.editNotes(
+            static_cast<size_t>(slotIndex_),
+            [&](mm::core::Pattern& pattern) { return mm::core::setChances(pattern, voice, chances); }, stepped_);
+        stepped_ = stepped_ || done;
+        repaint();
+        return;
+    }
     const bool ok = processor_.editNotes(
         static_cast<size_t>(slotIndex_),
         [&](mm::core::Pattern& pattern) { return mm::core::setVelocities(pattern, voice, changes); }, stepped_);
@@ -513,6 +588,35 @@ juce::PopupMenu EditableRoll::contextMenu() const {
             lockVelocity = lockVelocity && note->lock.velocity;
         }
     }
+    int sharedChance = selection_.empty() ? -2 : -1;
+    int sharedA = selection_.empty() ? -2 : -1;
+    int sharedB = -1;
+    for (const uint32_t id : selection_) {
+        if (const auto* note = find(id)) {
+            sharedChance = sharedChance == -1 || sharedChance == note->chance ? note->chance : -2;
+            if (sharedA == -1) {
+                sharedA = note->condA;
+                sharedB = note->condB;
+            } else if (sharedA != note->condA || sharedB != note->condB) {
+                sharedA = -2;
+            }
+        }
+    }
+    juce::PopupMenu chances;
+    for (size_t i = 0; i < chanceChoices().size(); ++i) {
+        chances.addItem(kMenuChanceBase + static_cast<int>(i), juce::String(chanceChoices()[i]) + " %",
+                        !selection_.empty(), sharedChance == chanceChoices()[i]);
+    }
+    menu.addSubMenu(tr(mm::core::text::kRollChance), chances, !selection_.empty());
+    juce::PopupMenu conditions;
+    for (size_t i = 0; i < conditionChoices().size(); ++i) {
+        const auto [a, b] = conditionChoices()[i];
+        const juce::String label = b == 1 ? juce::String(tr(mm::core::text::kRollConditionAlways))
+                                          : juce::String(a) + ":" + juce::String(b);
+        conditions.addItem(kMenuConditionBase + static_cast<int>(i), label, !selection_.empty(),
+                           sharedA == a && sharedB == b);
+    }
+    menu.addSubMenu(tr(mm::core::text::kRollCondition), conditions, !selection_.empty());
     juce::PopupMenu locks;
     locks.addItem(kMenuLockBase + 1, tr(mm::core::text::kLockPitch), !selection_.empty(), lockPitch);
     locks.addItem(kMenuLockBase + 2, tr(mm::core::text::kLockRhythm), !selection_.empty(), lockRhythm);
@@ -528,6 +632,11 @@ void EditableRoll::runMenuAction(int id) {
         toggleAccent();
     } else if (id == kMenuSlide) {
         toggleSlide();
+    } else if (id >= kMenuChanceBase && id < kMenuChanceBase + static_cast<int>(chanceChoices().size())) {
+        setChanceOfSelection(chanceChoices()[static_cast<size_t>(id - kMenuChanceBase)]);
+    } else if (id >= kMenuConditionBase && id < kMenuConditionBase + static_cast<int>(conditionChoices().size())) {
+        const auto& choice = conditionChoices()[static_cast<size_t>(id - kMenuConditionBase)];
+        setConditionOfSelection(choice[0], choice[1]);
     } else if (id > kMenuLockBase && id <= kMenuLockBase + 3) {
         toggleNoteLock(id == kMenuLockBase + 1   ? mm::core::LockDimension::Pitch
                        : id == kMenuLockBase + 2 ? mm::core::LockDimension::Rhythm
@@ -770,6 +879,11 @@ void EditableRoll::visibilityChanged() {
 void EditableRoll::mouseDown(const juce::MouseEvent& event) {
     const auto point = fieldPoint(event);
     if (event.position.y >= static_cast<float>(field().getBottom())) {
+        if (event.position.x < static_cast<float>(kGutter) &&
+            event.position.y >= static_cast<float>(field().getBottom() + markerHeight())) {
+            setLaneMode(laneMode_ == LaneMode::Velocity ? LaneMode::Chance : LaneMode::Velocity); // the label at the lane
+            return;
+        }
         if (markers_ && event.position.y < static_cast<float>(field().getBottom() + markerHeight())) {
             pressMarker({static_cast<double>(event.position.x) - kGutter,
                          static_cast<double>(event.position.y) - static_cast<double>(field().getBottom())});
@@ -918,7 +1032,9 @@ void EditableRoll::paint(juce::Graphics& g) {
                 continue;
             }
             const bool selected = selection_.count(note.id) != 0;
-            const float velocity = 0.45f + 0.55f * static_cast<float>(note.velocity) / 127.0f;
+            // a note that plays only sometimes is fainter (the lower its chance, the fainter)
+            const float velocity = (0.45f + 0.55f * static_cast<float>(note.velocity) / 127.0f) *
+                                   (0.55f + 0.45f * static_cast<float>(note.chance) / 100.0f);
             g.setColour((selected ? accent_.brighter(0.5f) : accent_).withAlpha(alpha * (selected ? 1.0f : velocity)));
             g.fillRoundedRectangle(box, 2.0f);
             if (selected) {
@@ -932,6 +1048,13 @@ void EditableRoll::paint(juce::Graphics& g) {
                 triangle.addTriangle(box.getX(), top, box.getX() + 7.0f, top, box.getX() + 3.5f, top + 6.0f);
                 g.setColour(juce::Colours::white.withAlpha(alpha * 0.95f));
                 g.fillPath(triangle);
+            }
+            if (note.condB > 1) {
+                // The condition A:B above the note.
+                g.setColour(juce::Colours::white.withAlpha(alpha * 0.8f));
+                g.setFont(juce::FontOptions(9.0f));
+                g.drawText(juce::String(note.condA) + ":" + juce::String(note.condB), juce::roundToInt(box.getX()) + 8,
+                           juce::roundToInt(box.getY()) - 10, 24, 10, juce::Justification::centredLeft);
             }
             if (note.lock.pitch || note.lock.rhythm || note.lock.velocity) {
                 // A small square at the lower left corner: the note has a lock in some dimension.
@@ -1012,20 +1135,28 @@ void EditableRoll::paint(juce::Graphics& g) {
         g.fillRect(lane);
         g.setColour(juce::Colours::white.withAlpha(0.10f));
         g.drawHorizontalLine(lane.getY(), static_cast<float>(lane.getX()), static_cast<float>(lane.getRight()));
+        const bool chanceMode = laneMode_ == LaneMode::Chance;
         for (const auto& note : source_) {
-            auto box = toRect(mm::core::velocityBarBox(geo, note, static_cast<double>(lane.getHeight())),
+            auto box = toRect(chanceMode ? mm::core::chanceBarBox(geo, note, static_cast<double>(lane.getHeight()))
+                                         : mm::core::velocityBarBox(geo, note, static_cast<double>(lane.getHeight())),
                               {lane.getX(), lane.getY()});
             if (box.getRight() < static_cast<float>(lane.getX()) || box.getX() > static_cast<float>(lane.getRight())) {
                 continue;
             }
             const bool selected = selection_.count(note.id) != 0;
-            auto colour = note.accent ? accent_.brighter(0.8f) : accent_;
+            auto colour = chanceMode ? juce::Colour(0xffd0a050) : (note.accent ? accent_.brighter(0.8f) : accent_);
             if (selected) {
                 colour = colour.brighter(0.4f);
             }
             g.setColour(colour.withAlpha(alpha * (selected ? 1.0f : 0.8f)));
             g.fillRect(box);
-            if (note.accent) {
+            if (chanceMode && note.condB > 1) { // the condition A:B of the note, over its bar
+                g.setColour(juce::Colours::white.withAlpha(alpha * 0.85f));
+                g.setFont(juce::FontOptions(9.0f));
+                g.drawText(juce::String(note.condA) + ":" + juce::String(note.condB), juce::roundToInt(box.getX()) - 4,
+                           lane.getY() + 1, 24, 10, juce::Justification::centredLeft);
+            }
+            if (!chanceMode && note.accent) {
                 g.setColour(juce::Colours::white.withAlpha(alpha * 0.9f));
                 g.fillRect(box.withHeight(2.0f));
             }
@@ -1040,6 +1171,16 @@ void EditableRoll::paint(juce::Graphics& g) {
                            juce::Justification::centredLeft);
             }
         }
+    }
+
+    // The label at the lane: what it shows; a click on it switches between velocity and chance.
+    {
+        juce::Graphics::ScopedSaveState state(g);
+        g.reduceClipRegion(juce::Rectangle<int>(0, area.getBottom() + markerHeight(), kGutter, laneHeight()));
+        g.setColour(juce::Colours::white.withAlpha(0.6f));
+        g.setFont(juce::FontOptions(10.0f));
+        g.drawText(laneMode_ == LaneMode::Chance ? "%" : "Vel", 2, area.getBottom() + markerHeight() + 2, kGutter - 6, 12,
+                   juce::Justification::centredRight);
     }
 
     // Key labels: the C of every octave, named after the chosen convention (C3 = 60 or C4 = 60).

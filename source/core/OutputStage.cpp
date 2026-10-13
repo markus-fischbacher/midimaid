@@ -38,6 +38,8 @@ struct Work {
     bool extended = false;   ///< the end reaches the next note (slide overlap, or a tie onto the same pitch)
     bool glides = false;     ///< the extension is a real slide: the next note has another pitch
     bool dropped = false;
+    int64_t plainFinal = 0;  ///< the end without a slide, after the kick clearance (when the slide target stays out)
+    uint32_t slideTargetId = 0;
 };
 
 struct GrooveTable {
@@ -166,6 +168,7 @@ void applySlides(const Track& track, std::vector<Work>& notes, const OutputSetti
             }
         }
         work.plainCut = limit;
+        work.plainFinal = limit;
         work.end = limit;
         work.extended = false;
         work.glides = false;
@@ -178,6 +181,7 @@ void applySlides(const Track& track, std::vector<Work>& notes, const OutputSetti
             work.wantsSlide = false; // the groove moved the target in front of this note
             continue;
         }
+        work.slideTargetId = notes[target.index].source->id;
         const bool samePitch = notes[target.index].source->pitch == work.source->pitch;
         work.end = samePitch ? targetStart : targetStart + settings.slideOverlapTicks;
         work.extended = true;
@@ -224,11 +228,13 @@ void applyKickClearance(std::vector<Work>& notes, const std::vector<uint32_t>& k
                 keepSlide = !reachesKick(probe) && !notes[target.index].dropped;
             }
             int64_t end = slideEnd[i];
+            int64_t plain = work.plainCut;
+            if (settings.kickClearanceTicks > 0) {
+                plain = std::min(plain, nextKick(work.start) - static_cast<int64_t>(settings.kickClearanceTicks));
+            }
+            work.plainFinal = plain;
             if (!keepSlide) {
-                end = work.plainCut; // a removed slide ends like a plain note
-                if (settings.kickClearanceTicks > 0) {
-                    end = std::min(end, nextKick(work.start) - static_cast<int64_t>(settings.kickClearanceTicks));
-                }
+                end = plain; // a removed slide ends like a plain note
             }
             const bool dropped = end - work.start < static_cast<int64_t>(settings.minNoteTicks);
             if (keepSlide != work.extended || dropped != work.dropped || end != work.end) {
@@ -326,6 +332,13 @@ OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& setting
             note.startTick = static_cast<int32_t>(work.start);
             note.endTick = static_cast<int32_t>(work.end);
             note.slideIntoNext = work.extended && work.glides;
+            note.chance = work.source->chance;
+            note.condA = work.source->condA;
+            note.condB = work.source->condB;
+            if (work.extended && work.slideTargetId != 0) {
+                note.slideTargetId = work.slideTargetId;
+                note.plainEndTick = static_cast<int32_t>(std::max<int64_t>(work.plainFinal, work.start));
+            }
             resolveRatchet(note, work.source->slide ? uint8_t{1} : work.source->ratchet, settings, voice.notes);
         }
         std::stable_sort(voice.notes.begin(), voice.notes.end(), [](const OutputNote& a, const OutputNote& b) {

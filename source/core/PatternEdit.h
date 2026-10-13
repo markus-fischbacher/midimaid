@@ -59,6 +59,18 @@ size_t setAccent(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, 
 /// the note (the two never combine). Returns the number of notes that changed.
 size_t setRatchet(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int repeats);
 
+/// Probability and condition of the notes (SPEC 3.19, v1.1, D-233): `chance` 0-100 percent, the condition A:B (the A-th
+/// of every B passes, B 1-8, A 1-B; out of range values are limited, A above B becomes B). Both belong to the rhythm
+/// dimension: notes with a locked rhythm do not change. Returns the number of notes that changed.
+struct ChanceChange {
+    uint32_t id = 0;
+    uint8_t chance = 100; ///< 0-100; larger values are cut
+};
+/// Sets the chance per note (the chance lane edits several bars at once); notes with a locked rhythm stay.
+size_t setChances(Pattern& pattern, size_t voice, std::span<const ChanceChange> changes);
+size_t setChance(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int chance);
+size_t setCondition(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int a, int b);
+
 /// The dimensions a lock can cover (SPEC 3.5, D-231).
 enum class LockDimension { Pitch, Rhythm, Velocity };
 

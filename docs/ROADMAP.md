@@ -244,7 +244,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [ ] Session-Ansicht: Slot per Clip-Hüllkurve, Beispiele in der Live-Vorlage
 
 **Musik**
-- [ ] Wahrscheinlichkeit und Bedingungen A:B inkl. Export aufgelöster Durchläufe (SPEC §3.19)
+- [x] Wahrscheinlichkeit und Bedingungen A:B inkl. Export aufgelöster Durchläufe (SPEC §3.19, D-233; KI-Schema, Variationsoperatoren und Turnaround-Bedingungen offen)
 - [x] Ratchets (STYLES.md §1.13, D-227; im KI-Schema erst mit Wahrscheinlichkeit/Bedingungen)
 - [x] Polymeter-Sequenzen mit Neustart, Archetyp `polymeter_seq` (STYLES.md §1.3, D-230; „frei laufend“ und Export bis zum Vielfachen bleiben [Backlog])
 - [x] Turnaround (STYLES.md §1.12, D-226; Ratchet-Variante mit den Ratchets, Schalter je Phrase offen)
@@ -256,7 +256,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 **Bearbeitung**
 - [x] Sperren pro Dimension und Note (SPEC §3.5, D-231; die KI-Erzeugung beachtet nur ganz gesperrte Stimmen)
 - [x] Piano-Roll-Hilfen: Scale-Fold, Slide/Akzent-Zeile, Hintergründe (Phrasen, Kick-Raster) (SPEC §3.5, D-232)
-- [ ] Piano-Roll: Wahrscheinlichkeits-Spur (mit §3.19)
+- [x] Piano-Roll: Wahrscheinlichkeits-Spur (D-233)
 - [ ] Tastenkürzel nach SPEC §8.3: Aktionen frei belegbar in den Einstellungen, keine Voreinstellung (D-126)
 
 **Referenzen und Lenkung**

@@ -22,6 +22,7 @@ PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile&
 
     PlaybackNotes result;
     result.lengthTicks = out.lengthTicks;
+    result.seed = pattern.info.winnerSeed ^ pattern.info.seed;
     if (voiceIndex >= out.voices.size()) {
         return result;
     }
@@ -29,8 +30,18 @@ PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile&
         const int32_t start = std::max<int32_t>(note.startTick, 0);
         const int32_t end = std::min<int32_t>(note.endTick, static_cast<int32_t>(out.lengthTicks));
         if (end > start) {
-            result.notes.push_back({static_cast<uint32_t>(start), static_cast<uint32_t>(end - start), note.channel,
-                                    note.pitch, note.velocity});
+            PatternNote out{static_cast<uint32_t>(start), static_cast<uint32_t>(end - start), note.channel, note.pitch,
+                            note.velocity};
+            out.noteId = note.noteId;
+            out.chance = note.chance;
+            out.condA = note.condA;
+            out.condB = note.condB;
+            if (note.slideTargetId != 0) {
+                out.slideTargetId = note.slideTargetId;
+                const int32_t plainEnd = std::min<int32_t>(note.plainEndTick, end);
+                out.plainLengthTicks = plainEnd > start ? static_cast<uint32_t>(plainEnd - start) : 0u;
+            }
+            result.notes.push_back(out);
         }
     }
     std::stable_sort(result.notes.begin(), result.notes.end(),

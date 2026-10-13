@@ -1597,3 +1597,173 @@ TEST_CASE("transposition does not allocate while processing", "[engine][transpos
     tCounting = false;
     CHECK(gAllocations.load() == 0);
 }
+
+// -- probability and conditions (SPEC 3.19, D-233) ----------------------------------------------------------------
+
+namespace {
+
+/// Runs `bars` bars of a one-bar pattern and counts the note-ons of each pitch per bar.
+std::vector<std::vector<int>> noteOnsPerBar(PatternView pattern, int bars) {
+    Simulation sim(pattern);
+    const int blocksPerBar = 4 * 48000 / 2 / 256 + 1;
+    for (int i = 0; i < bars * blocksPerBar; ++i) {
+        sim.block(256);
+    }
+    std::vector<std::vector<int>> result(static_cast<size_t>(bars), std::vector<int>(128, 0));
+    for (const auto& e : sim.events()) {
+        if (e.noteOn) {
+            const auto bar = static_cast<size_t>(std::floor(e.ppq / 4.0 + 0.01));
+            if (bar < result.size()) {
+                ++result[bar][e.pitch];
+            }
+        }
+    }
+    return result;
+}
+
+PatternNote chanceNote(uint32_t id, uint8_t pitch, uint32_t start, uint8_t chance, uint8_t a = 1, uint8_t b = 1) {
+    PatternNote note{start, 240, 1, pitch, 100};
+    note.noteId = id;
+    note.chance = chance;
+    note.condA = a;
+    note.condB = b;
+    return note;
+}
+
+} // namespace
+
+TEST_CASE("a condition A:B plays the note in the A-th of every B passes", "[engine][probability]") {
+    const PatternNote notes[] = {chanceNote(1, 40, 0, 100), chanceNote(2, 41, 960, 100, 2, 4), chanceNote(3, 42, 1920, 100, 4, 4),
+                                 chanceNote(4, 43, 2880, 100, 1, 2)};
+    PatternView view = viewOf(notes, 4);
+    view.seed = 99;
+    const auto bars = noteOnsPerBar(view, 8);
+    for (size_t bar = 0; bar < 8; ++bar) {
+        INFO("bar " << bar);
+        CHECK(bars[bar][40] == 1);                  // always
+        CHECK(bars[bar][41] == (bar % 4 == 1 ? 1 : 0)); // 2:4
+        CHECK(bars[bar][42] == (bar % 4 == 3 ? 1 : 0)); // 4:4
+        CHECK(bars[bar][43] == (bar % 2 == 0 ? 1 : 0)); // 1:2
+    }
+}
+
+TEST_CASE("a chance is decided by the seed, the note and the pass, the same in every player", "[engine][probability]") {
+    const PatternNote notes[] = {chanceNote(1, 40, 0, 50), chanceNote(2, 41, 960, 50), chanceNote(3, 42, 1920, 0),
+                                 chanceNote(4, 43, 2880, 100)};
+    PatternView view = viewOf(notes, 4);
+    view.seed = 12345;
+    const auto first = noteOnsPerBar(view, 24);
+    const auto second = noteOnsPerBar(view, 24);
+    CHECK(first == second); // the same pass sounds the same
+    int ones = 0;
+    int twos = 0;
+    for (size_t bar = 0; bar < 24; ++bar) {
+        ones += first[bar][40];
+        twos += first[bar][41];
+        CHECK(first[bar][42] == 0); // 0 %: never
+        CHECK(first[bar][43] == 1); // 100 %: always
+    }
+    CHECK(ones > 4);
+    CHECK(ones < 20);
+    CHECK(twos > 4);
+    CHECK(twos < 20);
+    bool differ = false;
+    for (size_t bar = 0; bar < 24; ++bar) {
+        differ = differ || first[bar][40] != first[bar][41]; // two notes decide on their own
+    }
+    CHECK(differ);
+    PatternView other = view;
+    other.seed = 54321;
+    CHECK(noteOnsPerBar(other, 24) != first); // another seed, another sequence
+}
+
+TEST_CASE("the position decides, not the time since the start of the playing", "[engine][probability]") {
+    const PatternNote notes[] = {chanceNote(1, 40, 0, 50)};
+    PatternView view = viewOf(notes, 1);
+    view.seed = 7;
+    const auto reference = noteOnsPerBar(view, 16);
+    // a player that starts at bar 6 plays what the reference plays there
+    Simulation late(view);
+    late.setPpq(6 * 4.0);
+    for (int i = 0; i < 10 * (4 * 48000 / 2 / 256 + 1); ++i) {
+        late.block(256);
+    }
+    std::vector<int> played(16, 0);
+    for (const auto& e : late.events()) {
+        if (e.noteOn) {
+            const auto bar = static_cast<size_t>(std::floor(e.ppq / 4.0 + 0.01));
+            if (bar < played.size()) {
+                ++played[bar];
+            }
+        }
+    }
+    for (size_t bar = 6; bar < 15; ++bar) {
+        INFO("bar " << bar);
+        CHECK(played[bar] == reference[bar][40]);
+    }
+}
+
+TEST_CASE("the parts of a ratchet stay or fall together", "[engine][probability]") {
+    PatternNote a = chanceNote(5, 40, 0, 50);
+    PatternNote b = a;
+    b.startTick = 80; // a second part of the same note: same id, same values
+    const PatternNote notes[] = {a, b};
+    PatternView view = viewOf(notes, 2);
+    view.seed = 3;
+    const auto bars = noteOnsPerBar(view, 20);
+    for (size_t bar = 0; bar < 20; ++bar) {
+        CHECK((bars[bar][40] == 0 || bars[bar][40] == 2));
+    }
+}
+
+TEST_CASE("a slide note ends plain when the note it glides into does not play", "[engine][probability]") {
+    PatternNote slide{0, 480, 1, 40, 100};
+    slide.noteId = 1;
+    slide.slideTargetId = 2;
+    slide.plainLengthTicks = 240; // plain: 240 ticks, slid: 480 ticks (reaches the next note)
+    PatternNote target = chanceNote(2, 43, 480, 100, 1, 2); // plays in every other pass only
+    const PatternNote notes[] = {slide, target};
+    PatternView view = viewOf(notes, 2);
+    view.seed = 1;
+    Simulation sim(view);
+    for (int i = 0; i < 2 * (4 * 48000 / 2 / 256 + 1); ++i) {
+        sim.block(256);
+    }
+    const auto offs = ofPitch(sim.events(), 40, false);
+    const auto ons = ofPitch(sim.events(), 40, true);
+    REQUIRE(ons.size() >= 2);
+    REQUIRE(offs.size() >= 2);
+    // bar 0: the target plays (1:2), the note slides (480 ticks = 0.5 PPQ); bar 1: it does not, the note ends plain
+    CHECK(offs[0].ppq - ons[0].ppq == Catch::Approx(0.5).margin(0.01));
+    CHECK(offs[1].ppq - ons[1].ppq == Catch::Approx(0.25).margin(0.01));
+}
+
+TEST_CASE("deciding the passes allocates nothing", "[engine][probability][realtime]") {
+    PatternNote notes[16];
+    for (uint32_t i = 0; i < 16; ++i) {
+        notes[i] = chanceNote(i + 1, static_cast<uint8_t>(40 + i), i * 240, 60, 1 + i % 2, 2);
+    }
+    notes[3].slideTargetId = 5;
+    notes[3].plainLengthTicks = 120;
+    PatternView view = viewOf(notes, 16);
+    view.seed = 5;
+    PatternPlayer player(view);
+    MidiEventList out;
+    TransportInfo info;
+    info.hasPosition = true;
+    info.isPlaying = true;
+    info.bpm = 120.0;
+    player.process(info, 128, kSampleRate, out);
+    info.ppq += 128 * 120.0 / 60.0 / kSampleRate;
+    gAllocations = 0;
+    tCounting = true;
+    size_t events = 0;
+    for (int i = 0; i < 40000; ++i) { // many passes
+        player.process(info, 128, kSampleRate, out);
+        events += out.size();
+        info.ppq += 128 * 120.0 / 60.0 / kSampleRate;
+    }
+    tCounting = false;
+    CHECK(gAllocations.load() == 0);
+    CHECK(events > 100);
+}

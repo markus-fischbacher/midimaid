@@ -35,6 +35,12 @@ struct OutputNote {
     int32_t startTick = 0;
     int32_t endTick = 0;
     bool slideIntoNext = false; ///< the note overlaps the next one by the slide overlap
+    // Probability and conditions of the note (SPEC 3.19, D-233); all parts of a ratchet carry them.
+    uint8_t chance = 100;
+    uint8_t condA = 1;
+    uint8_t condB = 1;
+    uint32_t slideTargetId = 0; ///< a note that reaches into the next one: the id of that note (0: none)
+    int32_t plainEndTick = 0;   ///< and where it ends when that note does not play in a pass
 
     bool operator==(const OutputNote&) const = default;
 };

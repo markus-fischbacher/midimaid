@@ -151,7 +151,7 @@ eigene Phrasen-Rolle.
   deaktiviert (SPEC §3.9).
 - Bei Bass-Swing über 56 % weist die UI auf mögliche Flams mit einer geraden Kick hin.
 
-### 1.16 [v1.1] Wahrscheinlichkeit und Bedingungen (Startwerte)
+### 1.16 [v1.1] Wahrscheinlichkeit und Bedingungen (Startwerte, umgesetzt, D-233)
 - Allgemein sparsam: höchstens 15 % der Noten eines Patterns mit Wahrscheinlichkeit < 100 %
 - **Peak Time:** Geisternoten im Bass (leise Zwischen-16tel) mit 50–75 %, Melodie-Zierungen mit 60–80 %
 - **Melodic Techno:** kaum Wahrscheinlichkeit; Bedingungen für Variationen in Antwortphrasen (z. B. 2:2)

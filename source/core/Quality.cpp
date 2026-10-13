@@ -80,11 +80,12 @@ int rangeScore(const Track& track) {
 }
 
 int densityScore(const Track& track, uint32_t lengthBars, int energyPct) {
-    // expected onsets per bar in hundredths: one onset per start tick, counted with the highest chance of its notes
+    // expected onsets per bar in hundredths: one onset per start tick, counted with the highest expectation of its notes
     std::map<uint32_t, int> chanceAt;
     for (const Note& note : track.notes) {
         int& chance = chanceAt[note.startTick];
-        chance = std::max<int>(chance, std::min<int>(note.chance, 100));
+        // a condition A:B lets the note sound in one pass of B: its expected share is the chance divided by B (SPEC 3.19)
+        chance = std::max<int>(chance, std::min<int>(note.chance, 100) / std::clamp<int>(note.condB, 1, 8));
     }
     int total = 0;
     for (const auto& entry : chanceAt) {

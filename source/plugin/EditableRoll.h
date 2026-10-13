@@ -5,6 +5,7 @@
 #include "plugin/ProcessorBase.h"
 #include "plugin/RollView.h"
 
+#include <array>
 #include <functional>
 #include <map>
 #include <set>
@@ -77,6 +78,13 @@ public:
     void toggleSlide();
     /// Ratchet of the selection: `repeats` 1 (off) to 4 (`core/PatternEdit::setRatchet`), one undo step.
     void setRatchet(int repeats);
+    /// What the lane under the notes shows and edits: the velocity (default) or the chance of the notes (v1.1, D-233).
+    enum class LaneMode { Velocity, Chance };
+    void setLaneMode(LaneMode mode);
+    LaneMode laneMode() const { return laneMode_; }
+    /// Sets the chance of the selected notes (percent), or their condition A:B (one undo step each).
+    void setChanceOfSelection(int percent);
+    void setConditionOfSelection(int a, int b);
     /// Locks one dimension of the selected notes, or takes the lock away when all of them have it (one undo step, v1.1, D-231).
     void toggleNoteLock(mm::core::LockDimension dimension);
     /// Adds `delta` to the velocity of the selection (cut to 1-127), one undo step.
@@ -115,6 +123,11 @@ public:
     static constexpr int kMenuAccent = 1;
     static constexpr int kMenuSlide = 2;
     static constexpr int kMenuDelete = 3;
+    static constexpr int kMenuChanceBase = 40; ///< + index into `chanceChoices()`
+    static constexpr int kMenuConditionBase = 60; ///< + index into `conditionChoices()`
+    /// The chances and conditions the menu offers.
+    static const std::array<int, 6>& chanceChoices();
+    static const std::array<std::array<int, 2>, 9>& conditionChoices();
     static constexpr int kMenuLockBase = 20; ///< + 1 pitch, 2 rhythm, 3 velocity: lock of the selected notes
     static constexpr int kMenuRatchetBase = 10; ///< + the repeats: 11 = off, 12 to 14 = 2 to 4 repeats
 
@@ -148,6 +161,8 @@ private:
     mm::core::EditGrid grid_;
     mm::core::PitchSnap pitchSnap_ = mm::core::PitchSnap::Scale;
     int middleC_ = 3;
+    LaneMode laneMode_ = LaneMode::Velocity;
+    void stepChance(double y);
     bool fold_ = false;
     bool guides_ = true;
     bool markers_ = false;

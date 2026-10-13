@@ -1,5 +1,7 @@
 #include "engine/PatternPlayer.h"
 
+#include "core/Probability.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -348,6 +350,15 @@ void PatternPlayer::startNote(const PatternNote& note, double endPpq, int offset
     ++activeCount_;
 }
 
+bool PatternPlayer::targetSounds(uint32_t noteId, uint64_t pass) const {
+    for (size_t i = 0; i < pattern_.count; ++i) {
+        if (pattern_.notes[i].noteId == noteId) {
+            return core::soundsInPass(pattern_.notes[i], pattern_.seed, pass);
+        }
+    }
+    return false;
+}
+
 void PatternPlayer::processSegment(double scanFrom, double origin, double to, int sampleBase, int numSamples,
                                    double ppqPerSample, MidiEventList& out) {
     // Hosts report negative positions during a count-in: stay silent there (O-24). A block that crosses zero
@@ -363,7 +374,16 @@ void PatternPlayer::processSegment(double scanFrom, double origin, double to, in
                 const PatternNote& note = pattern_.notes[i];
                 const double start = static_cast<double>(cycle) * lengthPpq + note.startTick * ticksToPpq;
                 if (start >= scanFrom && start < to) {
-                    const double end = start + note.lengthTicks * ticksToPpq;
+                    // probability and conditions (SPEC 3.19): the same decision for the same pass wherever it is played
+                    if (!core::soundsInPass(note, pattern_.seed, static_cast<uint64_t>(cycle))) {
+                        continue;
+                    }
+                    uint32_t lengthTicks = note.lengthTicks;
+                    if (note.slideTargetId != 0 && note.plainLengthTicks != 0 &&
+                        !targetSounds(note.slideTargetId, static_cast<uint64_t>(cycle))) {
+                        lengthTicks = note.plainLengthTicks; // the note it glides into stays out: it ends as a plain note
+                    }
+                    const double end = start + lengthTicks * ticksToPpq;
                     startNote(note, end, clampOffset(sampleBase, (start - origin) / ppqPerSample, numSamples), out);
                 }
             }

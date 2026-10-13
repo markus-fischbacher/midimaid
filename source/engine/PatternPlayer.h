@@ -168,6 +168,8 @@ private:
     void releaseAt(MidiEventList& out, int sampleOffset, bool guardOwnStarts);
     double positionTolerance(double ppqPerSample) const;
     void startNote(const PatternNote& note, double endPpq, int offset, MidiEventList& out);
+    /// True if the note with this id plays in `pass` (a slide note looks at the note it glides into).
+    bool targetSounds(uint32_t noteId, uint64_t pass) const;
     void reportActive() const;
 
     struct SlotEntry {

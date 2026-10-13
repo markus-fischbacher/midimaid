@@ -213,6 +213,55 @@ TEST_CASE("the export carries the notes of the playing slot and the DAW tempo", 
     CHECK(noteOffs == static_cast<int>(pitches.size()));
 }
 
+TEST_CASE("the export holds the resolved passes when notes have conditions", "[plugin][export][probability]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    mm::core::Pattern pattern = offbeatBass(45);
+    pattern.voices[0].notes[0].condA = 1; // step 2: every pass
+    pattern.voices[0].notes[1].condA = 2;
+    pattern.voices[0].notes[1].condB = 2; // step 6: the second of two passes
+    pattern.voices[0].notes[2].condA = 1;
+    pattern.voices[0].notes[2].condB = 2; // step 10: the first of two passes
+    fillSlot(processor, 0, pattern);
+    FakePlayHead head;
+    setHostTempo(processor, head, 120.0);
+    processor.updateExport();
+    REQUIRE(waitForExport(processor.midiExporter(), 120.0));
+    const auto file = processor.midiExporter().readyFile();
+    juce::MidiFile midi;
+    juce::FileInputStream stream(file);
+    REQUIRE(stream.openedOk());
+    REQUIRE(midi.readFrom(stream));
+    std::vector<int> starts;
+    double lastEnd = 0.0;
+    for (const auto* event : *midi.getTrack(0)) {
+        if (event->message.isNoteOn()) {
+            starts.push_back(static_cast<int>(event->message.getTimeStamp()));
+        }
+        lastEnd = std::max(lastEnd, event->message.getTimeStamp());
+    }
+    // two passes of one bar (3840 ticks): pass 0 has steps 2, 10, 14; pass 1 has steps 2, 6, 14
+    const std::vector<int> expected{480, 2400, 3360, 3840 + 480, 3840 + 1440, 3840 + 3360};
+    CHECK(starts == expected);
+    CHECK(lastEnd <= 2 * 3840);
+}
+
+TEST_CASE("a pattern without chances is exported as it is", "[plugin][export][probability]") {
+    mm::plugin::InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, offbeatBass(45));
+    FakePlayHead head;
+    setHostTempo(processor, head, 120.0);
+    processor.updateExport();
+    REQUIRE(waitForExport(processor.midiExporter(), 120.0));
+    juce::MidiFile midi;
+    juce::FileInputStream stream(processor.midiExporter().readyFile());
+    REQUIRE(midi.readFrom(stream));
+    int notes = 0;
+    for (const auto* event : *midi.getTrack(0)) {
+        notes += event->message.isNoteOn() ? 1 : 0;
+    }
+    CHECK(notes == 4);
+}
+
 TEST_CASE("the export follows the slot, the octave and the tempo", "[plugin][export]") {
     mm::plugin::InstrumentProcessor processor("Test");
     fillSlot(processor, 0, offbeatBass(45));
