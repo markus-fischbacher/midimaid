@@ -541,6 +541,39 @@ TEST_CASE("the examples text names the role, length, key and the notes, and asks
     CHECK(contains(text, "- melody, 1 bar, C dorian: 3:-2/4\n"));
 }
 
+TEST_CASE("the taste summary has numbers and names only and is empty for an invalid profile", "[ai][prompt][reference]") {
+    CHECK(tasteSummaryText(mm::core::SetProfile{}).empty());
+    mm::core::SetProfile profile;
+    profile.valid = true;
+    profile.activeItems = 5;
+    profile.scales = {{"natural_minor", 3}, {"dorian", 1}};
+    profile.chromaticPermille = 120;
+    profile.bass.items = 4;
+    profile.bass.notesPerBar100 = 725;
+    profile.bass.stepPermille[0] = 900;
+    profile.bass.stepPermille[3] = 499; // below half: not named
+    profile.bass.stepPermille[10] = 500;
+    const auto text = tasteSummaryText(profile);
+    CHECK(contains(text, "numbers only, no notes"));
+    CHECK(contains(text, "- scale: mostly natural_minor (75 %)\n"));
+    CHECK(contains(text, "- bass: about 7.2 notes per bar, most often on the 16th steps 0, 10\n"));
+    CHECK_FALSE(contains(text, "- melody")); // no melody line in the set
+    CHECK(contains(text, "- notes outside the scale: 12 %\n"));
+}
+
+TEST_CASE("the taste summary goes into the request prompt ahead of the examples", "[ai][generate][reference]") {
+    const auto style = shipped();
+    auto input = inputFor(style);
+    input.prompt.tasteSummary = "The musician's taste, test\n";
+    input.examples = {bassExample()};
+    MockProvider provider;
+    provider.enqueueText(answerFor(algorithmic(style, 5), style));
+    REQUIRE(generateWithAi(provider, input, CancellationToken()).outcome == AiOutcome::Success);
+    const std::string user = provider.requests()[0].userPrompt;
+    CHECK(user.find("The musician's taste, test") < user.find("own style"));
+    CHECK(user.find("own style") < user.find("<<<dark rolling bass>>>"));
+}
+
 TEST_CASE("the examples go into the request prompt, and without them nothing of it is there", "[ai][generate][reference]") {
     const auto style = shipped();
     auto input = inputFor(style);

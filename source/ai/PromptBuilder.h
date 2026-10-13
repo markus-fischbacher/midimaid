@@ -78,7 +78,16 @@ struct GeneratePromptInput {
     /// Pieces of the musician's own style (SPEC 3.20, 7.4): at most `kMaxPersonalExamples`, shown as "the musician's
     /// style" and ahead of every other example. The caller leaves them out when the provider has no consent (D-86).
     std::vector<mm::core::PersonalExample> examples;
+    /// What the musician's taste looks like in words (`tasteSummaryText`): no notes, so it goes to every provider.
+    /// Empty: no valid profile or "Personal" at 0 (D-248).
+    std::string tasteSummary;
 };
+
+/// A few lines about the musician's taste from the profile of the active set (SPEC 3.20, D-248): the preferred scale,
+/// the most frequent progression, the density and the favourite steps of bass and melody, the share of notes outside
+/// the scale. Only numbers and names, never a note of a piece, so it does not need the consent of D-86. Empty for an
+/// invalid profile.
+std::string tasteSummaryText(const mm::core::SetProfile& profile);
 
 /// The prompt text for the musician's examples (empty for none): one line per example with the role, the length, the key
 /// and the notes as `step:semitones/length`, and the instruction to pick the style up without copying it.
