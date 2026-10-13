@@ -1,6 +1,7 @@
 #include "core/Variation.h"
 
 #include "core/Random.h"
+#include "core/Ratchet.h"
 #include "core/Theory.h"
 
 #include <algorithm>
@@ -17,7 +18,7 @@ constexpr uint32_t kLengthStepTicks = 60; // 1/64
 constexpr uint32_t kHalfBarTicks = kTicksPerBar / 2;
 constexpr uint32_t kGridTicks = 240; // 1/16
 
-enum class SubtleOperator { Length, VelocityContour, MoveAccent, ReplaceNote };
+enum class SubtleOperator { Length, VelocityContour, MoveAccent, ReplaceNote, Ratchet, Chance };
 
 std::optional<Chord> chordAt(const HarmonicContext& harmony, uint32_t tick) {
     const uint32_t halfBar = tick / kHalfBarTicks;
@@ -98,8 +99,8 @@ bool moveAccent(std::vector<Note>& notes, Pcg32& rng) {
     for (int d = -2; d <= 2; ++d) {
         const auto to = static_cast<long>(from) + d;
         if (d != 0 && to >= 0 && to < static_cast<long>(notes.size()) && !notes[static_cast<size_t>(to)].accent &&
-            !notes[static_cast<size_t>(to)].lock.velocity) {
-            targets.push_back(static_cast<size_t>(to));
+            !notes[static_cast<size_t>(to)].lock.velocity && notes[static_cast<size_t>(to)].chance == 100) {
+            targets.push_back(static_cast<size_t>(to)); // an ornament with a chance takes no accent
         }
     }
     if (targets.empty()) {
@@ -152,6 +153,76 @@ bool replaceNote(std::vector<Note>& notes, const VariationVoice& context, Pcg32&
     return true;
 }
 
+bool takesRatchets(const VariationVoice& voice) {
+    return voice.archetypeId != nullptr && (*voice.archetypeId == "acid_siren" || *voice.archetypeId == "roll16_aggressive");
+}
+
+/// Adds a ratchet to one note or takes one away (SPEC 3.6, v1.1): at most one per bar like the generators (STYLES.md
+/// 1.13); the notes that can take one are single, no slide, not the target of a slide and at least 120 ticks long.
+bool toggleRatchet(std::vector<Note>& notes, Pcg32& rng) {
+    std::vector<size_t> ratcheted;
+    for (size_t i = 0; i < notes.size(); ++i) {
+        if (notes[i].ratchet > 1 && !notes[i].lock.rhythm) {
+            ratcheted.push_back(i);
+        }
+    }
+    if (!ratcheted.empty() && rng.chance(40)) {
+        notes[ratcheted[rng.bounded(static_cast<uint32_t>(ratcheted.size()))]].ratchet = 1;
+        return true;
+    }
+    std::vector<size_t> eligible;
+    for (size_t i = 0; i < notes.size(); ++i) {
+        const Note& note = notes[i];
+        const bool single = (i == 0 || notes[i - 1].startTick != note.startTick) &&
+                            (i + 1 >= notes.size() || notes[i + 1].startTick != note.startTick);
+        const bool slideTarget = i > 0 && notes[i - 1].slide;
+        bool barTaken = false;
+        for (const Note& other : notes) {
+            barTaken = barTaken || (other.ratchet > 1 && other.startTick / kTicksPerBar == note.startTick / kTicksPerBar);
+        }
+        if (note.ratchet == 1 && single && !note.slide && !slideTarget && !note.lock.rhythm && !barTaken &&
+            note.lengthTicks >= 120) {
+            eligible.push_back(i);
+        }
+    }
+    if (eligible.empty()) {
+        return false;
+    }
+    Note& note = notes[eligible[rng.bounded(static_cast<uint32_t>(eligible.size()))]];
+    const int most = maxRatchetFor(note.lengthTicks);
+    note.ratchet = static_cast<uint8_t>(2 + rng.bounded(static_cast<uint32_t>(most - 1)));
+    return true;
+}
+
+/// Sets the chance of a quiet note on an off 16th (an ornament or ghost note) or takes it away again; no more than 15 %
+/// of the notes of the voice have one (STYLES.md 1.16). Notes with a condition or a locked rhythm stay as they are.
+bool toggleChance(std::vector<Note>& notes, Pcg32& rng) {
+    std::vector<size_t> with;
+    std::vector<size_t> candidates;
+    for (size_t i = 0; i < notes.size(); ++i) {
+        const Note& note = notes[i];
+        if (note.lock.rhythm || note.condB > 1) {
+            continue;
+        }
+        if (note.chance < 100) {
+            with.push_back(i);
+        } else if (note.startTick % 480 == 240 && !note.accent && note.velocity < 100) {
+            candidates.push_back(i);
+        }
+    }
+    const bool full = (with.size() + 1) * 100 > notes.size() * 15;
+    if (!with.empty() && (full || candidates.empty() || rng.chance(40))) {
+        notes[with[rng.bounded(static_cast<uint32_t>(with.size()))]].chance = 100;
+        return true;
+    }
+    if (candidates.empty() || full) {
+        return false;
+    }
+    notes[candidates[rng.bounded(static_cast<uint32_t>(candidates.size()))]].chance =
+        static_cast<uint8_t>(rng.range(50, 80));
+    return true;
+}
+
 bool applyOperator(SubtleOperator op, std::vector<Note>& notes, const LockFlags& lock, int strengthPct,
                    const VariationVoice& context, Pcg32& rng) {
     switch (op) {
@@ -163,12 +234,21 @@ bool applyOperator(SubtleOperator op, std::vector<Note>& notes, const LockFlags&
         return !lock.velocity && moveAccent(notes, rng);
     case SubtleOperator::ReplaceNote:
         return !lock.pitch && replaceNote(notes, context, rng);
+    case SubtleOperator::Ratchet:
+        return !lock.rhythm && takesRatchets(context) && toggleRatchet(notes, rng);
+    case SubtleOperator::Chance:
+        return !lock.rhythm && toggleChance(notes, rng);
     }
     return false;
 }
 
-constexpr std::array<SubtleOperator, 4> kSubtleOperators = {SubtleOperator::Length, SubtleOperator::VelocityContour,
-                                                            SubtleOperator::MoveAccent, SubtleOperator::ReplaceNote};
+constexpr std::array<SubtleOperator, 5> kSubtleOperators = {SubtleOperator::Length, SubtleOperator::VelocityContour,
+                                                            SubtleOperator::MoveAccent, SubtleOperator::ReplaceNote,
+                                                            SubtleOperator::Chance};
+/// The same with the ratchet, for voices whose archetype takes ratchets.
+constexpr std::array<SubtleOperator, 6> kSubtleOperatorsWithRatchet = {
+    SubtleOperator::Length,      SubtleOperator::VelocityContour, SubtleOperator::MoveAccent,
+    SubtleOperator::ReplaceNote, SubtleOperator::Chance,          SubtleOperator::Ratchet};
 
 void sortByStart(std::vector<Note>& notes) {
     std::stable_sort(notes.begin(), notes.end(),
@@ -647,6 +727,7 @@ size_t applyVariation(Pattern& pattern, const StyleProfile& style, const Archety
         context.patternEnd = next.lengthBars * kTicksPerBar;
         context.role = track.role;
         context.phrases = &next.phrases;
+        context.archetypeId = &track.archetypeId;
         if (v < constraints.voices.size()) {
             context.rangeLow = constraints.voices[v].rangeLow;
             context.rangeHigh = constraints.voices[v].rangeHigh;
@@ -659,7 +740,10 @@ size_t applyVariation(Pattern& pattern, const StyleProfile& style, const Archety
         // Operators run until `edits` notes differ. One may find nothing to do (no accent, no room, no allowed
         // neighbour) or undo an earlier edit: draw again, bounded.
         for (size_t attempt = 0; done < edits && attempt < edits * 8 + 16; ++attempt) {
-            const auto op = kSubtleOperators[rng.bounded(static_cast<uint32_t>(kSubtleOperators.size()))];
+            const auto op = takesRatchets(context)
+                                ? kSubtleOperatorsWithRatchet[rng.bounded(
+                                      static_cast<uint32_t>(kSubtleOperatorsWithRatchet.size()))]
+                                : kSubtleOperators[rng.bounded(static_cast<uint32_t>(kSubtleOperators.size()))];
             if (applyOperator(op, track.notes, track.lock, request.strengthPct, context, rng)) {
                 done = countChanged(before, track.notes);
             }

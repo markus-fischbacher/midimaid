@@ -245,6 +245,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 
 **Musik**
 - [x] Wahrscheinlichkeit und Bedingungen A:B inkl. Export aufgelöster Durchläufe (SPEC §3.19, D-233; KI-Schema, Variationsoperatoren und Turnaround-Bedingungen offen)
+- [x] Variation: Ratchet und Wahrscheinlichkeit als subtile Operatoren (SPEC §3.6, D-234)
 - [x] Ratchets (STYLES.md §1.13, D-227; im KI-Schema erst mit Wahrscheinlichkeit/Bedingungen)
 - [x] Polymeter-Sequenzen mit Neustart, Archetyp `polymeter_seq` (STYLES.md §1.3, D-230; „frei laufend“ und Export bis zum Vielfachen bleiben [Backlog])
 - [x] Turnaround (STYLES.md §1.12, D-226; Ratchet-Variante mit den Ratchets, Schalter je Phrase offen)

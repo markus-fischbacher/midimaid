@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace mm::core {
@@ -31,6 +32,7 @@ struct VariationVoice {
     VoiceRole role = VoiceRole::Bass;
     const std::vector<Phrase>* phrases = nullptr;
     const std::vector<Note>* original = nullptr; ///< the voice before this variation (same indices while D1 only edits)
+    const std::string* archetypeId = nullptr;    ///< the archetype of the voice: only some take ratchets (STYLES.md 1.13)
 };
 
 enum class StructuralOperator { ShiftRhythm, SwapTones, OctaveJump, Density, InvertOrMirror, CallResponse };

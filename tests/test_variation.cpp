@@ -536,7 +536,11 @@ TEST_CASE("structural operators join from the threshold on and never below it", 
         applyVariation(below, style, {}, requestOf(seed, kLastSubtlePct));
         applyVariation(above, style, {}, requestOf(seed, 100));
         for (size_t v = 0; v < base.voices.size(); ++v) {
-            structuralBelow += starts(below.voices[v]) != starts(base.voices[v]) ? 1 : 0;
+            // Stabs in chord memory move as a whole when a changed bass clashes with them (the constraint layer, D-229):
+            // that is not an operator, so such a voice does not count for the subtle strengths.
+            const bool memoryStabs = base.voicing.chordMemory && (base.voices[v].archetypeId == "stabs" ||
+                                                                  base.voices[v].archetypeId == "aggro_stabs");
+            structuralBelow += !memoryStabs && starts(below.voices[v]) != starts(base.voices[v]) ? 1 : 0;
             structuralAbove += starts(above.voices[v]) != starts(base.voices[v]) ? 1 : 0;
         }
     }
@@ -595,4 +599,122 @@ TEST_CASE("a subtle variation never merges the tones of a chord", "[variation]")
         applyVariation(varied, style, {}, requestOf(seed, kLastSubtlePct, 1));
         CHECK(varied.voices[1].notes.size() == base.voices[1].notes.size());
     }
+}
+
+// -- ratchet and chance as subtle operators (SPEC 3.6, v1.1, D-234) --------------------------------------------------
+
+namespace {
+
+/// A 4-bar voice of loud 16ths on the beats and quiet ones in between, with the archetype `archetype`.
+Pattern sixteenths(const std::string& archetype, size_t voice = 1) {
+    Pattern p = makeEmptyPattern(4, "peak_time");
+    p.voices[voice].archetypeId = archetype;
+    for (uint32_t step = 0; step < 64; ++step) {
+        Note note;
+        note.id = allocateNoteId(p);
+        note.pitch = static_cast<uint8_t>(voice == 0 ? 36 : 64);
+        note.startTick = step * 240;
+        note.lengthTicks = 180;
+        note.velocity = step % 2 == 1 ? 70 : 105;
+        p.voices[voice].notes.push_back(note);
+    }
+    return p;
+}
+
+int ratchetBar(const Track& track, uint32_t bar) {
+    int count = 0;
+    for (const Note& n : track.notes) {
+        count += n.startTick / kTicksPerBar == bar && n.ratchet > 1 ? 1 : 0;
+    }
+    return count;
+}
+
+} // namespace
+
+TEST_CASE("a subtle variation adds and takes away ratchets only in the archetypes that take them", "[variation][ratchet]") {
+    const StyleProfile style = loadShipped("hard_industrial");
+    int added = 0;
+    int removed = 0;
+    for (uint64_t seed = 1; seed <= 200; ++seed) {
+        Pattern base = sixteenths("acid_siren");
+        if (seed % 2 == 0) {
+            base.voices[1].notes[8].ratchet = 3; // one to take away
+        }
+        Pattern varied = base;
+        applyVariation(varied, style, {}, requestOf(seed, kLastSubtlePct, 1));
+        for (uint32_t bar = 0; bar < 4; ++bar) {
+            CHECK(ratchetBar(varied.voices[1], bar) <= 1); // one per bar
+        }
+        size_t before = 0;
+        size_t after = 0;
+        for (size_t i = 0; i < base.voices[1].notes.size(); ++i) {
+            before += base.voices[1].notes[i].ratchet > 1 ? 1 : 0;
+            after += varied.voices[1].notes[i].ratchet > 1 ? 1 : 0;
+            CHECK(varied.voices[1].notes[i].startTick == base.voices[1].notes[i].startTick);
+            CHECK_FALSE((varied.voices[1].notes[i].ratchet > 1 && varied.voices[1].notes[i].slide));
+        }
+        added += after > before ? 1 : 0;
+        removed += after < before ? 1 : 0;
+        CHECK(validatePattern(varied).empty());
+        // another archetype never takes one
+        Pattern other = sixteenths("hypnotic_motif");
+        applyVariation(other, style, {}, requestOf(seed, kLastSubtlePct, 1));
+        CHECK(ratchetBar(other.voices[1], 0) + ratchetBar(other.voices[1], 1) + ratchetBar(other.voices[1], 2) +
+                  ratchetBar(other.voices[1], 3) ==
+              0);
+    }
+    CHECK(added > 5);
+    CHECK(removed > 2);
+}
+
+TEST_CASE("a locked rhythm keeps its ratchets and chances", "[variation][ratchet]") {
+    const StyleProfile style = loadShipped("hard_industrial");
+    for (uint64_t seed = 1; seed <= 60; ++seed) {
+        Pattern base = sixteenths("acid_siren");
+        base.voices[1].lock.rhythm = true;
+        Pattern varied = base;
+        applyVariation(varied, style, {}, requestOf(seed, kLastSubtlePct, 1));
+        for (size_t i = 0; i < base.voices[1].notes.size(); ++i) {
+            CHECK(varied.voices[1].notes[i].ratchet == 1);
+            CHECK(varied.voices[1].notes[i].chance == 100);
+        }
+    }
+}
+
+TEST_CASE("a subtle variation sets and clears the chance of quiet off-beat notes, sparingly", "[variation][chance]") {
+    const StyleProfile style = loadShipped("peak_time");
+    int set = 0;
+    int cleared = 0;
+    for (uint64_t seed = 1; seed <= 200; ++seed) {
+        Pattern base = sixteenths("hypnotic_motif");
+        if (seed % 2 == 0) {
+            base.voices[1].notes[9].chance = 60; // one to clear
+            base.voices[1].notes[0].condB = 2;   // and a condition that stays
+        }
+        base.voices[1].notes[3].accent = true; // an accent is no ornament
+        Pattern varied = base;
+        applyVariation(varied, style, {}, requestOf(seed, kLastSubtlePct, 1));
+        size_t marked = 0;
+        for (size_t i = 0; i < varied.voices[1].notes.size(); ++i) {
+            const Note& n = varied.voices[1].notes[i];
+            if (n.chance < 100) {
+                ++marked;
+                if (base.voices[1].notes[i].chance == 100) {
+                    CHECK(n.startTick % 480 == 240); // a new one is on an off 16th
+                    CHECK(n.velocity < 100);
+                    CHECK_FALSE(n.accent);
+                    CHECK(n.chance >= 50);
+                    CHECK(n.chance <= 80);
+                }
+            }
+            CHECK(n.condB == base.voices[1].notes[i].condB); // conditions are not touched
+        }
+        CHECK(marked * 100 <= varied.voices[1].notes.size() * 15 + 100); // sparing (the one that was there is allowed)
+        for (size_t i = 0; i < base.voices[1].notes.size(); ++i) {
+            set += base.voices[1].notes[i].chance == 100 && varied.voices[1].notes[i].chance < 100 ? 1 : 0;
+            cleared += base.voices[1].notes[i].chance < 100 && varied.voices[1].notes[i].chance == 100 ? 1 : 0;
+        }
+    }
+    CHECK(set > 10);
+    CHECK(cleared > 3);
 }

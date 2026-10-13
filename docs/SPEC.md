@@ -239,7 +239,7 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
 ### 3.6 Variationen per Knopfdruck
 Algorithmische Mutationen, deterministisch über einen Seed, in zwei Gruppen:
 - **Subtil** (hypnotisch, Standard bei geringer Stärke): Notenlänge, Velocity-Kontur, Akzent
-  verschieben, einzelne Note ersetzen; [v1.1] Ratchet hinzufügen oder entfernen, Wahrscheinlichkeit
+  verschieben, einzelne Note ersetzen; [v1.1, umgesetzt, D-234] Ratchet hinzufügen oder entfernen, Wahrscheinlichkeit
   einzelner Zier- und Geisternoten setzen
 - **Strukturell:** Rhythmus verschieben, Noten innerhalb von Skala oder Akkordtönen austauschen,
   Oktavsprünge, Dichte erhöhen oder verringern, Motiv umkehren oder spiegeln, Call & Response tauschen
