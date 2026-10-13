@@ -160,7 +160,7 @@ das *Gewicht* ändern, *Tags* vergeben und *Entfernen*. Es wirkt in dieser Form:
   legst mit dem Namensfeld ein neues an, benennst um oder löschst es. Eine Datei liegt nur einmal in deiner Sammlung und kann in
   mehreren Sets stecken (*Aus anderem Set …*); *an/aus*, *Gewicht* und *Tags* gelten je Set. Das **aktive Set** wählst du auch im Hub
   neben dem Stil; es gilt für alle Instanzen und jedes Pattern merkt sich, mit welchem Set es entstand. Das Set **Favoriten**
-  gibt es immer: Patterns, die du in der Bibliothek mit 4 Sternen oder mehr bewertest, landen dort (in den Einstellungen auch im
+  gibt es immer: Patterns, die du im Hub (Sterne-Feld rechts unten in der Infozeile, ein Klick, auch ohne vorheriges Speichern: das Pattern kommt dabei in die Bibliothek) oder in der Bibliothek mit 4 Sternen oder mehr bewertest, landen dort (in den Einstellungen auch im
   aktiven Set).
 - Ab **5 aktiven Einträgen** mischt MidiMaid deren Akkordfolgen in die des Stils (höchstens zur Hälfte).
 - **Kopierschutz:** Ein Ergebnis, das einem aktiven Bass- oder Melodie-Eintrag zu ähnlich ist, wird gekennzeichnet

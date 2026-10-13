@@ -330,7 +330,7 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
 - Speichern mit Name, Stil, Tonart, Seed und Prompt; Laden; Import und Export als .mid
 - [v1.1, umgesetzt, D-237] Tags, BPM-Bereich, Bewertung (1–5 Sterne), Suche, Filter, Vorhören
 - **[v1.1] Favoriten** = Bewertung ab 4 Sternen; sie landen automatisch im Referenz-Set „Favoriten“ des Stils
-  (§3.20). Bewerten geht mit einem Klick direkt im Hub, auch ohne vorheriges Speichern.
+  (§3.20). Bewerten geht mit einem Klick direkt im Hub, auch ohne vorheriges Speichern. **Umgesetzt (D-246):** Sterne-Feld rechts in der Infozeile; der erste Klick legt das Pattern des Slots in die Bibliothek.
 - Ansicht **Referenzen**: Set pro Stil, Import-Fläche, Liste mit Rolle und erkannter Tonart, Gewicht,
   an/aus; [v1.1] mehrere Sets, automatische Rollen-Erkennung mit Konfidenz, Tags, Set-Zusammenfassung
 - Speicherort: Benutzer-Anwendungsdatenordner (siehe §9.2)

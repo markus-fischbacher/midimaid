@@ -8,6 +8,7 @@
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/GroupText.h"
 #include "plugin/KeyChords.h"
+#include "plugin/LibraryStore.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ProcessorBase.h"
 #include "plugin/ReferenceStore.h"
@@ -7432,4 +7433,56 @@ TEST_CASE("the store of own templates takes names up to the limit and a bounded 
     CHECK(own.store.library()->size() == mm::plugin::embeddedGrooves().size() + mm::plugin::UserGrooveStore::kMaxTemplates);
     groove.nameDe = "Zu viel";
     CHECK(own.store.add(groove).empty());
+}
+
+// --- the rating box of the hub (SPEC 3.12, D-246) ---------------------------------------------------------------------
+
+TEST_CASE("the hub rates the pattern of the slot with one click", "[group-wiring][editor][rating]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::LibraryStore library{juce::File()};
+    auto* previous = &mm::plugin::libraryStore();
+    mm::plugin::overrideLibraryStore(&library);
+    mm::plugin::ReferenceStore references{juce::File(), mm::plugin::embeddedStyles()};
+    auto* previousReferences = &mm::plugin::referenceStore();
+    mm::plugin::overrideReferenceStore(&references);
+    struct Restore {
+        mm::plugin::LibraryStore* library;
+        mm::plugin::ReferenceStore* references;
+        ~Restore() {
+            mm::plugin::overrideLibraryStore(library);
+            mm::plugin::overrideReferenceStore(references);
+        }
+    } restore{previous, previousReferences};
+
+    GrooveRig rig;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(rig.hub.processor.createEditor());
+    pumpMessages(80);
+    auto* box = child<juce::ComboBox>(*editor, "rating");
+    REQUIRE(box != nullptr);
+    REQUIRE(waitFor([&] { return box->isVisible() && box->isEnabled(); }));
+    CHECK(box->getSelectedId() == 1);
+    CHECK(box->getItemText(0) == "ohne Bewertung");
+    CHECK(editor->getLocalBounds().contains(box->getBounds()));
+    // the click saves the pattern and rates it
+    box->setSelectedId(5, juce::sendNotificationSync); // four stars
+    REQUIRE(library.list().size() == 1);
+    CHECK(library.list()[0].rating == 4);
+    CHECK(rig.hub.processor.slotRating(0) == 4);
+    // a rating made elsewhere shows up
+    CHECK(rig.hub.processor.rateSlot(0, 2));
+    CHECK(waitFor([&] { return box->getSelectedId() == 3; }));
+    CHECK(library.list().size() == 1);
+    // an edit makes a new pattern: the box shows no rating
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.6f));
+    CHECK(waitFor([&] { return box->getSelectedId() == 1; }));
+    for (auto* other : editor->getChildren()) {
+        if (other != box && other->isVisible() && other->getWidth() > 0 &&
+            dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+            INFO(other->getComponentID().toStdString());
+            CHECK_FALSE(box->getBounds().intersects(other->getBounds()));
+        }
+    }
+    // an empty slot has nothing to rate
+    rig.hub.setSlotParameter(2);
+    CHECK(waitFor([&] { return !box->isEnabled(); }));
 }
