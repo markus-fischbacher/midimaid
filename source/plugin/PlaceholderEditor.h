@@ -144,6 +144,8 @@ private:
     ProcessorBase::RefineTargets shownTargets_;
     bool refinePending_ = false; // a refinement was started and its text stays until it is done
     juce::Label infoLabel_;
+    juce::ComboBox ratingBox_;      // the stars of the pattern of the slot (SPEC 3.12, D-246)
+    bool ratingUpdating_ = false;   // the box is being set from the processor: no click to send
     juce::TextButton takeOverButton_;
     juce::TextButton generateButton_;
     juce::TextButton openHubButton_;

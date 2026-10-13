@@ -1565,3 +1565,96 @@ TEST_CASE("the window puts a favorite into the active set only when the setting 
     stars.setSelectedId(5, juce::sendNotificationSync);
     REQUIRE(pumpUntil([&] { return !references.store.get("peak_time").items.empty(); }));
 }
+
+// ---- rating a slot with one click, saved or not (SPEC 3.12, D-246) ---------------------------------------------------
+
+TEST_CASE("one click rates the pattern of a slot that was never saved", "[library-plugin][rating]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, 4, "Intro", 2);
+    CHECK(processor.slotRating(0) == 0);
+    REQUIRE(processor.rateSlot(0, 3));
+    CHECK(processor.generationStatus() == GenerationStatus::LibrarySaved);
+    REQUIRE(scoped.store.list().size() == 1);
+    CHECK(scoped.store.list()[0].rating == 3);
+    CHECK(processor.slotRating(0) == 3);
+    CHECK(processor.slotRating(1) == 0); // another slot
+    CHECK(favoritesOf(references.store) == 0);
+    // tags and tempo range of the entry stay, a second rating changes the same entry
+    const auto id = scoped.store.list()[0].id;
+    scoped.store.setMeta(id, {{"dark"}, 3, 120, 130});
+    REQUIRE(processor.rateSlot(0, 5));
+    REQUIRE(scoped.store.list().size() == 1);
+    const auto entry = scoped.store.list()[0];
+    CHECK(entry.rating == 5);
+    CHECK(entry.tags == std::vector<std::string>{"dark"});
+    CHECK((entry.bpmLow == 120 && entry.bpmHigh == 130));
+    CHECK(processor.slotRating(0) == 5);
+    // four stars and more are favorites, fewer take them out
+    REQUIRE(pumpUntil([&] { return favoritesOf(references.store) > 0; }));
+    REQUIRE(processor.rateSlot(0, 2));
+    CHECK(favoritesOf(references.store) == 0);
+    // no rating takes the stars back and leaves the entry in the library
+    REQUIRE(processor.rateSlot(0, 0));
+    CHECK(processor.slotRating(0) == 0);
+    CHECK(scoped.store.list().size() == 1);
+    CHECK(scoped.store.list()[0].rating == 0);
+}
+
+TEST_CASE("an edited or new pattern is a new pattern for the rating", "[library-plugin][rating]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, 4);
+    REQUIRE(processor.rateSlot(0, 4));
+    // a note edit: the stars belong to the pattern that was rated, not to the edited one
+    processor.editSlots([](SlotBank& bank) {
+        auto pattern = *bank.slot(0)->pattern;
+        pattern.voices[0].notes.erase(pattern.voices[0].notes.begin());
+        REQUIRE(bank.edit(0, pattern));
+    });
+    CHECK(processor.slotRating(0) == 0);
+    REQUIRE(processor.rateSlot(0, 2));
+    CHECK(scoped.store.list().size() == 2); // the first entry keeps its four stars
+    CHECK(processor.slotRating(0) == 2);
+    // a new result as well
+    fillSlot(processor, 0, 9);
+    CHECK(processor.slotRating(0) == 0);
+    // rating nothing creates nothing
+    REQUIRE(processor.rateSlot(0, 0));
+    CHECK(scoped.store.list().size() == 2);
+}
+
+TEST_CASE("rating is refused for a voice, an empty slot, a wrong value and a full library", "[library-plugin][rating]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedReferences references;
+    InstrumentProcessor processor("Test");
+    CHECK_FALSE(processor.rateSlot(0, 3)); // empty
+    CHECK(processor.generationStatus() == GenerationStatus::LibraryNothingToSave);
+    fillSlot(processor, 0, 4);
+    CHECK_FALSE(processor.rateSlot(0, 6));
+    CHECK_FALSE(processor.rateSlot(0, -1));
+    CHECK_FALSE(processor.rateSlot(99, 3));
+    CHECK(scoped.store.list().empty());
+    auto settings = processor.instanceSettings();
+    settings.role = InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    CHECK_FALSE(processor.rateSlot(0, 3));
+    CHECK(processor.generationStatus() == GenerationStatus::UseHub);
+    CHECK(scoped.store.list().empty());
+
+    LibraryStore small{juce::File(), 1};
+    overrideLibraryStore(&small);
+    InstrumentProcessor hub("Hub");
+    fillSlot(hub, 0, 4);
+    fillSlot(hub, 1, 5);
+    REQUIRE(hub.rateSlot(0, 3));
+    CHECK_FALSE(hub.rateSlot(1, 3));
+    CHECK(hub.generationStatus() == GenerationStatus::LibraryFull);
+    CHECK(hub.slotRating(1) == 0);
+    overrideLibraryStore(&scoped.store);
+}

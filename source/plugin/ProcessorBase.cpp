@@ -23,6 +23,7 @@
 #include "plugin/EmbeddedGrooves.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/HostDetection.h"
+#include "plugin/Favorites.h"
 #include "plugin/LibraryStore.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ReferenceStore.h"
@@ -1215,6 +1216,72 @@ bool ProcessorBase::saveToLibrary(const std::string& name, std::optional<size_t>
     generationStatus_ = result.error == LibraryStore::SaveError::None ? GenerationStatus::LibrarySaved
                                                                       : GenerationStatus::LibraryFull;
     return result.error == LibraryStore::SaveError::None;
+}
+
+int ProcessorBase::slotRating(size_t slot) const {
+    if (slot >= rated_.size() || !rated_[slot]) {
+        return 0;
+    }
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        const auto* content = slots_.slot(slot);
+        if (content == nullptr || !content->pattern || content->pattern->version != rated_[slot]->version ||
+            slots_.origin() != rated_[slot]->origin) {
+            return 0;
+        }
+    }
+    const auto info = libraryStore().info(rated_[slot]->entryId);
+    return info ? info->rating : 0;
+}
+
+bool ProcessorBase::rateSlot(size_t slot, int stars) {
+    if (!isHubOrSolo()) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    if (stars < 0 || stars > 5 || slot >= rated_.size()) {
+        return false;
+    }
+    std::optional<mm::core::Pattern> pattern;
+    std::string slotName;
+    uint8_t color = 0;
+    uint64_t origin = 0;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        if (const auto* content = slots_.slot(slot); content != nullptr && content->pattern) {
+            pattern = content->pattern;
+            slotName = content->name;
+            color = content->color;
+        }
+        origin = slots_.origin();
+    }
+    if (!pattern) {
+        generationStatus_ = GenerationStatus::LibraryNothingToSave;
+        return false;
+    }
+    auto& link = rated_[slot];
+    std::string id;
+    if (link && link->version == pattern->version && link->origin == origin && libraryStore().info(link->entryId)) {
+        id = link->entryId;
+    } else if (stars == 0) {
+        return true; // nothing was rated, nothing to take back
+    } else {
+        const auto saved = libraryStore().savePattern("", *pattern, slotName, color);
+        if (saved.error != LibraryStore::SaveError::None) {
+            generationStatus_ = GenerationStatus::LibraryFull;
+            return false;
+        }
+        id = saved.id;
+        link = RatedPattern{id, origin, pattern->version};
+        generationStatus_ = GenerationStatus::LibrarySaved;
+    }
+    if (const auto info = libraryStore().info(id)) {
+        auto meta = mm::core::metaOf(*info);
+        meta.rating = static_cast<uint8_t>(stars);
+        libraryStore().setMeta(id, meta);
+    }
+    updateFavorite(libraryStore(), referenceStore(), id, globalSettings().ready() && globalSettings().get().favoritesToActiveSet);
+    return true;
 }
 
 bool ProcessorBase::saveSetToLibrary(const std::string& name) {

@@ -416,6 +416,15 @@ public:
     std::shared_ptr<bool> libraryAliveFlag() const { return libraryAlive_; }
     bool saveToLibrary(const std::string& name, std::optional<size_t> slot = std::nullopt);
     bool saveSetToLibrary(const std::string& name);
+    /// The stars of the pattern a slot holds now (SPEC 3.12, v1.1, D-246): 0 to 5, 0 for none, an empty slot or a pattern
+    /// that was not rated (an edit or a new result is a new pattern). Message thread.
+    int slotRating(size_t slot) const;
+    /// Rates the pattern of a slot with one click, also when it was never saved: the pattern goes into the library at the
+    /// first rating (name: the style) and the rating is kept on that entry (tags and tempo range stay); a later rating of
+    /// the same pattern changes the entry. 4 stars and more put it into the favorites of its style (D-238), fewer take it
+    /// out. 0 takes the rating back (the entry stays in the library). False for a voice instance, an empty slot, a rating
+    /// over 5 or when the library is full. Message thread.
+    bool rateSlot(size_t slot, int stars);
     /// Reads the entry in the background and puts it into a slot (a pattern; default: the active slot) or into the
     /// slots a set holds (the others stay). Both are results: the pattern that was there stays in the history.
     bool loadFromLibrary(const std::string& id, std::optional<size_t> slot = std::nullopt);
@@ -644,6 +653,12 @@ private:
     std::optional<mm::core::SlotContent> slotClipboard_; // message thread
     std::unique_ptr<mm::platform::InstanceRegistration> formatRegistration_; ///< counts this instance for its format
     std::string formatTag_;
+    struct RatedPattern {
+        std::string entryId;
+        uint64_t origin = 0;  ///< of the bank the pattern was in
+        uint64_t version = 0; ///< `Pattern::version`
+    };
+    std::array<std::optional<RatedPattern>, mm::core::kSlotCount> rated_{}; ///< the library entry of the pattern of a slot (message thread)
     std::shared_ptr<bool> libraryAlive_ = std::make_shared<bool>(true); ///< callbacks of the library check it
     bool importCut_ = false; ///< the import that started the running generation was cut to 16 bars
     MidiImportService importer_;  // before the generator: both are destroyed before the members they call into

@@ -487,6 +487,26 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     infoLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.6f));
     addChildComponent(infoLabel_);
 
+    ratingBox_.setComponentID("rating");
+    ratingBox_.addItem(tr(keys::kLibraryNoRating), 1);
+    for (int stars = 1; stars <= 5; ++stars) {
+        juce::String text;
+        for (int i = 0; i < 5; ++i) {
+            text += juce::String::fromUTF8(i < stars ? "\xe2\x98\x85" : "\xe2\x98\x86");
+        }
+        ratingBox_.addItem(text, stars + 1);
+    }
+    ratingBox_.setSelectedId(1, juce::dontSendNotification);
+    ratingBox_.onChange = [this] {
+        if (ratingUpdating_) {
+            return;
+        }
+        processor_.rateSlot(static_cast<size_t>(std::max(processor_.playingSlotInfo().slot, 1) - 1),
+                            std::max(ratingBox_.getSelectedId() - 1, 0)); // a rating is one click
+        updateStatus();
+    };
+    addChildComponent(ratingBox_);
+
     openHubButton_.setButtonText(tr(keys::kButtonOpenHub));
     openHubButton_.setComponentID("openHub");
     openHubButton_.onClick = [this] { processor_.showHub(); };
@@ -971,7 +991,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &referenceSetBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
-             &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
+             &infoLabel_, &ratingBox_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
              &expertButton_, &previewButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_, &evolveButton_, &evolveBackButton_,
              &evolveStageLabel_, &evolveKeepButton_}) {
         component->setVisible(!voiceLayout);
@@ -1487,6 +1507,15 @@ void PlaceholderEditor::updateFullView() {
                                juce::dontSendNotification);
         }
     }
+    {
+        const int rating = info.filled ? processor_.slotRating(static_cast<size_t>(info.slot - 1)) : 0;
+        ratingBox_.setEnabled(info.filled);
+        if (ratingBox_.getSelectedId() != rating + 1) {
+            ratingUpdating_ = true;
+            ratingBox_.setSelectedId(rating + 1, juce::dontSendNotification);
+            ratingUpdating_ = false;
+        }
+    }
     updateActionButtons();
 }
 
@@ -1713,7 +1742,9 @@ void PlaceholderEditor::resized() {
     take(retryButton_, 140, 6);
     take(errorSettingsButton_, 120, 6);
     statusLabel_.setBounds(statusRow);
-    infoLabel_.setBounds(area.removeFromBottom(28).reduced(16, 0));
+    auto infoRow = area.removeFromBottom(28).reduced(16, 0);
+    ratingBox_.setBounds(infoRow.removeFromRight(130).reduced(0, 2));
+    infoLabel_.setBounds(infoRow);
     auto historyBar = area.removeFromBottom(32).reduced(16, 2);
     undoButton_.setBounds(historyBar.removeFromLeft(110));
     historyBar.removeFromLeft(8);

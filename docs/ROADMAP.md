@@ -263,7 +263,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Tastenkürzel nach SPEC §8.3: Aktionen frei belegbar in den Einstellungen, keine Voreinstellung (D-126, D-235; Host-Prüfung H83 steht aus)
 
 **Referenzen und Lenkung**
-- [x] Mehrere benannte Sets pro Stil, automatisches Set „Favoriten“ (D-238; Host-Prüfung H87; Bewerten direkt im Hub offen)
+- [x] Mehrere benannte Sets pro Stil, automatisches Set „Favoriten“ (D-238; Host-Prüfung H87; Bewerten direkt im Hub: D-246)
 - [x] Automatische Rollen-Erkennung mit Konfidenz (D-239)
 - [x] Motiv-Zellen, Rhythmus-Statistik, Profil pro Set, Zusammenfassung (D-240)
 - [x] Regler „Persönlich“ und Profil-Schnappschuss (SPEC §3.20, D-241; Host-Prüfung H90)
