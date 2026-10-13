@@ -157,6 +157,7 @@ GlobalSettings sanitize(GlobalSettings settings) {
     if (!isValidDivision(settings.grid.division)) {
         settings.grid.division = defaults.grid.division;
     }
+    settings.shortcuts = sanitizeShortcuts(settings.shortcuts);
     settings.drumMap = drumMappingToText(drumMappingFromText(settings.drumMap)); // only what can be read stays
     settings.transpose = sanitize(settings.transpose);
     settings.ai = sanitize(std::move(settings.ai));
@@ -206,6 +207,13 @@ GlobalSettings parseGlobalSettings(std::string_view text) {
     boolean("rollGuides", settings.rollGuides);
     boolean("rollMarkers", settings.rollMarkers);
     integer("middleC", 3, 4, settings.middleC);
+    if (const auto it = root.find("shortcuts"); it != root.end() && it->is_object()) {
+        for (const auto& [action, text] : it->items()) {
+            if (text.is_string()) {
+                settings.shortcuts[action] = text.get<std::string>(); // put in order below
+            }
+        }
+    }
     if (const auto it = root.find("language"); it != root.end() && it->is_string()) {
         settings.language = it->get<std::string>(); // sanitised below
     }
@@ -256,6 +264,7 @@ std::string toJson(const GlobalSettings& input) {
     root["rollGuides"] = settings.rollGuides;
     root["rollMarkers"] = settings.rollMarkers;
     root["middleC"] = settings.middleC;
+    root["shortcuts"] = settings.shortcuts;
     root["language"] = settings.language;
     root["drumMap"] = settings.drumMap;
     root["transpose"] = {{"mode", toString(settings.transpose.mode)},

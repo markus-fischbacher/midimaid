@@ -1,6 +1,8 @@
 #include "core/Theory.h"
 #include "plugin/SettingsDialog.h"
 
+#include "plugin/KeyChords.h"
+
 #include "core/TextKeys.h"
 #include "plugin/AiText.h"
 #include "plugin/EmbeddedTranslation.h"
@@ -371,6 +373,49 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
     };
     addAndMakeVisible(noteNamingBox_);
 
+    makeLabel(shortcutsLabel_, keys::kLabelShortcuts);
+    shortcutActionBox_.setComponentID("shortcutAction");
+    for (size_t i = 0; i < mm::core::shortcutActions().size(); ++i) {
+        shortcutActionBox_.addItem(tr(mm::core::shortcutActions()[i].textKey), static_cast<int>(i) + 1);
+    }
+    shortcutActionBox_.setSelectedId(1, juce::dontSendNotification);
+    shortcutActionBox_.onChange = [this] {
+        capturing_ = false;
+        updateShortcut();
+    };
+    addAndMakeVisible(shortcutActionBox_);
+    shortcutKeyLabel_.setComponentID("shortcutKey");
+    shortcutKeyLabel_.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(shortcutKeyLabel_);
+    shortcutAssignButton_.setComponentID("shortcutAssign");
+    shortcutAssignButton_.setButtonText(tr(keys::kShortcutAssign));
+    shortcutAssignButton_.onClick = [this] {
+        capturing_ = true;
+        grabKeyboardFocus();
+        updateShortcut();
+    };
+    addAndMakeVisible(shortcutAssignButton_);
+    shortcutRemoveButton_.setComponentID("shortcutRemove");
+    shortcutRemoveButton_.setButtonText(tr(keys::kShortcutRemove));
+    shortcutRemoveButton_.onClick = [this] {
+        capturing_ = false;
+        const auto action = chosenAction();
+        changeShortcuts([&](std::map<std::string, std::string>& shortcuts) { shortcuts = mm::core::assignShortcut(shortcuts, action, std::nullopt); });
+    };
+    addAndMakeVisible(shortcutRemoveButton_);
+    shortcutResetButton_.setComponentID("shortcutReset");
+    shortcutResetButton_.setButtonText(tr(keys::kShortcutReset));
+    shortcutResetButton_.onClick = [this] {
+        capturing_ = false;
+        changeShortcuts([](std::map<std::string, std::string>& shortcuts) { shortcuts.clear(); });
+    };
+    addAndMakeVisible(shortcutResetButton_);
+    shortcutHint_.setComponentID("shortcutHint");
+    shortcutHint_.setColour(juce::Label::textColourId, juce::Colour(MidiMaidLookAndFeel::kTextDim));
+    addAndMakeVisible(shortcutHint_);
+    setWantsKeyboardFocus(true);
+    updateShortcut();
+
     makeLabel(rollViewLabel_, keys::kLabelRollView);
     const auto rollToggle = [this](juce::ToggleButton& toggle, const char* id, std::string_view text,
                                    bool mm::core::GlobalSettings::*field) {
@@ -468,6 +513,9 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {&languageLabel_, {&languageBox_}, {}, kControl, false, false, -1, 260},
              {nullptr, {&languageHint_}, {}, kHint, true},
              {&noteNamingLabel_, {&noteNamingBox_}, {}, kControl, false, false, -1, 260},
+             {&shortcutsLabel_, {&shortcutActionBox_, &shortcutKeyLabel_}, {320}, kControl, false, true},
+             {nullptr, {&shortcutAssignButton_, &shortcutRemoveButton_, &shortcutResetButton_}, {150, 120}, kControl, true},
+             {nullptr, {&shortcutHint_}, {}, 56, true},
              {&rollViewLabel_, {&rollFoldToggle_, &rollGuidesToggle_}, {230}, kControl},
              {nullptr, {&rollMarkersToggle_}, {}, kControl, true},
              {&drumMapLabel_, {&drumMapEditor_}, {}, kControl, false, true},
@@ -602,6 +650,55 @@ void SettingsDialog::fillReferenceNotes() {
     }
     transposeReferenceBox_.setSelectedId(selected > 0 ? selected : 1, juce::dontSendNotification);
     updating_ = was;
+}
+
+std::string SettingsDialog::chosenAction() const {
+    const int index = shortcutActionBox_.getSelectedId() - 1;
+    const auto actions = mm::core::shortcutActions();
+    return index >= 0 && static_cast<size_t>(index) < actions.size() ? std::string(actions[static_cast<size_t>(index)].id)
+                                                                      : std::string();
+}
+
+void SettingsDialog::changeShortcuts(const std::function<void(std::map<std::string, std::string>&)>& change) {
+    settings_().update([&](mm::core::GlobalSettings& settings) { change(settings.shortcuts); });
+    updateShortcut();
+}
+
+void SettingsDialog::updateShortcut() {
+    const auto& shortcuts = settings_().get().shortcuts;
+    const auto found = shortcuts.find(chosenAction());
+    juce::String text = tr(keys::kShortcutNone);
+    if (found != shortcuts.end()) {
+        if (const auto chord = mm::core::parseChord(found->second)) {
+            text = chordText(*chord);
+        }
+    }
+    shortcutKeyLabel_.setText(capturing_ ? juce::String(tr(keys::kShortcutPress)) : text, juce::dontSendNotification);
+    shortcutHint_.setText(tr(keys::kShortcutHint), juce::dontSendNotification);
+    shortcutRemoveButton_.setEnabled(found != shortcuts.end());
+}
+
+bool SettingsDialog::keyPressed(const juce::KeyPress& press) {
+    if (!capturing_) {
+        return false;
+    }
+    if (press == juce::KeyPress::escapeKey) {
+        capturing_ = false;
+        updateShortcut();
+        return true;
+    }
+    if (press.getKeyCode() == juce::KeyPress::spaceKey) {
+        shortcutHint_.setText(tr(keys::kShortcutSpace), juce::dontSendNotification); // the transport of the DAW
+        return true;
+    }
+    const auto chord = chordOf(press);
+    if (!chord.has_value()) {
+        return true; // a lone modifier, the numeric pad: wait for a real key
+    }
+    capturing_ = false;
+    const auto action = chosenAction();
+    changeShortcuts([&](std::map<std::string, std::string>& shortcuts) { shortcuts = mm::core::assignShortcut(shortcuts, action, chord); });
+    return true;
 }
 
 void SettingsDialog::updateTranspose() {

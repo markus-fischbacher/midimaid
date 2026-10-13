@@ -258,7 +258,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Sperren pro Dimension und Note (SPEC §3.5, D-231; die KI-Erzeugung beachtet nur ganz gesperrte Stimmen)
 - [x] Piano-Roll-Hilfen: Scale-Fold, Slide/Akzent-Zeile, Hintergründe (Phrasen, Kick-Raster) (SPEC §3.5, D-232)
 - [x] Piano-Roll: Wahrscheinlichkeits-Spur (D-233)
-- [ ] Tastenkürzel nach SPEC §8.3: Aktionen frei belegbar in den Einstellungen, keine Voreinstellung (D-126)
+- [x] Tastenkürzel nach SPEC §8.3: Aktionen frei belegbar in den Einstellungen, keine Voreinstellung (D-126, D-235; Host-Prüfung H83 steht aus)
 
 **Referenzen und Lenkung**
 - [ ] Mehrere benannte Sets pro Stil, automatisches Set „Favoriten“

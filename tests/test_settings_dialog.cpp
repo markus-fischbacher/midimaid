@@ -1,9 +1,11 @@
 #include "ai/MockProvider.h"
+#include "core/Shortcuts.h"
 #include "core/TextKeys.h"
 #include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/AiBackend.h"
 #include "plugin/AiConnection.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "plugin/KeyChords.h"
 #include "plugin/ProcessorBase.h"
 #include "plugin/SettingsDialog.h"
 
@@ -414,6 +416,100 @@ TEST_CASE("the aids of the piano roll are switched here and saved", "[settings-d
     CHECK(part<juce::ToggleButton>(*later, "rollFold").getToggleState());
     CHECK_FALSE(part<juce::ToggleButton>(*later, "rollGuides").getToggleState());
     CHECK(part<juce::ToggleButton>(*later, "rollMarkers").getToggleState());
+}
+
+TEST_CASE("a key is assigned to an action by pressing it", "[settings-dialog][shortcuts]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    auto& actions = part<juce::ComboBox>(*dialog, "shortcutAction");
+    auto& key = part<juce::Label>(*dialog, "shortcutKey");
+    auto& assign = part<juce::TextButton>(*dialog, "shortcutAssign");
+    auto& remove = part<juce::TextButton>(*dialog, "shortcutRemove");
+    CHECK(actions.getNumItems() == static_cast<int>(mm::core::shortcutActions().size()));
+    CHECK(actions.isVisible());
+    CHECK(key.getText() == "keine"); // nothing is assigned in advance
+    CHECK_FALSE(remove.isEnabled());
+    CHECK_FALSE(dialog->capturing());
+    CHECK_FALSE(dialog->keyPressed(juce::KeyPress('k', juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0))); // not capturing
+
+    // the action "undo" is the first
+    actions.setSelectedId(1, juce::sendNotificationSync);
+    assign.onClick();
+    CHECK(dialog->capturing());
+    CHECK(key.getText() == "Taste drücken …");
+    CHECK(dialog->keyPressed(juce::KeyPress('k', juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier), 0)));
+    CHECK_FALSE(dialog->capturing());
+    CHECK(env.store.get().shortcuts == std::map<std::string, std::string>{{"undo", "cmd+shift+k"}});
+    CHECK(key.getText().endsWith("Shift+K"));
+    CHECK(remove.isEnabled());
+
+    // the next action: another key, and the same key moves from one action to the other
+    actions.setSelectedId(2, juce::sendNotificationSync);
+    CHECK(key.getText() == "keine"); // "redo" has none
+    assign.onClick();
+    CHECK(dialog->keyPressed(juce::KeyPress('k', juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier), 0)));
+    CHECK(env.store.get().shortcuts == std::map<std::string, std::string>{{"redo", "cmd+shift+k"}});
+    actions.setSelectedId(1, juce::sendNotificationSync);
+    CHECK(key.getText() == "keine"); // taken away from "undo"
+
+    // remove
+    actions.setSelectedId(2, juce::sendNotificationSync);
+    remove.onClick();
+    CHECK(env.store.get().shortcuts.empty());
+    CHECK(key.getText() == "keine");
+}
+
+TEST_CASE("the space bar is refused, Escape and a lone modifier are not keys", "[settings-dialog][shortcuts]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    auto& assign = part<juce::TextButton>(*dialog, "shortcutAssign");
+    auto& key = part<juce::Label>(*dialog, "shortcutKey");
+    auto& hint = part<juce::Label>(*dialog, "shortcutHint");
+    assign.onClick();
+    CHECK(dialog->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    CHECK(dialog->capturing()); // still waiting
+    CHECK(hint.getText() == "Die Leertaste bleibt bei der DAW.");
+    CHECK(env.store.get().shortcuts.empty());
+    CHECK(dialog->keyPressed(juce::KeyPress(juce::KeyPress::numberPad0))); // not a key of ours: waits
+    CHECK(dialog->capturing());
+    CHECK(env.store.get().shortcuts.empty());
+    CHECK(dialog->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey))); // cancels
+    CHECK_FALSE(dialog->capturing());
+    CHECK(key.getText() == "keine");
+    CHECK(env.store.get().shortcuts.empty());
+    // an action chosen anew ends the waiting
+    assign.onClick();
+    part<juce::ComboBox>(*dialog, "shortcutAction").setSelectedId(3, juce::sendNotificationSync);
+    CHECK_FALSE(dialog->capturing());
+    // a key without modifier is a key
+    assign.onClick();
+    CHECK(dialog->keyPressed(juce::KeyPress(juce::KeyPress::F5Key)));
+    CHECK(env.store.get().shortcuts.size() == 1);
+    CHECK(env.store.get().shortcuts.begin()->second == "f5");
+    CHECK(key.getText() == "F5");
+}
+
+TEST_CASE("restoring the default takes every assignment away", "[settings-dialog][shortcuts]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    env.store.update([](mm::core::GlobalSettings& settings) {
+        settings.shortcuts = {{"undo", "cmd+z"}, {"generate", "cmd+g"}, {"vary", "f6"}};
+    });
+    const auto dialog = env.dialog();
+    auto& key = part<juce::Label>(*dialog, "shortcutKey");
+    auto& actions = part<juce::ComboBox>(*dialog, "shortcutAction");
+    actions.setSelectedId(1, juce::sendNotificationSync);
+    CHECK(key.getText().endsWith("Z")); // the dialog shows what was saved before
+    part<juce::TextButton>(*dialog, "shortcutReset").onClick();
+    CHECK(env.store.get().shortcuts.empty());
+    CHECK(key.getText() == "keine");
+    CHECK_FALSE(part<juce::TextButton>(*dialog, "shortcutRemove").isEnabled());
+    // and it ends the waiting for a key
+    part<juce::TextButton>(*dialog, "shortcutAssign").onClick();
+    part<juce::TextButton>(*dialog, "shortcutReset").onClick();
+    CHECK_FALSE(dialog->capturing());
 }
 
 TEST_CASE("the dialog shows what was saved before", "[settings-dialog]") {

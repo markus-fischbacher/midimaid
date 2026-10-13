@@ -76,6 +76,9 @@ public:
     /// Accent and slide of the selection: all set takes them away, otherwise they are set (one undo step).
     void toggleAccent();
     void toggleSlide();
+    /// Makes the selected notes longer (positive) or shorter by `ticks`, within the pattern and at least one tick
+    /// (`core/PatternEdit::resizeNotes`); one undo step.
+    void resizeSelection(int32_t ticks);
     /// Ratchet of the selection: `repeats` 1 (off) to 4 (`core/PatternEdit::setRatchet`), one undo step.
     void setRatchet(int repeats);
     /// What the lane under the notes shows and edits: the velocity (default) or the chance of the notes (v1.1, D-233).

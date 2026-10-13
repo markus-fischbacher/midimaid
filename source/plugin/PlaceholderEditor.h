@@ -32,6 +32,12 @@ public:
     /// The strength (0 to 100 %) that "Variation" uses; a value of the open editor, not saved (D-161).
     /// True while the expert level is shown (SPEC 8.1); the basic level is the default.
     bool expertLevel() const { return expert_; }
+    /// A key press (SPEC 8.3, D-235): the action the user gave the key in the settings runs; false when the key has no
+    /// action, when it has no modifier and a text field has the focus, or in the voice window. Keys the user did not
+    /// assign are never taken, so the host keeps them.
+    bool keyPressed(const juce::KeyPress& press) override;
+    /// Runs the action with this id (`core/Shortcuts`); false for an unknown id or when nothing was there to act on.
+    bool runShortcut(const std::string& action);
     int variationStrength() const { return static_cast<int>(strengthSlider_.getValue()); }
 
 private:

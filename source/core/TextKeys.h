@@ -281,6 +281,50 @@ namespace mm::core::text {
     X(kLockVelocity, "lock.velocity")                                                                                  \
     X(kLockAll, "lock.all")                                                                                            \
     X(kVoicePartialLockedSuffix, "voice.partialLockedSuffix")                                                          \
+    X(kShortcutUndo, "shortcut.undo")                                                                              \
+    X(kShortcutRedo, "shortcut.redo")                                                                              \
+    X(kShortcutDuplicate, "shortcut.duplicate")                                                                    \
+    X(kShortcutSelectAll, "shortcut.selectAll")                                                                    \
+    X(kShortcutDelete, "shortcut.delete")                                                                          \
+    X(kShortcutPitchUp, "shortcut.pitchUp")                                                                        \
+    X(kShortcutPitchDown, "shortcut.pitchDown")                                                                    \
+    X(kShortcutOctaveUp, "shortcut.octaveUp")                                                                      \
+    X(kShortcutOctaveDown, "shortcut.octaveDown")                                                                  \
+    X(kShortcutMoveLeft, "shortcut.moveLeft")                                                                      \
+    X(kShortcutMoveRight, "shortcut.moveRight")                                                                    \
+    X(kShortcutLonger, "shortcut.longer")                                                                          \
+    X(kShortcutShorter, "shortcut.shorter")                                                                        \
+    X(kShortcutGridFiner, "shortcut.gridFiner")                                                                    \
+    X(kShortcutGridCoarser, "shortcut.gridCoarser")                                                                \
+    X(kShortcutTriplets, "shortcut.triplets")                                                                      \
+    X(kShortcutSnapToggle, "shortcut.snapToggle")                                                                  \
+    X(kShortcutFoldToggle, "shortcut.foldToggle")                                                                  \
+    X(kShortcutFocus1, "shortcut.focus1")                                                                          \
+    X(kShortcutFocus2, "shortcut.focus2")                                                                          \
+    X(kShortcutFocus3, "shortcut.focus3")                                                                          \
+    X(kShortcutFocus4, "shortcut.focus4")                                                                          \
+    X(kShortcutFocus5, "shortcut.focus5")                                                                          \
+    X(kShortcutFocus6, "shortcut.focus6")                                                                          \
+    X(kShortcutFocus7, "shortcut.focus7")                                                                          \
+    X(kShortcutFocus8, "shortcut.focus8")                                                                          \
+    X(kShortcutFocusAll, "shortcut.focusAll")                                                                      \
+    X(kShortcutGenerate, "shortcut.generate")                                                                      \
+    X(kShortcutRefineSend, "shortcut.refineSend")                                                                  \
+    X(kShortcutVary, "shortcut.vary")                                                                              \
+    X(kShortcutHistoryBack, "shortcut.historyBack")                                                                \
+    X(kShortcutHistoryForward, "shortcut.historyForward")                                                          \
+    X(kShortcutAccent, "shortcut.accent")                                                                          \
+    X(kShortcutSlide, "shortcut.slide")                                                                            \
+    X(kShortcutRatchetOff, "shortcut.ratchetOff")                                                                  \
+    X(kLabelShortcuts, "settings.shortcuts")                                                                       \
+    X(kShortcutAction, "settings.shortcutAction")                                                                  \
+    X(kShortcutAssign, "settings.shortcutAssign")                                                                  \
+    X(kShortcutPress, "settings.shortcutPress")                                                                    \
+    X(kShortcutRemove, "settings.shortcutRemove")                                                                  \
+    X(kShortcutReset, "settings.shortcutReset")                                                                    \
+    X(kShortcutNone, "settings.shortcutNone")                                                                      \
+    X(kShortcutHint, "settings.shortcutHint")                                                                      \
+    X(kShortcutSpace, "settings.shortcutSpace")                                                                    \
     X(kRollChance, "roll.chance")                                                                                      \
     X(kRollCondition, "roll.condition")                                                                                \
     X(kRollConditionAlways, "roll.conditionAlways")                                                                    \

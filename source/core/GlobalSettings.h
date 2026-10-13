@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/EditGrid.h"
+#include "core/Shortcuts.h"
 #include "core/Theory.h"
 #include "core/Transpose.h"
 
@@ -52,6 +53,7 @@ struct GlobalSettings {
     bool rollFold = false;    ///< the roll shows only the tones of the scale as rows (SPEC 3.5, D-232)
     bool rollGuides = true;   ///< the roll draws the phrase borders and the kick grid in the background
     bool rollMarkers = false; ///< the roll has a row for the accent and slide marks of the notes
+    std::map<std::string, std::string> shortcuts; ///< the keys the user gave to actions: id -> chord (SPEC 8.3, D-235); none by default
     std::string drumMap; ///< drum rack notes as a line "60=kick, 61=closed_hat" (SPEC 3.14); empty: General MIDI only
     TransposeSettings transpose; ///< the keyboard transposition (SPEC 3.16, 8.4): reference, mode, timing, target ...
     AiSettings ai;       ///< provider, models, consent, logging

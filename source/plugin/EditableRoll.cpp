@@ -496,6 +496,17 @@ void EditableRoll::toggleSlide() {
     flipFlag(false);
 }
 
+void EditableRoll::resizeSelection(int32_t ticks) {
+    if (selection_.empty() || !haveView_ || ticks == 0) {
+        return;
+    }
+    const std::vector<uint32_t> ids(selection_.begin(), selection_.end());
+    const size_t voice = static_cast<size_t>(voice_ - 1);
+    processor_.editNotes(static_cast<size_t>(slotIndex_), [&](mm::core::Pattern& pattern) -> size_t {
+        return voice < pattern.voices.size() ? mm::core::resizeNotes(pattern, voice, ids, ticks) : 0;
+    });
+}
+
 void EditableRoll::setRatchet(int repeats) {
     if (selection_.empty() || !haveView_) {
         return;
