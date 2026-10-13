@@ -363,7 +363,12 @@ static SelectionResult selectProtected(const GenerationRequest& request, const S
             const bool complete = std::all_of(pattern.voices.begin(), pattern.voices.end(), voiceComplete);
             return complete && (!copyCheck || copyCheck(pattern)) && (!repeatCheck || repeatCheck(pattern));
         };
-        return selectBest(generate, request.seed, style.quality, contextFor, hardCheck);
+        const ContextFor withHistory = [&](const Pattern& pattern) {
+            QualityContext context = contextFor(pattern);
+            context.history = history.empty() ? nullptr : &history; // the soft criterion keeps away from the same results
+            return context;
+        };
+        return selectBest(generate, request.seed, style.quality, withHistory, hardCheck);
     };
     SelectionResult result = select(request.history);
     if (!result.success && !request.history.empty() && !(request.cancel != nullptr && request.cancel->load())) {
@@ -371,6 +376,12 @@ static SelectionResult selectProtected(const GenerationRequest& request, const S
     }
     if (result.success) {
         applyResult(result.pattern, result);
+        if (!request.history.empty()) {
+            // the stored rating does not depend on the history: the winner seed replays the same pattern and rating (D-88)
+            const QualityContext context = contextFor(result.pattern);
+            result.pattern.qualityScore = static_cast<uint8_t>(
+                std::clamp(overallScore(scoreCriteria(result.pattern, context), style.quality, context.creativityPct), 0, 100));
+        }
     }
     return result;
 }

@@ -1,6 +1,7 @@
 #include "core/Quality.h"
 
 #include "core/Constraints.h"
+#include "core/CopyProtection.h"
 #include "core/KickGrid.h"
 #include "core/Random.h"
 #include "core/SetProfile.h"
@@ -223,6 +224,10 @@ SoftScores scoreCriteria(const Pattern& pattern, const QualityContext& context) 
             scores.proximityPct = std::clamp(context.personalPct, 0, 100) * 2;
         }
     }
+    if (context.history != nullptr && !context.history->empty()) {
+        scores.historyDistance = historyDistanceScore(pattern, *context.history);
+        scores.historyDistancePct = 200;
+    }
     scores.motif = meanOrFull(motif);
     scores.range = meanOrFull(range);
     scores.density = meanOrFull(density);
@@ -230,6 +235,11 @@ SoftScores scoreCriteria(const Pattern& pattern, const QualityContext& context) 
     scores.intervals = relevant == 0 ? 100 : clean * 100 / relevant;
     scores.rhythmVariety = meanOrFull(variety);
     return scores;
+}
+
+int historyDistanceScore(const Pattern& pattern, const std::vector<ReferenceEntry>& history) {
+    const CopyCheck check = checkCopyProtection(pattern, history);
+    return std::clamp(100 - check.permille / 10, 0, 100);
 }
 
 int overallScore(const SoftScores& scores, const QualityProfile& weights, int creativityPct) {
@@ -242,7 +252,9 @@ int overallScore(const SoftScores& scores, const QualityProfile& weights, int cr
                                 {std::max(weights.kick, 0) * int64_t{200}, scores.kick},
                                 {std::max(weights.intervals, 0) * int64_t{200}, scores.intervals},
                                 {std::max(weights.rhythmVariety, 0) * int64_t{200}, scores.rhythmVariety},
-                                {std::max(weights.proximity, 0) * int64_t{2} * scores.proximityPct, scores.proximity}};
+                                {std::max(weights.proximity, 0) * int64_t{2} * scores.proximityPct, scores.proximity},
+                                {std::max(weights.historyDistance, 0) * int64_t{1} * scores.historyDistancePct,
+                                 scores.historyDistance}};
     int64_t numerator = 0;
     int64_t denominator = 0;
     for (const auto& pair : pairs) {

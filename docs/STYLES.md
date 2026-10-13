@@ -130,7 +130,7 @@ eigene Phrasen-Rolle.
 - Der Algorithmus erzeugt pro Generierung **8 Kandidaten** und wählt den besten gültigen (SPEC §4.4)
 - Weiche Kriterien (je 0–100, gewichtet zum Gesamtwert): Motiv-Wiederholung (§1.11), Tonumfang,
   **erwartete** Dichte im Zielbereich der Energie (Wahrscheinlichkeiten eingerechnet), keine
-  Kick-Kollisionen, Intervallregeln, rhythmische Abwechslung, [v1.1] Abstand zum Verlauf, [v1.1, umgesetzt, D-242] Nähe zum
+  Kick-Kollisionen, Intervallregeln, rhythmische Abwechslung, [v1.1, umgesetzt, D-244] Abstand zum Verlauf, [v1.1, umgesetzt, D-242] Nähe zum
   aktiven Referenz-Set (gewichtet mit dem Regler „Persönlich“, SPEC §3.20). Gewichte und
   **Mindestbewertung** stehen im Profil (`quality`, §5) und werden im Hörtest von Phase 1a kalibriert.
 - **Kein gültiger Kandidat:** bis zu 2 weitere Runden, danach bleibt das bisherige Pattern (SPEC §4.4)

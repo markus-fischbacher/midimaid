@@ -68,6 +68,7 @@ struct QualityProfile {
     int kick = 2;
     int intervals = 2;
     int rhythmVariety = 1;
+    int historyDistance = 1; ///< [v1.1] distance to the last results of the slot (STYLES 1.14, D-244); counts only with a history
     int proximity = 2; ///< [v1.1] closeness to the reference set (SPEC 3.20); counts only with a profile, times Persönlich / 50
 
     bool operator==(const QualityProfile&) const = default;
