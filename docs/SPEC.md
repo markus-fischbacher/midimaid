@@ -188,11 +188,14 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
 - **Live:** Das Plugin spielt das aktive Pattern synchron zum DAW-Transport (Loop). Neue Patterns und
   Variationen wechseln quantisiert. Der Zeitpunkt ist einstellbar: nächster Schlag, nächster Takt,
   nächste 4/8/16 Takte, Ende der Phrase, Ende des Patterns. Standard ist „nächster Takt“.
+  [v1.1, teilweise umgesetzt, D-247] Wählbar (Experten-Ebene, je Instanz): Schlag, Takt, 2, 4, 8, 16 Takte;
+  „Ende der Phrase“ und „Ende des Patterns“ sind **nicht umgesetzt**.
   - **Einsatzposition:** „Neustart“, das neue Pattern beginnt am Wechselzeitpunkt bei Takt 1.
     [v1.1, umgesetzt, D-236] Alternativ „Legato“: Die Position läuft weiter wie bei Lives Legato-Modus.
   - „Neustart“ ist nur an Taktgrenzen erlaubt. Bei Quantisierung „nächster Schlag“ gilt automatisch
     „Legato“, sonst läge Schritt 0 des Patterns nicht mehr auf der Eins und Kick-Raster, Phrasen und
-    Akzente wären verschoben.
+    Akzente wären verschoben. [v1.1, umgesetzt, D-247] Die Engine hält das ein: ein Wechsel ab Schlag-
+    Quantisierung (Punkt nicht auf einer Taktgrenze) übernimmt immer die laufende Position.
   - **Geplante Wechsel:** Jeder Wechsel bekommt einen PPQ-Zeitstempel. Liegt der nächste
     Quantisierungspunkt näher als der **Mindestvorlauf** (Standard 150 ms, Einstellung in der
     Experten-Ebene, D-90), wird der übernächste gewählt. Gemessen wird ab der am weitesten
@@ -912,7 +915,8 @@ des Songs (PPQ 0 = Taktanfang); Sample-Offsets werden aus PPQ und Tempo des Bloc
 3. **Raster:** Schlag = 1 PPQ, Takt = 4 PPQ, n Takte = 4n PPQ, jeweils ab PPQ 0; „Ende des Patterns“ und
    „Ende der Phrase“ sind das nächste Vielfache der Pattern- bzw. Phrasenlänge. v1.0 kennt nur „Neustart“
    (§3.4): Ein Q, das nicht auf einer Taktgrenze liegt (Quantisierung „nächster Schlag“), wird auf die nächste
-   Taktgrenze aufgerundet. „Legato“ ist [v1.1].
+   Taktgrenze aufgerundet. „Legato“ ist [v1.1]. [v1.1, D-247] Ist „nächster Schlag“ gewählt, entfällt das Aufrunden: Der Wechsel
+   liegt auf dem Schlag und läuft in Legato.
 4. **Sofort statt quantisiert:** Start (T1), Sprung (T4) und Bearbeitungen (§6.3). Beim Stop (T2) wird nichts
    übernommen; der Wechsel gilt erst beim nächsten Start.
 5. **Mehrere Wechsel am selben Punkt:** Vorrang nach §6.8. Ein neuer ausstehender Wechsel ersetzt einen älteren

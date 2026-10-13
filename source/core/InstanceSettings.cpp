@@ -44,6 +44,29 @@ OutputMode parseOutputMode(std::string_view text) {
     return text == "none" ? OutputMode::None : OutputMode::OneVoice;
 }
 
+double switchGridPpq(SwitchQuantize quantize) {
+    switch (quantize) {
+    case SwitchQuantize::Beat:
+        return 1.0;
+    case SwitchQuantize::Bars2:
+        return 8.0;
+    case SwitchQuantize::Bars4:
+        return 16.0;
+    case SwitchQuantize::Bars8:
+        return 32.0;
+    case SwitchQuantize::Bars16:
+        return 64.0;
+    case SwitchQuantize::Bar:
+        break;
+    }
+    return 4.0;
+}
+
+SwitchQuantize switchQuantizeFromInt(int value) {
+    return value >= 0 && value <= static_cast<int>(SwitchQuantize::Bars16) ? static_cast<SwitchQuantize>(value)
+                                                                            : SwitchQuantize::Bar;
+}
+
 GenerationSettings sanitize(GenerationSettings settings) {
     if (!isValidPatternLength(settings.lengthBars)) {
         settings.lengthBars = 4;

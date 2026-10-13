@@ -239,7 +239,8 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
   - [x] Etappe 2 (D-216): Gruppe (Voices folgen der geteilten Transposition mit geplantem Wechsel über den Gruppenkanal, „eigen“ nutzt den Parameter der Voice), Export mit Transposition (abschaltbar im Code), Anzeige in der Voice
   - [x] Etappe 3 (D-217): Einstellungsdialog und Speicherung in den globalen Einstellungen (Referenznote, Modus, Verhalten, Zeitpunkt, Ziel, Kanal, Export), MIDI Thru
 - [x] Vorhören bei gestopptem Transport, auch für Voices (SPEC §3.11, D-236; Prüfung in Logic H85)
-- [x] Legato-Einsatz (SPEC §3.4, D-236; dabei „Neustart“ für Patterns über einen Takt korrigiert; einstellbare Quantisierung offen)
+- [x] Legato-Einsatz (SPEC §3.4, D-236; dabei „Neustart“ für Patterns über einen Takt korrigiert; einstellbare Quantisierung: D-247)
+- [x] Einstellbare Wechsel-Quantisierung: Schlag, Takt, 2/4/8/16 Takte (SPEC §3.4, D-247)
 - [x] Trigger-Parameter Generieren/Variation (SPEC §3.13, D-218)
 - [ ] Session-Ansicht: Slot per Clip-Hüllkurve, Beispiele in der Live-Vorlage
 

@@ -126,6 +126,7 @@ private:
     juce::ToggleButton autoOfflineButton_;
     juce::TextEditor seedEditor_;
     juce::TextButton randomButton_;
+    juce::ComboBox quantBox_; // expert level: where a switch may happen (SPEC 3.4, D-247)
     juce::ComboBox startBox_; // expert level: a new pattern restarts at the switch or continues the position (SPEC 3.4)
     juce::Label hatModeLabel_;
     juce::ComboBox hatModeBox_; // expert level: melody rhythm relative to the hats (SPEC 3.14)

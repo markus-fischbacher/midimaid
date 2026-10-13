@@ -15,13 +15,14 @@ int clampOffset(int base, double samples, int numSamples) {
     return static_cast<int>(std::clamp<long long>(offset, 0, numSamples > 0 ? numSamples - 1 : 0));
 }
 
-/// First multiple of `gridPpq` not before `ppq`, rounded up to a bar line (4/4, SPEC 6.1a rule 3).
-double firstSwitchPoint(double ppq, double gridPpq) {
+/// First multiple of `gridPpq` not before `ppq`, rounded up to a bar line (4/4, SPEC 6.1a rule 3)
+/// unless `offBar` allows a point inside the bar (the beat quantization, D-247).
+double firstSwitchPoint(double ppq, double gridPpq, bool offBar) {
     constexpr double kBarPpq = 4.0;
     constexpr double kEpsilon = 1e-9;
     const double grid = gridPpq > 0.0 ? gridPpq : kBarPpq;
     double point = std::ceil((ppq - kEpsilon) / grid) * grid;
-    if (std::fmod(point, kBarPpq) > kEpsilon && kBarPpq - std::fmod(point, kBarPpq) > kEpsilon) {
+    if (!offBar && std::fmod(point, kBarPpq) > kEpsilon && kBarPpq - std::fmod(point, kBarPpq) > kEpsilon) {
         point = std::ceil((point - kEpsilon) / kBarPpq) * kBarPpq;
     }
     return point;
@@ -189,7 +190,9 @@ void PatternPlayer::reportActive() const {
 }
 
 void PatternPlayer::commitSelected(double point, bool restart) {
-    phasePpq_ = restart ? 0.0 : (legato_ ? phasePpq_ : point);
+    // A point inside the bar always continues the position: the pattern would start off the bar line otherwise (D-247).
+    const bool onBar = std::fabs(point - std::round(point / 4.0) * 4.0) < 1e-6;
+    phasePpq_ = restart ? 0.0 : (legato_ || !onBar ? phasePpq_ : point);
     retire(detachedOwner_);
     detachedOwner_ = nullptr;
     pattern_ = slots_[static_cast<size_t>(selected_)].view;
@@ -419,7 +422,7 @@ void PatternPlayer::playRangeSwitch(double scanFrom, double origin, double to, i
     if (switchPending() && timing_.resolved && timing_.pointPpq < to && !canRetire()) {
         // The return queue is full: the old pattern cannot be handed back, so the switch waits for the next grid
         // point (SPEC 6.3). Until then the old pattern keeps playing.
-        timing_.pointPpq = firstSwitchPoint(std::max(timing_.pointPpq, scanFrom) + 1e-6, timing_.gridPpq);
+        timing_.pointPpq = firstSwitchPoint(std::max(timing_.pointPpq, scanFrom) + 1e-6, timing_.gridPpq, offBarSwitch_);
     }
     if (switchPending() && timing_.resolved && timing_.pointPpq < to) {
         const double point = std::max(timing_.pointPpq, scanFrom);
@@ -496,7 +499,7 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
             // Fixed once, in the block that first sees the change (rule 2): never in the past.
             timing_.pointPpq = timing_.hasStamp && timing_.stampPpq >= transport.ppq - 1e-9
                                    ? timing_.stampPpq
-                                   : firstSwitchPoint(transport.ppq, timing_.gridPpq);
+                                   : firstSwitchPoint(transport.ppq, timing_.gridPpq, offBarSwitch_);
             timing_.resolved = true;
         }
     } else {

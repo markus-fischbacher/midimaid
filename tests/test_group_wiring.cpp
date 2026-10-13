@@ -6859,6 +6859,74 @@ TEST_CASE("the start box is an expert control that follows the instance", "[grou
     child<juce::ToggleButton>(*editor, "expert")->onClick();
 }
 
+// --- quantization of a switch (SPEC 3.4, D-247) -------------------------------------------------------------------
+
+TEST_CASE("the switch grid follows the quantization", "[group-wiring][quantize]") {
+    using mm::core::SwitchQuantize;
+    CHECK(mm::core::switchGridPpq(SwitchQuantize::Bar) == 4.0);
+    CHECK(mm::core::switchGridPpq(SwitchQuantize::Beat) == 1.0);
+    CHECK(mm::core::switchGridPpq(SwitchQuantize::Bars2) == 8.0);
+    CHECK(mm::core::switchGridPpq(SwitchQuantize::Bars4) == 16.0);
+    CHECK(mm::core::switchGridPpq(SwitchQuantize::Bars8) == 32.0);
+    CHECK(mm::core::switchGridPpq(SwitchQuantize::Bars16) == 64.0);
+    CHECK(mm::core::switchQuantizeFromInt(5) == SwitchQuantize::Bars16);
+    CHECK(mm::core::switchQuantizeFromInt(6) == SwitchQuantize::Bar);
+    CHECK(mm::core::switchQuantizeFromInt(-1) == SwitchQuantize::Bar);
+}
+
+TEST_CASE("the quantization is saved with the instance, only when it is not the bar", "[group-wiring][quantize]") {
+    Quiet quiet;
+    Instance source("Source");
+    CHECK(source.processor.instanceSettings().quantize == mm::core::SwitchQuantize::Bar);
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("switchQuant"));
+    auto settings = source.processor.instanceSettings();
+    settings.quantize = mm::core::SwitchQuantize::Bars8;
+    source.processor.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.processor.instanceSettings().quantize == mm::core::SwitchQuantize::Bars8);
+    target.processor.setStateInformation(standard.getData(), static_cast<int>(standard.getSize()));
+    CHECK(target.processor.instanceSettings().quantize == mm::core::SwitchQuantize::Bar);
+}
+
+TEST_CASE("the quantization box is an expert control that follows the instance", "[group-wiring][quantize][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    auto* box = child<juce::ComboBox>(*editor, "switchQuant");
+    REQUIRE(box != nullptr);
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(true, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK(box->isVisible());
+    CHECK(box->getNumItems() == 6);
+    CHECK(box->getItemText(0) == "Wechsel: Takt");
+    CHECK(editor->getLocalBounds().contains(box->getBounds()));
+    for (auto* other : editor->getChildren()) {
+        if (other != box && other->isVisible() && other->getWidth() > 0 &&
+            dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+            INFO(other->getComponentID().toStdString());
+            CHECK_FALSE(box->getBounds().intersects(other->getBounds()));
+        }
+    }
+    box->setSelectedId(2, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().quantize == mm::core::SwitchQuantize::Beat);
+    auto settings = hub.processor.instanceSettings();
+    settings.quantize = mm::core::SwitchQuantize::Bars4;
+    hub.processor.setInstanceSettings(settings);
+    CHECK(waitFor([&] { return box->getSelectedId() == 4; }));
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+}
+
 // --- groove templates (SPEC 3.9, D-220) -----------------------------------------------------------------------
 
 namespace {

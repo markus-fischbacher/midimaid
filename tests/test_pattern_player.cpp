@@ -606,6 +606,53 @@ TEST_CASE("grids shorter than a bar are rounded up to the bar line", "[engine][s
     CHECK(ons.front().sample == Catch::Approx((8.0 - 5.3) * 24000).margin(1.0));
 }
 
+TEST_CASE("with the beat quantization a switch happens at the next beat inside the bar (D-247)", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.player().setOffBarSwitch(true);
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().requestSwitch(nextPattern(), 1.0);
+    while (sim.clock() < 4 * 24000) {
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx((6.0 - 5.3) * 24000).margin(1.0));
+}
+
+TEST_CASE("a switch inside the bar keeps the phase, one on a bar line restarts it (D-247)", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.player().setOffBarSwitch(true);
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().requestSwitch(nextPattern(), 1.0);
+    while (sim.clock() < 2 * 24000) {
+        sim.block(512);
+    }
+    CHECK(sim.player().phasePpq() == 0.0); // the beat at 6.0 is off the bar line: the position goes on
+    Simulation onBar(longPattern());
+    onBar.setPpq(5.3);
+    onBar.block(512);
+    onBar.player().requestSwitch(nextPattern(), 4.0);
+    while (onBar.clock() < 4 * 24000) {
+        onBar.block(512);
+    }
+    CHECK(onBar.player().phasePpq() == Catch::Approx(8.0));
+}
+
+TEST_CASE("a switch grid of several bars waits for that bar line (D-247)", "[engine][switch]") {
+    Simulation sim(longPattern());
+    sim.setPpq(5.3);
+    sim.block(512);
+    sim.player().requestSwitch(nextPattern(), 16.0);
+    while (sim.clock() < 12 * 24000) {
+        sim.block(512);
+    }
+    const auto ons = ofPitch(sim.events(), 50, true);
+    REQUIRE(ons.size() >= 1);
+    CHECK(ons.front().sample == Catch::Approx((16.0 - 5.3) * 24000).margin(1.0));
+}
+
 TEST_CASE("a planned switch uses its stamp, a stale stamp falls back to the next grid point", "[engine][switch]") {
     SECTION("stamp ahead of the block") {
         Simulation sim(longPattern());

@@ -48,6 +48,12 @@ namespace mm::core::text {
     X(kLabelPersonal, "label.personal")                                                                                \
     X(kStartRestart, "start.restart")                                                                                  \
     X(kStartLegato, "start.legato")                                                                                    \
+    X(kQuantBar, "quant.bar")                                                                                          \
+    X(kQuantBeat, "quant.beat")                                                                                        \
+    X(kQuantBars2, "quant.bars2")                                                                                      \
+    X(kQuantBars4, "quant.bars4")                                                                                      \
+    X(kQuantBars8, "quant.bars8")                                                                                      \
+    X(kQuantBars16, "quant.bars16")                                                                                    \
     X(kLabelHatMode, "label.hatMode")                                                                                  \
     X(kHatModeFree, "hatMode.free")                                                                                    \
     X(kHatModeWith, "hatMode.with")                                                                                    \

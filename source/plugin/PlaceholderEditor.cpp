@@ -435,6 +435,18 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         processor_.setInstanceSettings(next);
     };
     addChildComponent(startBox_);
+    quantBox_.setComponentID("switchQuant");
+    for (const std::string_view key : {keys::kQuantBar, keys::kQuantBeat, keys::kQuantBars2, keys::kQuantBars4, keys::kQuantBars8,
+                            keys::kQuantBars16}) {
+        quantBox_.addItem(tr(key), quantBox_.getNumItems() + 1);
+    }
+    quantBox_.setSelectedId(1, juce::dontSendNotification);
+    quantBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.quantize = mm::core::switchQuantizeFromInt(quantBox_.getSelectedId() - 1);
+        processor_.setInstanceSettings(next);
+    };
+    addChildComponent(quantBox_);
     hatModeBox_.setComponentID("hatMode");
     hatModeBox_.addItem(tr(keys::kHatModeFree), 1);
     hatModeBox_.addItem(tr(keys::kHatModeWith), 2);
@@ -1069,6 +1081,9 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     if (startBox_.getSelectedId() != (settings.legato ? 2 : 1)) {
         startBox_.setSelectedId(settings.legato ? 2 : 1, juce::dontSendNotification);
     }
+    if (quantBox_.getSelectedId() != static_cast<int>(settings.quantize) + 1) {
+        quantBox_.setSelectedId(static_cast<int>(settings.quantize) + 1, juce::dontSendNotification);
+    }
     const bool outputNone = settings.outputMode == mm::core::OutputMode::None;
     if (outputBox_.getSelectedId() != (outputNone ? 2 : 1)) {
         outputBox_.setSelectedId(outputNone ? 2 : 1, juce::dontSendNotification);
@@ -1276,7 +1291,7 @@ void PlaceholderEditor::applyLevel() {
     const bool show = expert_ && !voiceLayout_;
     for (auto* component :
          std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
-                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &personalLabel_, &personalSlider_, &hatModeLabel_, &hatModeBox_, &startBox_,
+                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &personalLabel_, &personalSlider_, &hatModeLabel_, &hatModeBox_, &startBox_, &quantBox_,
                                                  &evolveEveryBox_,
                                                  &evolveOriginalButton_, &evolveStrengthLabel_,
                                                  &evolveStrengthSlider_}) {
@@ -1778,6 +1793,8 @@ void PlaceholderEditor::resized() {
     if (expert_) {
         editBar.removeFromLeft(8);
         startBox_.setBounds(editBar.removeFromLeft(170));
+        editBar.removeFromLeft(8);
+        quantBox_.setBounds(editBar.removeFromLeft(170));
     }
     if (expert_) { // the settings of Evolve (SPEC 6.7) in a row of their own
         auto evolveRow = area.removeFromTop(32).reduced(16, 2);

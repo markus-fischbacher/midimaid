@@ -201,6 +201,8 @@ public:
     void updateExport();
     /// Last tempo reported by the host (120 until the host reported one). Safe to read from any thread.
     double lastKnownBpm() const;
+    /// Grid of a pattern switch in quarter notes, from the quantization setting (D-247).
+    double switchGrid() const { return switchGrid_.load(std::memory_order_acquire); }
 
     /// Message thread: queues a pattern for the audio thread (SPEC 6.3). A switch takes effect at the next grid point
     /// (`gridPpq`, rounded up to a bar line), an edit at the next block without restarting the position.
@@ -549,6 +551,8 @@ private:
     std::atomic<bool> previewRequested_{false}; // the Play button (message thread) and the first block of the host
     bool previewRunning_ = false;               // audio thread: the internal clock runs
     double previewPpq_ = 0.0;                   // audio thread: its position
+    std::atomic<double> switchGrid_{4.0}; // grid of the switch in quarter notes (D-247)
+    std::atomic<bool> offBar_{false}; // beat quantization (D-247)
     std::atomic<bool> legato_{false};                                    // how a new pattern starts (SPEC 3.4, D-236)
     std::atomic<int> outputVoice_{1};                                    // the voice this instance plays (1 = first)
     const mm::core::StyleLibrary& styles_;
