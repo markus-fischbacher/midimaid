@@ -208,6 +208,7 @@ private:
     bool settingsApplied_ = false;
     uint64_t namingRevision_ = 0; ///< the settings revision the roll key labels were taken from
     bool voiceLayout_ = false;
+    juce::Rectangle<int> voiceStrip_; ///< the strip of the voice window that paints as a surface
     ProcessorBase::VoiceView shown_; // what the roll shows now
     juce::Label statusLabel_;
     juce::String groupText_;

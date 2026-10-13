@@ -180,7 +180,8 @@ private:
     juce::ToggleButton muteButton_;
     juce::ToggleButton lockButton_;
     mm::core::LockFlags lockFlags_; ///< what the view showed last: the menu ticks follow it
-    juce::TextButton moreButton_; ///< the menu of Variation, Duplicate and Focus
+    static constexpr int kCollapsedStripWidth = 352; ///< a folded lane's strip: name, five buttons and the menu
+    juce::TextButton moreButton_; ///< the menu of Variation and Duplicate
     juce::ToggleButton focusButton_;
     juce::TextButton renewButton_;
     juce::TextButton varyButton_;
