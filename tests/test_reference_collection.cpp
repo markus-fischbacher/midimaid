@@ -4,6 +4,7 @@
 #include "core/ReferenceProfile.h"
 
 #include <algorithm>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -430,5 +431,56 @@ TEST_CASE("removing the favorites of one entry leaves the entries whose id start
     REQUIRE_FALSE(left.empty());
     for (const auto& item : left) {
         CHECK(item.id.rfind("fav:e10:", 0) == 0);
+    }
+}
+
+TEST_CASE("an imported item knows how sure the role was, and the musician's choice makes it sure", "[reference-collection][role]") {
+    using Catch::Approx;
+    // eight notes right at the limit between bass and melody: an unsure melody
+    std::vector<PatternNote> list;
+    for (uint32_t i = 0; i < 8; ++i) {
+        list.push_back({i * 480, 240, 1, 55, 100});
+    }
+    const auto bytes = writeMidiFile(PatternView{list.data(), list.size(), kTicksPerBar}, MidiFileOptions{});
+    ReferenceImportReport report;
+    auto items = itemsFromMidiFile("limit", bytes, shipped(), report);
+    REQUIRE(items.size() == 1);
+    CHECK(items[0].role == TrackRole::Melody);
+    CHECK(items[0].roleConfidence == Approx(0.5));
+    CHECK(isRoleUnsure(items[0]));
+    CHECK(bassItem(0).roleConfidence == Approx(0.5 + 0.5 * 10.0 / 12.0)); // median A2: ten semitones below the limit
+    CHECK_FALSE(isRoleUnsure(bassItem(0)));
+
+    ReferenceCollection c;
+    c.styleId = "peak_time";
+    normalize(c);
+    const auto set = createSet(c, "A");
+    ReferenceImportReport add;
+    addItems(c, set, {withId(items[0], "u1"), withId(bassItem(0), "b1")}, add);
+    CHECK(unsureRoleCount(viewOf(c, set)) == 1);
+    CHECK(unsureRoleCount(viewOf(c, kFavoritesSetId)) == 0);
+    // saved and read back
+    const auto back = referenceCollectionFromJson(referenceCollectionToJson(c), "peak_time");
+    CHECK(back == c);
+    CHECK(viewOf(back, set).items[0].roleConfidence == Approx(0.5));
+    // the musician sets the role: sure from then on, in the collection and in a set of the old kind
+    REQUIRE(setItemRole(c, "u1", TrackRole::Bass));
+    CHECK(viewOf(c, set).items[0].roleConfidence == Approx(1.0));
+    CHECK(unsureRoleCount(viewOf(c, set)) == 0);
+    ReferenceSet old = viewOf(back, set);
+    REQUIRE(setItemRole(old, "u1", TrackRole::Chords));
+    CHECK(old.items[0].roleConfidence == Approx(1.0));
+    CHECK(unsureRoleCount(old) == 0);
+    // a file written before the field existed counts as sure
+    auto json = nlohmann::json::parse(referenceSetToJson(viewOf(back, set)));
+    for (auto& item : json["items"]) {
+        item.erase("roleConfidence");
+    }
+    const auto older = referenceSetFromJson(json.dump(), "peak_time");
+    REQUIRE(older.items.size() == 2);
+    CHECK(older.items[0].roleConfidence == Approx(1.0));
+    // favorites come from the voices of a pattern: the role is known
+    for (const auto& item : favoriteItemsOf(made(5), "e", "x", shipped())) {
+        CHECK(item.roleConfidence == Approx(1.0));
     }
 }

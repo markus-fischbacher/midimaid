@@ -25,7 +25,7 @@ AnalysisSettings analysisSettingsOf(const StyleProfile& style) {
 } // namespace
 
 bool ReferenceItem::operator==(const ReferenceItem& other) const {
-    return id == other.id && name == other.name && role == other.role && active == other.active &&
+    return id == other.id && name == other.name && role == other.role && roleConfidence == other.roleConfidence && active == other.active &&
            weight == other.weight && tags == other.tags && lengthBars == other.lengthBars && notes == other.notes &&
            analysisToJson(analysis) == analysisToJson(other.analysis);
 }
@@ -115,7 +115,8 @@ std::vector<ReferenceItem> itemsFromMidiFile(const std::string& fileName, const 
         item.lengthBars = plan.lengthBars;
         item.notes = plan.notes;
         item.analysis = analyzeTrack(plan.notes, plan.lengthBars, settings);
-        item.role = suggestRole(plan.notes);
+        item.role = item.analysis.role; // the same detection, with its confidence
+        item.roleConfidence = item.analysis.roleConfidence;
         if (plan.truncated) {
             ++report.truncated;
         }
@@ -177,6 +178,7 @@ bool setItemRole(ReferenceSet& set, const std::string& id, TrackRole role) {
         return false;
     }
     item->role = role;
+    item->roleConfidence = 1.0; // the musician decided
     return true;
 }
 
@@ -196,6 +198,14 @@ size_t countOfRole(const ReferenceSet& set, TrackRole role) {
         std::count_if(set.items.begin(), set.items.end(), [&](const ReferenceItem& i) { return i.role == role; }));
 }
 
+bool isRoleUnsure(const ReferenceItem& item) {
+    return item.roleConfidence < kUnsureRoleConfidence;
+}
+
+size_t unsureRoleCount(const ReferenceSet& set) {
+    return static_cast<size_t>(std::count_if(set.items.begin(), set.items.end(), isRoleUnsure));
+}
+
 std::string referenceSetToJson(const ReferenceSet& set) {
     using nlohmann::json;
     json root;
@@ -210,6 +220,7 @@ std::string referenceSetToJson(const ReferenceSet& set) {
         items.push_back({{"id", item.id},
                          {"name", item.name},
                          {"role", std::string(toString(item.role))},
+                         {"roleConfidence", item.roleConfidence},
                          {"active", item.active},
                          {"weight", item.weight},
                          {"bars", item.lengthBars},
@@ -249,6 +260,7 @@ ReferenceSet referenceSetFromJson(std::string_view text, const std::string& styl
                 continue;
             }
             item.role = *role;
+            item.roleConfidence = entry.contains("roleConfidence") && entry["roleConfidence"].is_number() ? std::clamp(entry["roleConfidence"].get<double>(), 0.0, 1.0) : 1.0;
             item.analysis = *analysis;
             item.active = entry.at("active").get<bool>();
             item.weight = std::clamp(entry.at("weight").get<int>(), kMinReferenceWeight, kMaxReferenceWeight);

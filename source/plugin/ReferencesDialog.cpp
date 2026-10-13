@@ -5,6 +5,7 @@
 #include "plugin/EmbeddedTranslation.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mm::plugin {
 
@@ -36,13 +37,20 @@ constexpr mm::core::TrackRole kRoles[4] = {mm::core::TrackRole::Bass, mm::core::
 juce::String infoText(const mm::core::ReferenceItem& item) {
     const auto length = std::to_string(item.lengthBars);
     const auto notes = std::to_string(item.notes.size());
+    juce::String text;
     if (item.role == mm::core::TrackRole::Drums) {
-        return tr(keys::kReferencesInfoDrums, {{"length", length}, {"n", notes}});
+        text = tr(keys::kReferencesInfoDrums, {{"length", length}, {"n", notes}});
+    } else {
+        text = tr(keys::kReferencesInfo, {{"key", kKeyNames[item.analysis.key.root % 12]},
+                                          {"scale", tr(keys::scaleKey(item.analysis.key.scaleId)).toStdString()},
+                                          {"length", length},
+                                          {"n", notes}});
     }
-    return tr(keys::kReferencesInfo, {{"key", kKeyNames[item.analysis.key.root % 12]},
-                                      {"scale", tr(keys::scaleKey(item.analysis.key.scaleId)).toStdString()},
-                                      {"length", length},
-                                      {"n", notes}});
+    if (mm::core::isRoleUnsure(item)) {
+        text += " · " + tr(keys::kReferencesRoleUnsure,
+                           {{"n", std::to_string(static_cast<int>(std::lround(item.roleConfidence * 100.0)))}});
+    }
+    return text;
 }
 
 } // namespace
@@ -113,6 +121,8 @@ public:
         id_ = item.id;
         name_.setText(juce::String::fromUTF8(item.name.c_str()), juce::dontSendNotification);
         info_.setText(infoText(item), juce::dontSendNotification);
+        info_.setColour(juce::Label::textColourId, mm::core::isRoleUnsure(item) ? juce::Colours::orange.withAlpha(0.9f)
+                                                                                : juce::Colour(MidiMaidLookAndFeel::kTextDim));
         for (int i = 0; i < 4; ++i) {
             if (kRoles[i] == item.role) {
                 role_.setSelectedId(i + 1, juce::dontSendNotification);
@@ -323,7 +333,13 @@ juce::String ReferencesDialog::summaryText(const mm::core::ReferenceSet& set) co
             roles.add(roleName(role) + " " + juce::String(static_cast<int>(count)));
         }
     }
-    return roles.isEmpty() ? text : text + " (" + roles.joinIntoString(", ") + ")";
+    if (!roles.isEmpty()) {
+        text += " (" + roles.joinIntoString(", ") + ")";
+    }
+    if (const auto unsure = mm::core::unsureRoleCount(set); unsure > 0) {
+        text += ", " + tr(keys::kReferencesSummaryUnsure, {{"n", std::to_string(unsure)}});
+    }
+    return text;
 }
 
 juce::String ReferencesDialog::statusText(const ReferenceStore::Progress& progress) const {

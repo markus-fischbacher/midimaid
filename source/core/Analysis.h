@@ -56,6 +56,7 @@ struct RegisterStats {
 
 struct TrackAnalysis {
     TrackRole role = TrackRole::Melody;
+    double roleConfidence = 1.0; ///< 0 to 1: how sure `guessRole` was (v1.1). Not part of the JSON: it depends on the register, the item keeps it
     KeyEstimate key;
     std::vector<ChordGuess> progression; ///< covers the clip without gaps, per bar or per half bar
     double progressionConfidence = 0;    ///< mean confidence of the chords (unsure progressions count less)
@@ -83,6 +84,20 @@ KeyEstimate estimateKey(const std::vector<MidiClipNote>& notes, const AnalysisSe
 /// Drums (channel 10, or only typical drum notes), chords (mostly three or more tones at once), bass (one tone at a
 /// time and low), else melody. A suggestion: the musician can correct it.
 TrackRole suggestRole(const std::vector<MidiClipNote>& notes);
+
+/// The role with a confidence from 0 to 1 (SPEC 3.20, v1.1, D-239). The role is that of `suggestRole`. Channel 10: the
+/// share of its notes; chords: the share of onsets with three or more tones; a kit on another channel: 0.6 (0.75 from
+/// 16 notes); a bass line: 0.5 at the limit of its register (median pitch 55), 1 an octave below; a melody: the surer
+/// of "tones overlap" (0.6 for one overlap, 1 from a fifth of the notes) and "lies high" (0.5 at the limit, 1 an octave
+/// above it). An empty track is a melody with confidence 0. A heuristic, not a probability.
+struct RoleGuess {
+    TrackRole role = TrackRole::Melody;
+    double confidence = 0;
+};
+RoleGuess guessRole(const std::vector<MidiClipNote>& notes);
+
+/// Below this confidence the view marks the role as unsure.
+constexpr double kUnsureRoleConfidence = 0.7;
 
 /// The chord of every bar, or of every half bar when the two halves clearly differ (SPEC 3.18). Taken from the
 /// tones the bar holds, the lowest ones counting more; a bass line without thirds gets the quality its scale gives.

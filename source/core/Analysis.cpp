@@ -292,16 +292,16 @@ KeyEstimate estimateKeyOf(const std::vector<std::vector<MidiClipNote>>& tracks, 
     return estimateKey(all, settings);
 }
 
-TrackRole suggestRole(const std::vector<MidiClipNote>& notes) {
+RoleGuess guessRole(const std::vector<MidiClipNote>& notes) {
     if (notes.empty()) {
-        return TrackRole::Melody;
+        return {TrackRole::Melody, 0.0};
     }
     size_t channelTen = 0;
     for (const auto& note : notes) {
         channelTen += note.channel == 10 ? 1 : 0;
     }
     if (channelTen * 2 > notes.size()) {
-        return TrackRole::Drums;
+        return {TrackRole::Drums, static_cast<double>(channelTen) / static_cast<double>(notes.size())};
     }
     const auto groups = onsetGroups(notes);
     size_t chordGroups = 0;
@@ -313,7 +313,7 @@ TrackRole suggestRole(const std::vector<MidiClipNote>& notes) {
         chordGroups += pitches.size() >= 3 ? 1 : 0;
     }
     if (chordGroups * 10 >= groups.size() * 6) { // regularly three or more tones at once
-        return TrackRole::Chords;
+        return {TrackRole::Chords, static_cast<double>(chordGroups) / static_cast<double>(groups.size())};
     }
     std::set<uint8_t> distinct;
     for (const auto& note : notes) {
@@ -324,19 +324,38 @@ TrackRole suggestRole(const std::vector<MidiClipNote>& notes) {
     const bool hasKick = distinct.count(35) != 0 || distinct.count(36) != 0;
     const bool onlyKitPitches = std::all_of(distinct.begin(), distinct.end(), isKitNote);
     if (onlyKitPitches && hasKick && notes.size() >= 8 && distinct.size() <= 8 && distinct.size() >= 2) {
-        return TrackRole::Drums;
+        return {TrackRole::Drums, notes.size() >= 16 ? 0.75 : 0.6}; // the pitches say it, the channel does not
     }
-    bool monophonic = true;
-    for (size_t i = 0; i + 1 < notes.size() && monophonic; ++i) {
-        monophonic = notes[i].startTick + notes[i].lengthTicks <= notes[i + 1].startTick + 30;
+    size_t overlaps = 0;
+    for (size_t i = 0; i + 1 < notes.size(); ++i) {
+        overlaps += notes[i].startTick + notes[i].lengthTicks > notes[i + 1].startTick + 30 ? 1 : 0;
     }
+    const bool monophonic = overlaps == 0;
     std::vector<uint8_t> pitches;
     for (const auto& note : notes) {
         pitches.push_back(note.pitch);
     }
     std::sort(pitches.begin(), pitches.end());
     const int median = pitches[pitches.size() / 2];
-    return monophonic && median < 55 ? TrackRole::Bass : TrackRole::Melody;
+    if (monophonic && median < 55) {
+        // the lower it lies, the surer: 0.5 right at the limit, 1 a whole octave below it
+        return {TrackRole::Bass, 0.5 + 0.5 * std::min(1.0, (55 - median) / 12.0)};
+    }
+    // a melody: because tones overlap (one overlap in the clip is a weak sign, a fifth of the notes a sure one) or
+    // because it lies high (0.5 right at the limit, 1 an octave above it); the surer of the two reasons counts
+    double confidence = 0.0;
+    if (!monophonic) {
+        const double share = static_cast<double>(overlaps) / static_cast<double>(notes.size());
+        confidence = 0.6 + 0.4 * std::min(1.0, share / 0.2);
+    }
+    if (median >= 55) {
+        confidence = std::max(confidence, 0.5 + 0.5 * std::min(1.0, (median - 55) / 12.0));
+    }
+    return {TrackRole::Melody, confidence};
+}
+
+TrackRole suggestRole(const std::vector<MidiClipNote>& notes) {
+    return guessRole(notes).role;
 }
 
 namespace {
@@ -417,7 +436,9 @@ TrackAnalysis analyzeTrack(const std::vector<MidiClipNote>& notes, uint32_t leng
     TrackAnalysis analysis;
     analysis.lengthBars = lengthBars;
     analysis.noteCount = notes.size();
-    analysis.role = suggestRole(notes);
+    const RoleGuess guess = guessRole(notes);
+    analysis.role = guess.role;
+    analysis.roleConfidence = guess.confidence;
     analysis.key = estimateKey(notes, settings);
     analysis.progression = estimateProgression(notes, lengthBars, analysis.key);
     double weighted = 0;

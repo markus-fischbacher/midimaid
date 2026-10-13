@@ -309,6 +309,8 @@
   "references.role.melody": "Melodie",
   "references.weight": "Gewicht {n}",
   "references.set.favorites": "Favoriten",
+  "references.roleUnsure": "Rolle unsicher ({n} %)",
+  "references.summaryUnsure": "{n} Rollen unsicher",
   "references.set.new": "Neues Set",
   "references.set.rename": "Umbenennen",
   "references.set.delete": "Set löschen",

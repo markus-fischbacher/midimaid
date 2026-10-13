@@ -230,6 +230,7 @@ bool setItemRole(ReferenceCollection& collection, std::string_view itemId, Track
         return false;
     }
     it->role = role;
+    it->roleConfidence = 1.0; // the musician decided
     return true;
 }
 
