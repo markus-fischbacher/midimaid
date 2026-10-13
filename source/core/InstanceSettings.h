@@ -46,6 +46,14 @@ struct GenerationSettings {
 /// Brings every field into its valid range: an invalid length becomes 4 bars, percentages are clamped.
 GenerationSettings sanitize(GenerationSettings settings);
 
+/// Where a pattern switch may happen (SPEC 3.4, v1.1, D-247). `Beat` and everything off a bar line continue the position.
+enum class SwitchQuantize { Bar, Beat, Bars2, Bars4, Bars8, Bars16 };
+
+/// Grid of the switch in quarter notes (4/4): 1, 4, 8, 16, 32 or 64.
+double switchGridPpq(SwitchQuantize quantize);
+/// Clamps a stored number into the enum (unknown values give `Bar`).
+SwitchQuantize switchQuantizeFromInt(int value);
+
 /// Persistent settings of an instance besides the slots and the host parameters (SPEC 9.1).
 struct InstanceSettings {
     InstanceRole role = InstanceRole::Solo;
@@ -55,6 +63,7 @@ struct InstanceSettings {
     SlotFollow slotFollow = SlotFollow::Hub; ///< only a voice looks at it
     int octave = 0;                          ///< -2 to +2: this instance plays its voice that many octaves up (D-147)
     bool legato = false;                     ///< a new pattern continues the position (v1.1, D-236); false: it restarts at the switch
+    SwitchQuantize quantize = SwitchQuantize::Bar; ///< where a switch may happen (v1.1, D-247)
     EvolveSettings evolve{};                 ///< what the Evolve layer does when it is on (SPEC 6.7); on/off is not saved
 
     bool operator==(const InstanceSettings&) const = default;

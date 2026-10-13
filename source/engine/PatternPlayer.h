@@ -103,6 +103,8 @@ public:
     /// mode. After a start or a jump the position is the song position modulo the pattern length in both modes.
     void setLegato(bool legato) { legato_ = legato; }
     bool legato() const { return legato_; }
+    /// Lets a switch happen inside a bar (the beat quantization, D-247); the position then always continues.
+    void setOffBarSwitch(bool allowed) { offBarSwitch_ = allowed; }
     /// The song position (PPQ) at which position 0 of the playing pattern lies (0 after a start or jump).
     double phasePpq() const { return phasePpq_; }
 
@@ -205,6 +207,7 @@ private:
     double slotGridPpq_ = 4.0;
     double phasePpq_ = 0.0; ///< where position 0 of the playing pattern lies on the song position
     bool legato_ = false;
+    bool offBarSwitch_ = false;
     PatternHandover* handover_ = nullptr;
     SwitchTiming timing_;
     int mapPitch(int pitch) const;
