@@ -3,7 +3,9 @@
 #include "core/PatternGenerator.h"
 #include "core/StyleProfile.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -781,4 +783,114 @@ TEST_CASE("a bass line in the range of the toms is a bass line, not a kit (D-180
         }
     }
     CHECK(suggestRole(kit) != TrackRole::Drums);
+}
+
+TEST_CASE("the role comes with a confidence, and the role is the one suggestRole gives", "[analysis][role]") {
+    using Catch::Approx;
+    // nothing to go on
+    CHECK(guessRole({}).role == TrackRole::Melody);
+    CHECK(guessRole({}).confidence == 0.0);
+
+    // channel 10: the share of the notes on it
+    std::vector<MidiClipNote> drums;
+    for (uint32_t i = 0; i < 10; ++i) {
+        drums.push_back(note(i % 2 == 0 ? 36 : 42, i * 240, 120, 100, i < 6 ? 10 : 1));
+    }
+    CHECK(guessRole(drums).role == TrackRole::Drums);
+    CHECK(guessRole(drums).confidence == Approx(0.6));
+    for (auto& n : drums) {
+        n.channel = 10;
+    }
+    CHECK(guessRole(drums).confidence == Approx(1.0));
+
+    // a kit on another channel: only the pitches say so, more notes say it more surely
+    std::vector<MidiClipNote> kit;
+    for (uint32_t i = 0; i < 8; ++i) {
+        kit.push_back(note(i % 2 == 0 ? 36 : 42, i * 240, 120));
+    }
+    CHECK(guessRole(kit).role == TrackRole::Drums);
+    CHECK(guessRole(kit).confidence == Approx(0.6));
+    for (uint32_t i = 8; i < 16; ++i) {
+        kit.push_back(note(i % 2 == 0 ? 36 : 42, i * 240, 120));
+    }
+    CHECK(guessRole(kit).confidence == Approx(0.75));
+
+    // chords: the share of the onsets with three tones or more
+    std::vector<MidiClipNote> chords;
+    for (uint32_t bar = 0; bar < 4; ++bar) {
+        for (const int pitch : {57, 60, 64}) {
+            chords.push_back(note(static_cast<uint8_t>(pitch), bar * 3840 + (pitch == 60 ? 12 : 0), 1800));
+        }
+    }
+    CHECK(guessRole(chords).role == TrackRole::Chords);
+    CHECK(guessRole(chords).confidence == Approx(1.0));
+    for (uint32_t bar = 0; bar < 2; ++bar) { // two bars of single tones between: 4 of 6 onsets are chords
+        chords.push_back(note(60, bar * 3840 + 1920, 240));
+    }
+    std::stable_sort(chords.begin(), chords.end(), [](const auto& a, const auto& b) { return a.startTick < b.startTick; });
+    CHECK(guessRole(chords).role == TrackRole::Chords);
+    CHECK(guessRole(chords).confidence == Approx(4.0 / 6.0));
+
+    // a bass line: the lower it lies, the surer (0.5 at the limit, 1 an octave below)
+    CHECK(guessRole(bassLine({33, 33})).role == TrackRole::Bass);
+    CHECK(guessRole(bassLine({33, 33})).confidence == Approx(1.0));
+    std::vector<MidiClipNote> high;
+    for (uint32_t i = 0; i < 8; ++i) {
+        high.push_back(note(54, i * 480, 240));
+    }
+    CHECK(guessRole(high).role == TrackRole::Bass);
+    CHECK(guessRole(high).confidence == Approx(0.5 + 0.5 / 12.0));
+    for (auto& n : high) {
+        n.pitch = 49;
+    }
+    CHECK(guessRole(high).confidence == Approx(0.5 + 0.5 * 6.0 / 12.0));
+
+    // a melody: high, or with overlapping tones
+    std::vector<MidiClipNote> lead;
+    for (uint32_t i = 0; i < 8; ++i) {
+        lead.push_back(note(static_cast<uint8_t>(72 + (i % 3)), i * 480, 240));
+    }
+    CHECK(guessRole(lead).role == TrackRole::Melody);
+    CHECK(guessRole(lead).confidence == Approx(1.0));
+    for (auto& n : lead) {
+        n.pitch = 61;
+    }
+    CHECK(guessRole(lead).confidence == Approx(0.5 + 0.5 * 6.0 / 12.0));
+    for (auto& n : lead) {
+        n.pitch = 55;
+    }
+    CHECK(guessRole(lead).confidence == Approx(0.5)); // right at the limit
+    std::vector<MidiClipNote> lowOverlapping; // low, but two tones at once: not a bass line
+    lowOverlapping.push_back(note(40, 0, 1920));
+    lowOverlapping.push_back(note(47, 480, 1920));
+    CHECK(guessRole(lowOverlapping).role == TrackRole::Melody);
+    CHECK(guessRole(lowOverlapping).confidence == Approx(1.0)); // one overlap in two notes
+    std::vector<MidiClipNote> rare; // one overlap in twenty notes is a weak sign
+    for (uint32_t i = 0; i < 20; ++i) {
+        rare.push_back(note(40, i * 480, i == 3 ? 960 : 240));
+    }
+    CHECK(guessRole(rare).role == TrackRole::Melody);
+    CHECK(guessRole(rare).confidence == Approx(0.6 + 0.4 * 0.25));
+
+    // the role is always that of suggestRole
+    for (const auto* notes : {&drums, &kit, &chords, &high, &lead, &lowOverlapping, &rare}) {
+        CHECK(guessRole(*notes).role == suggestRole(*notes));
+    }
+    CHECK(kUnsureRoleConfidence == Approx(0.7));
+}
+
+TEST_CASE("the analysis carries the confidence of the role, which the JSON does not keep", "[analysis][role]") {
+    using Catch::Approx;
+    const auto analysis = analyzeTrack(bassLine({33, 33}), 2);
+    CHECK(analysis.role == TrackRole::Bass);
+    CHECK(analysis.roleConfidence == Approx(1.0));
+    std::vector<MidiClipNote> lead;
+    for (uint32_t i = 0; i < 8; ++i) {
+        lead.push_back(note(55, i * 480, 240));
+    }
+    const auto unsure = analyzeTrack(lead, 1);
+    CHECK(unsure.roleConfidence == Approx(0.5));
+    // the stored analysis does not depend on the key, the confidence depends on the register: the item stores it
+    CHECK(analysisToJson(unsure).find("roleConfidence") == std::string::npos);
+    CHECK(analysisFromJson(analysisToJson(unsure))->roleConfidence == Approx(1.0));
 }

@@ -28,6 +28,7 @@ struct ReferenceItem {
     std::string id;
     std::string name; ///< file name, with the channel when the file had several tracks
     TrackRole role = TrackRole::Melody;
+    double roleConfidence = 1.0; ///< how sure the detection was; 1 once the musician set the role
     bool active = true;
     int weight = kDefaultReferenceWeight;
     std::vector<std::string> tags; ///< the tags of the item in a set (only in the view of a set, v1.1)
@@ -85,6 +86,9 @@ bool removeItem(ReferenceSet& set, const std::string& id);
 /// The items that count: active ones, optionally of one role.
 size_t activeCount(const ReferenceSet& set);
 size_t countOfRole(const ReferenceSet& set, TrackRole role);
+/// The items whose role the detection was unsure of (below `kUnsureRoleConfidence`) and the musician has not set.
+size_t unsureRoleCount(const ReferenceSet& set);
+bool isRoleUnsure(const ReferenceItem& item);
 
 std::string_view toString(TrackRole role);
 std::optional<TrackRole> trackRoleFromString(std::string_view text);

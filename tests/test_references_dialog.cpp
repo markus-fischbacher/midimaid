@@ -340,3 +340,38 @@ TEST_CASE("a row of another set does not show the typed tags of the first", "[re
     part<juce::ComboBox>(*env.dialog, "set").setSelectedId(2, juce::sendNotificationSync);
     CHECK(pumpUntil([&] { return part<juce::TextEditor>(env.row(0), "tags").getText() == "one"; }));
 }
+
+TEST_CASE("an unsure role is marked in the row and counted in the summary", "[references-dialog][role]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    // eight notes at the limit between bass and melody: the role is a guess
+    std::vector<PatternNote> list;
+    for (uint32_t i = 0; i < 8; ++i) {
+        list.push_back({i * 480, 240, 1, 55, 100});
+    }
+    const auto bytes = writeMidiFile(PatternView{list.data(), list.size(), kTicksPerBar}, MidiFileOptions{});
+    env.importAndWait({env.data.write("limit.mid", bytes), env.data.write("bass.mid", bassFile())});
+    REQUIRE(env.list().getListBoxModel()->getNumRows() == 2);
+    int unsureRows = 0;
+    for (int row = 0; row < 2; ++row) {
+        const auto& info = [&]() -> juce::String {
+            for (auto* child : env.row(row).getChildren()) {
+                if (auto* label = dynamic_cast<juce::Label*>(child); label != nullptr && label->getText().contains(" · ")) {
+                    return label->getText();
+                }
+            }
+            return {};
+        }();
+        if (info.contains("Rolle unsicher (50 %)")) {
+            ++unsureRows;
+        }
+    }
+    CHECK(unsureRows == 1);
+    CHECK(env.text("summary").contains("1 Rollen unsicher"));
+    // the musician decides: the mark and the count go
+    const auto items = env.store.get("peak_time").items;
+    const auto unsure = std::find_if(items.begin(), items.end(), [](const auto& i) { return isRoleUnsure(i); });
+    REQUIRE(unsure != items.end());
+    env.store.setRole("peak_time", unsure->id, TrackRole::Melody);
+    CHECK(pumpUntil([&] { return !env.text("summary").contains("unsicher"); }));
+}

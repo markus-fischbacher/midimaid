@@ -232,6 +232,8 @@ namespace mm::core::text {
     X(kReferencesRoleMelody, "references.role.melody")                                                             \
     X(kReferencesWeight, "references.weight")                                                                      \
     X(kReferencesSetFavorites, "references.set.favorites")                                                         \
+    X(kReferencesRoleUnsure, "references.roleUnsure")                                                              \
+    X(kReferencesSummaryUnsure, "references.summaryUnsure")                                                        \
     X(kReferencesSetNew, "references.set.new")                                                                     \
     X(kReferencesSetRename, "references.set.rename")                                                               \
     X(kReferencesSetDelete, "references.set.delete")                                                               \
