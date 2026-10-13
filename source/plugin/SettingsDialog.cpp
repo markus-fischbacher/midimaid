@@ -424,6 +424,14 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
         settings_().update([&](mm::core::GlobalSettings& settings) { settings.favoritesToActiveSet = on; });
     };
     addAndMakeVisible(favoritesToggle_);
+    exportGrooveToggle_.setComponentID("exportGroove");
+    exportGrooveToggle_.setButtonText(tr(keys::kToggleExportGroove));
+    exportGrooveToggle_.setToggleState(settings_().get().exportGroove, juce::dontSendNotification);
+    exportGrooveToggle_.onClick = [this] {
+        const bool on = exportGrooveToggle_.getToggleState();
+        settings_().update([&](mm::core::GlobalSettings& settings) { settings.exportGroove = on; });
+    };
+    addAndMakeVisible(exportGrooveToggle_);
     exportAllNotesToggle_.setComponentID("exportAllNotes");
     exportAllNotesToggle_.setButtonText(tr(keys::kToggleExportAllNotes));
     exportAllNotesToggle_.setToggleState(settings_().get().exportAllNotes, juce::dontSendNotification);
@@ -533,7 +541,7 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {nullptr, {&shortcutAssignButton_, &shortcutRemoveButton_, &shortcutResetButton_}, {150, 120}, kControl, true},
              {nullptr, {&shortcutHint_}, {}, 56, true},
              {nullptr, {&favoritesToggle_}, {}, kControl, true},
-             {nullptr, {&exportAllNotesToggle_}, {}, kControl, true},
+             {nullptr, {&exportGrooveToggle_, &exportAllNotesToggle_}, {270}, kControl, true},
              {&rollViewLabel_, {&rollFoldToggle_, &rollGuidesToggle_}, {230}, kControl},
              {nullptr, {&rollMarkersToggle_}, {}, kControl, true},
              {&drumMapLabel_, {&drumMapEditor_}, {}, kControl, false, true},

@@ -59,6 +59,7 @@ private:
         std::optional<bool> snapChromatic;
         std::optional<bool> rollFold;
         std::optional<bool> exportAllNotes;
+        std::optional<bool> exportGroove;
         std::optional<bool> favoritesToActiveSet;
         std::optional<bool> rollGuides;
         std::optional<bool> rollMarkers;

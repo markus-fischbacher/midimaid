@@ -22,6 +22,6 @@ struct PlaybackNotes {
 };
 
 PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile& style, size_t voiceIndex,
-                                     int octaveShift = 0, const GrooveLibrary* grooves = nullptr);
+                                     int octaveShift = 0, const GrooveLibrary* grooves = nullptr, bool includeGroove = true);
 
 } // namespace mm::core

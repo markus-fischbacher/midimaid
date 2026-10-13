@@ -280,6 +280,74 @@ TEST_CASE("with the export of all notes the conditions are not evaluated", "[plu
     CHECK(lastEnd <= 3840);
 }
 
+namespace {
+
+std::vector<int> exportedStarts(mm::plugin::InstrumentProcessor& processor) {
+    juce::MidiFile midi;
+    juce::FileInputStream stream(processor.midiExporter().readyFile());
+    REQUIRE(midi.readFrom(stream));
+    std::vector<int> starts;
+    INFO("tracks " << midi.getNumTracks() << " events " << (midi.getTrack(0) ? midi.getTrack(0)->getNumEvents() : -1));
+    for (const auto* event : *midi.getTrack(0)) {
+        if (event->message.isNoteOn()) {
+            starts.push_back(static_cast<int>(event->message.getTimeStamp()));
+        }
+    }
+    CHECK(!starts.empty());
+    return starts;
+}
+
+} // namespace
+
+TEST_CASE("the export holds the groove, or the grid when the switch is off", "[plugin][export][groove]") {
+    juce::TemporaryFile settingsFile;
+    mm::plugin::GlobalSettingsStore store(settingsFile.getFile());
+    for (int i = 0; i < 400 && !store.ready(); ++i) {
+        juce::Thread::sleep(5);
+    }
+    REQUIRE(store.ready());
+    mm::plugin::overrideGlobalSettings(&store);
+    struct Restore {
+        ~Restore() { mm::plugin::overrideGlobalSettings(nullptr); }
+    } restore;
+    mm::plugin::InstrumentProcessor processor("Test");
+    mm::core::Pattern pattern = offbeatBass(45);
+    pattern.voices[0].groove.swing = 0.66f;
+    for (auto& note : pattern.voices[0].notes) {
+        note.startTick -= 240; // sixteenths 1, 5, 9, 13: the odd ones carry the swing
+    }
+    fillSlot(processor, 0, pattern);
+    FakePlayHead head;
+    setHostTempo(processor, head, 120.0);
+
+    processor.updateExport(); // by default the groove is in
+    REQUIRE(waitForExport(processor.midiExporter(), 120.0));
+    const auto swung = exportedStarts(processor);
+    REQUIRE(swung.size() == 4);
+
+    store.update([](mm::core::GlobalSettings& settings) { settings.exportGroove = false; });
+    processor.updateExport();
+    for (int i = 0; i < 400 && exportedStarts(processor) == swung; ++i) {
+        juce::Thread::sleep(5);
+    }
+    const auto grid = exportedStarts(processor);
+    REQUIRE(grid.size() == 4);
+    for (const int start : grid) {
+        CHECK(start % 240 == 0); // on the sixteenths
+    }
+    CHECK(grid != swung);
+    for (size_t i = 0; i < grid.size(); ++i) {
+        CHECK(swung[i] >= grid[i]); // swing only delays
+    }
+
+    store.update([](mm::core::GlobalSettings& settings) { settings.exportGroove = true; });
+    processor.updateExport();
+    for (int i = 0; i < 400 && exportedStarts(processor) != swung; ++i) {
+        juce::Thread::sleep(5);
+    }
+    CHECK(exportedStarts(processor) == swung);
+}
+
 TEST_CASE("a pattern without chances is exported as it is", "[plugin][export][probability]") {
     mm::plugin::InstrumentProcessor processor("Test");
     fillSlot(processor, 0, offbeatBass(45));

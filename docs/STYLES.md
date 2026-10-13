@@ -149,7 +149,7 @@ eigene Phrasen-Rolle.
 - Swing-Standard: Bass 50–54 %, Melodie bis 58 %. Die gedachte Kick bleibt gerade.
 - Bei einer Groove-Vorlage mit eigenem Swing (z. B. aus der Drum-Referenz) ist der Swing-Regler
   deaktiviert (SPEC §3.9).
-- Bei Bass-Swing über 56 % weist die UI auf mögliche Flams mit einer geraden Kick hin.
+- Bei Bass-Swing über 56 % weist die UI auf mögliche Flams mit einer geraden Kick hin (umgesetzt, D-243).
 
 ### 1.16 [v1.1] Wahrscheinlichkeit und Bedingungen (Startwerte, umgesetzt, D-233)
 - Allgemein sparsam: höchstens 15 % der Noten eines Patterns mit Wahrscheinlichkeit < 100 %

@@ -205,6 +205,7 @@ GlobalSettings parseGlobalSettings(std::string_view text) {
     boolean("snapChromatic", settings.snapChromatic);
     boolean("rollFold", settings.rollFold);
     boolean("exportAllNotes", settings.exportAllNotes);
+    boolean("exportGroove", settings.exportGroove);
     boolean("favoritesToActiveSet", settings.favoritesToActiveSet);
     boolean("rollGuides", settings.rollGuides);
     boolean("rollMarkers", settings.rollMarkers);
@@ -264,6 +265,7 @@ std::string toJson(const GlobalSettings& input) {
     root["snapChromatic"] = settings.snapChromatic;
     root["rollFold"] = settings.rollFold;
     root["exportAllNotes"] = settings.exportAllNotes;
+    root["exportGroove"] = settings.exportGroove;
     root["favoritesToActiveSet"] = settings.favoritesToActiveSet;
     root["rollGuides"] = settings.rollGuides;
     root["rollMarkers"] = settings.rollMarkers;
