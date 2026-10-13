@@ -156,12 +156,13 @@ TEST_CASE("drums count for nothing, chords for the scales only", "[set-profile]"
     CHECK(total > 0);
     CHECK(fewer > 0);
     // the scale of a drum item is nowhere in the profile
+    const auto hasPhrygian = [](const SetProfile& profile) {
+        return std::any_of(profile.scales.begin(), profile.scales.end(), [](const WeightedId& scale) { return scale.id == "phrygian"; });
+    };
     set.items[0].analysis.key.scaleId = "phrygian";
-    CHECK(std::none_of(profileOf(set).scales.begin(), profileOf(set).scales.end(),
-                       [](const WeightedId& scale) { return scale.id == "phrygian"; }));
+    CHECK_FALSE(hasPhrygian(profileOf(set)));
     set.items[0].role = TrackRole::Bass;
-    CHECK(std::any_of(profileOf(set).scales.begin(), profileOf(set).scales.end(),
-                      [](const WeightedId& scale) { return scale.id == "phrygian"; }));
+    CHECK(hasPhrygian(profileOf(set)));
 }
 
 TEST_CASE("the span is the mean of the lines weighted by the items", "[set-profile]") {
