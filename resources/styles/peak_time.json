@@ -42,6 +42,9 @@
       { "id": "polymeter_seq", "w": 3 },
       { "id": "acid_siren", "w": 1 }
     ],
+    "stabs_archetypes": [{ "id": "stabs", "w": 4 }, { "id": "aggro_stabs", "w": 1 }],
+    "arp_archetypes": [{ "id": "arp", "w": 3 }, { "id": "chord_arp", "w": 2 }, { "id": "pluck_seq", "w": 1 }],
+    "counter_archetypes": [{ "id": "hypnotic_motif", "w": 3 }, { "id": "sparse_hits", "w": 3 }, { "id": "call_response", "w": 2 }],
     "chord_colors": [
       { "id": "min", "w": 40 },
       { "id": "fifth", "w": 30 },

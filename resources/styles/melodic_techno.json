@@ -46,6 +46,9 @@
       { "id": "call_response", "w": 3 },
       { "id": "pluck_seq", "w": 3 }
     ],
+    "stabs_archetypes": [{ "id": "stabs", "w": 1 }],
+    "arp_archetypes": [{ "id": "chord_arp", "w": 4 }, { "id": "pluck_seq", "w": 3 }, { "id": "arp", "w": 1 }],
+    "counter_archetypes": [{ "id": "lead_phrase", "w": 4 }, { "id": "call_response", "w": 3 }, { "id": "sparse_hits", "w": 2 }],
     "chord_colors": [
       { "id": "min7", "w": 25 },
       { "id": "min9", "w": 25 },

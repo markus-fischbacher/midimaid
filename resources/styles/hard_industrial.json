@@ -40,6 +40,9 @@
       { "id": "acid_siren", "w": 3 },
       { "id": "sparse_hits", "w": 2 }
     ],
+    "stabs_archetypes": [{ "id": "aggro_stabs", "w": 4 }, { "id": "stabs", "w": 2 }],
+    "arp_archetypes": [{ "id": "arp", "w": 3 }, { "id": "pluck_seq", "w": 2 }],
+    "counter_archetypes": [{ "id": "sparse_hits", "w": 4 }, { "id": "hypnotic_motif", "w": 2 }],
     "chord_colors": [
       { "id": "cluster", "w": 40 },
       { "id": "fifth", "w": 40 },

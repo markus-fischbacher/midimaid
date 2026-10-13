@@ -46,6 +46,10 @@ struct MelodyProfile {
     float swingDefault = 0.5f;
     std::vector<WeightedId> archetypes; ///< ids without an implementation are skipped when an archetype is chosen
     std::vector<WeightedId> chordColors;
+    /// Archetypes of the extra voice roles (D-251); empty: the role draws from `archetypes`, then from its family.
+    std::vector<WeightedId> stabsArchetypes;
+    std::vector<WeightedId> arpArchetypes;
+    std::vector<WeightedId> counterArchetypes;
 
     bool operator==(const MelodyProfile&) const = default;
 };
