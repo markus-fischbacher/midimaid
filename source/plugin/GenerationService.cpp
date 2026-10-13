@@ -171,6 +171,9 @@ void GenerationService::request(const GenerationJob& job) {
                     input.lockedFrom = job.lockedFrom;
                     input.createdUnixMs = createdUnixMs;
                     input.examples = job.examples;
+                    if (job.settings.personalPct > 0) { // numbers only, so every provider may get it (D-248)
+                        input.prompt.tasteSummary = mm::ai::tasteSummaryText(job.references.profile);
+                    }
                     input.referenceSet = job.references.entries;
                     input.referenceSetId = job.references.setId;
                     result = mm::ai::generateWithAi(*job.provider, input, cancel);

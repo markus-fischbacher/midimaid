@@ -239,6 +239,57 @@ std::string personalExamplesText(const std::vector<mm::core::PersonalExample>& e
     return text;
 }
 
+namespace {
+
+/// "0, 4, 8" for the steps that at least half of the bars have a note on (at most 8, the first ones).
+std::string favouriteSteps(const mm::core::RoleStats& stats) {
+    std::string text;
+    int count = 0;
+    for (size_t step = 0; step < stats.stepPermille.size() && count < 8; ++step) {
+        if (stats.stepPermille[step] >= 500) {
+            text += (count == 0 ? "" : ", ") + std::to_string(step);
+            ++count;
+        }
+    }
+    return text;
+}
+
+std::string roleTaste(const char* name, const mm::core::RoleStats& stats) {
+    if (stats.items == 0) {
+        return "";
+    }
+    const int perBar = stats.notesPerBar100;
+    std::string text = std::string("- ") + name + ": about " + std::to_string(perBar / 100) + "." +
+                       std::to_string(perBar / 10 % 10) + " notes per bar";
+    const std::string steps = favouriteSteps(stats);
+    if (!steps.empty()) {
+        text += ", most often on the 16th steps " + steps;
+    }
+    return text + "\n";
+}
+
+} // namespace
+
+std::string tasteSummaryText(const mm::core::SetProfile& profile) {
+    if (!profile.valid) {
+        return "";
+    }
+    const mm::core::ProfileFacts facts = mm::core::factsOf(profile);
+    std::string text =
+        "The musician's taste, summed up from the pieces they liked (numbers only, no notes; lean towards it without "
+        "making every piece alike):\n";
+    if (!facts.scaleId.empty()) {
+        text += "- scale: mostly " + facts.scaleId + " (" + std::to_string(facts.scalePercent) + " %)\n";
+    }
+    if (!facts.progression.empty()) {
+        text += "- favourite chord progression: " + facts.progression + "\n";
+    }
+    text += roleTaste("bass", profile.bass);
+    text += roleTaste("melody", profile.melody);
+    text += "- notes outside the scale: " + std::to_string(profile.chromaticPermille / 10) + " %\n";
+    return text;
+}
+
 std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, const GeneratePromptInput& input) {
     if (input.style == nullptr) {
         return std::nullopt;
@@ -276,7 +327,7 @@ std::optional<Prompt> buildGeneratePrompt(const PromptTemplates& templates, cons
                        "of 4, 8 or 16, `role`) that covers all bars without gaps; the plugin builds the phrases "
                        "from your motif."
                  : allBarsNote(input, bars);
-    request["examples"] = personalExamplesText(input.examples);
+    request["examples"] = input.tasteSummary + personalExamplesText(input.examples);
     request["locked_note"] = "";
     if (!input.lockedRoles.empty()) {
         request["locked_note"] =

@@ -1268,6 +1268,10 @@ möglich, aus der Modellliste des Anbieters geladen (bei Ollama die installierte
 - **Persönliche Beispiele:** bis zu 3 Einträge des aktiven Referenz-Sets als Few-Shot-Beispiele (§3.20),
   deutlich als „Stil des Nutzers“ gekennzeichnet, mit der Anweisung, den Stil aufzugreifen, aber nicht
   zu kopieren; sie haben Vorrang vor den allgemeinen Beispielen der Vorlage
+- **Geschmacks-Zusammenfassung** [v1.1, umgesetzt, D-248]: Ist das Profil des aktiven Sets gültig und „Persönlich“
+  über 0, steht vor den Beispielen ein kurzer Text aus dem Profil (bevorzugte Skala, häufigste Akkordfolge,
+  Dichte und bevorzugte 16tel-Schritte von Bass und Melodie, Anteil Töne außerhalb der Skala). Er enthält nur
+  Zahlen und Namen, keine Noten, und geht deshalb auch ohne Zustimmung (D-86) an jeden Anbieter
 
 ### 7.5 Robustheit und Kosten
 - Timeouts: Cloud 30 s, lokale Anbieter (Ollama, LM Studio) 600 s (einstellbar; D-174: Denkmodelle brauchen mehrere Minuten, die Anfrage ist jederzeit abbrechbar), Abbruch-Knopf in der UI

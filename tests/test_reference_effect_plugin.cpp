@@ -196,6 +196,36 @@ TEST_CASE("a cloud provider gets the examples only after the consent of that pro
     CHECK(contains(ask(false), "The musician's own style"));
 }
 
+TEST_CASE("a cloud provider without consent still gets the taste summary, which has no notes (D-248)",
+          "[reference-effect-plugin]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    ScopedSettings settings;
+    fillSet(scoped.store);
+    InstrumentProcessor processor("Test");
+
+    const auto ask = [&] {
+        auto provider = mock();
+        provider->enqueueText(answerFor(processor));
+        ScopedAiBackend backend(backendWith(provider, true));
+        processor.generate();
+        REQUIRE(pumpUntil([&] { return finished(processor); }));
+        REQUIRE(provider->requestCount() == 1);
+        return provider->requests().front().userPrompt;
+    };
+
+    const auto prompt = ask();
+    CHECK(contains(prompt, "The musician's taste"));
+    CHECK(contains(prompt, "- bass: about"));
+    CHECK_FALSE(contains(prompt, "own style")); // the examples stay back without consent
+
+    // "Personal" at 0 switches the summary off as well
+    auto next = processor.instanceSettings();
+    next.generation.personalPct = 0;
+    processor.setInstanceSettings(next);
+    CHECK_FALSE(contains(ask(), "The musician's taste"));
+}
+
 TEST_CASE("an empty set adds nothing to the prompt even with consent", "[reference-effect-plugin]") {
     juce::ScopedJuceInitialiser_GUI gui;
     ScopedStore scoped;
@@ -206,6 +236,7 @@ TEST_CASE("an empty set adds nothing to the prompt even with consent", "[referen
     processor.generate();
     REQUIRE(pumpUntil([&] { return finished(processor); }));
     CHECK_FALSE(contains(provider->requests().front().userPrompt, "own style"));
+    CHECK_FALSE(contains(provider->requests().front().userPrompt, "taste")); // no profile, no summary
 }
 
 TEST_CASE("an AI answer that copies the set is reported as flagged and still put in the slot",
