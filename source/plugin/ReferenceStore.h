@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/ReferenceCollection.h"
 #include "core/ReferenceSet.h"
 #include "core/StyleLibrary.h"
 
@@ -14,7 +15,7 @@
 
 namespace mm::plugin {
 
-/// The reference sets of the user, one per style (SPEC 3.20, D-181): `<folder>/<style>.json`, shared by every instance
+/// The references of the user, one collection per style (SPEC 3.20, D-181, D-238): `<folder>/<style>.json`, shared by every instance
 /// of the process. All file access and all analysis run on one background thread (CLAUDE.md); the sets live in memory
 /// and are read and changed on the message thread. A store without folder keeps its sets in memory only (the tests of
 /// the other parts run that way). Importing the same file twice finds it by its hash and does not analyse it again.
@@ -35,9 +36,16 @@ public:
     bool enabled() const { return folder_ != juce::File(); }
     /// True once the files of the folder were read (at once for a store without folder).
     bool ready() const { return ready_.load(); }
+    /// Counts every change of a set or of the progress (for views that poll, the editor).
+    uint64_t revision() const { return revision_.load(); }
 
-    /// The set of the style (empty for a style without references). Message thread.
+    /// The **active set** of the style as a view (empty for a style without references): what generation, copy
+    /// protection and AI examples use. Message thread.
     mm::core::ReferenceSet get(const std::string& styleId) const;
+    /// One named set of the style as a view (empty with that id for an unknown set).
+    mm::core::ReferenceSet view(const std::string& styleId, const std::string& setId) const;
+    /// The whole collection of the style: the pool, the sets and the active one.
+    mm::core::ReferenceCollection collection(const std::string& styleId) const;
 
     /// Imports MIDI files and the MIDI files inside the folders (also deeper ones) into the set of the style, in the
     /// background and in the order given. A new request while one runs waits for it. At most `kMaxFiles` files.
@@ -46,7 +54,26 @@ public:
     /// Stops the import that runs (what was analysed so far stays) and the ones that wait.
     void cancelImport();
 
-    /// Changes of one item (message thread, saved in the background). False for an unknown style or id.
+    /// Named sets (SPEC 3.20, v1.1; message thread, saved in the background). `createSet` returns the id, "" when the
+    /// name is empty, taken or there are too many sets; a new set becomes the active one. The favorites cannot be
+    /// renamed or deleted. The active set is remembered per style.
+    std::string createSet(const std::string& styleId, const std::string& name);
+    bool renameSet(const std::string& styleId, const std::string& setId, const std::string& name);
+    bool deleteSet(const std::string& styleId, const std::string& setId);
+    bool setActiveSet(const std::string& styleId, const std::string& setId);
+    /// Puts an item of the pool (from another set) into a set.
+    bool addToSet(const std::string& styleId, const std::string& setId, const std::string& itemId);
+
+    /// The favorites (SPEC 3.20): the voices of a library pattern as items of the set "Favoriten" (and with
+    /// `alsoActive` of the active set); replaces what an earlier call for the entry put there. `removeFavorite` takes
+    /// them out of every set. Both need the style (for the analysis) and are cheap (one pattern).
+    bool setFavorite(const std::string& styleId, const std::string& entryId, const std::string& name,
+                     const mm::core::Pattern& pattern, bool alsoActive);
+    void removeFavorite(const std::string& entryId);
+
+    /// Changes of one item of the **active set** (message thread, saved in the background). False for an unknown
+    /// style or id. `remove` takes the item out of the active set (and out of the pool when no set holds it).
+    bool setTags(const std::string& styleId, const std::string& id, std::vector<std::string> tags);
     bool setActive(const std::string& styleId, const std::string& id, bool active);
     bool setWeight(const std::string& styleId, const std::string& id, int weight);
     bool setRole(const std::string& styleId, const std::string& id, mm::core::TrackRole role);
@@ -65,18 +92,22 @@ private:
     juce::File fileFor(const std::string& styleId) const;
     static bool validStyleId(const std::string& styleId);
     void readAll();
-    void write(const std::string& styleId, const mm::core::ReferenceSet& set);
+    void write(const std::string& styleId, const mm::core::ReferenceCollection& collection);
     void changed();
-    bool edit(const std::string& styleId, const std::function<bool(mm::core::ReferenceSet&)>& change);
+    bool edit(const std::string& styleId, const std::function<bool(mm::core::ReferenceCollection&)>& change,
+              bool create = false);
+    mm::core::ReferenceCollection& collectionLocked(const std::string& styleId);
+    static std::string importTargetLocked(mm::core::ReferenceCollection& collection);
     void runImport(const std::string& styleId, std::vector<juce::File> paths);
 
     juce::File folder_;
     const mm::core::StyleLibrary& styles_;
     mutable juce::CriticalSection lock_;
-    std::map<std::string, mm::core::ReferenceSet> sets_;
+    std::map<std::string, mm::core::ReferenceCollection> collections_;
     Progress progress_;
     std::function<void()> onChanged_;
     std::atomic<bool> ready_{false};
+    std::atomic<uint64_t> revision_{0};
     std::atomic<bool> cancel_{false};
     std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
     juce::ThreadPool pool_{1};

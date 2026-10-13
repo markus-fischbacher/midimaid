@@ -143,7 +143,7 @@ ReferenceEffect referenceEffectOf(const ReferenceSet& set) {
     effect.progressions = personalProgressions(set);
     const bool anyActive = std::any_of(set.items.begin(), set.items.end(), [](const ReferenceItem& i) { return i.active; });
     if (anyActive) {
-        effect.setId = kReferenceSetId;
+        effect.setId = set.setId.empty() ? kReferenceSetId : set.setId;
     }
     return effect;
 }

@@ -136,7 +136,10 @@ TEST_CASE("a pattern made with an active set carries the set id, one without a s
     fillSet(scoped.store);
     processor.generate();
     REQUIRE(pumpUntil([&] { return finished(processor); }));
-    CHECK(processor.slotsSnapshot().slot(0)->pattern->info.referenceSetId == "default");
+    // the id of the set the files went into (v1.1: named sets, "Standard" when only the favorites were active)
+    CHECK(scoped.store.get("peak_time").setName == "Standard");
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->info.referenceSetId == scoped.store.get("peak_time").setId);
+    CHECK_FALSE(processor.slotsSnapshot().slot(0)->pattern->info.referenceSetId.empty());
 
     // every item switched off: no set
     for (const auto& item : scoped.store.get("peak_time").items) {
@@ -244,7 +247,7 @@ TEST_CASE("an AI answer that copies the set is reported as flagged and still put
     CHECK(processor.lastReport().copyFlagged);
     CHECK(processor.lastReport().belowMinScore);
     CHECK(processor.slotsSnapshot().slot(0)->pattern.has_value());
-    CHECK(processor.slotsSnapshot().slot(0)->pattern->info.referenceSetId == "default");
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->info.referenceSetId == scoped.store.get("peak_time").setId);
 
     // switched off, the same answer is no copy
     scoped.store.setActive("peak_time", set.items[0].id, false);

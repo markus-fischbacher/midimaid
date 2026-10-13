@@ -26,12 +26,12 @@ AnalysisSettings analysisSettingsOf(const StyleProfile& style) {
 
 bool ReferenceItem::operator==(const ReferenceItem& other) const {
     return id == other.id && name == other.name && role == other.role && active == other.active &&
-           weight == other.weight && lengthBars == other.lengthBars && notes == other.notes &&
+           weight == other.weight && tags == other.tags && lengthBars == other.lengthBars && notes == other.notes &&
            analysisToJson(analysis) == analysisToJson(other.analysis);
 }
 
 bool ReferenceSet::operator==(const ReferenceSet& other) const {
-    return styleId == other.styleId && items == other.items;
+    return styleId == other.styleId && setId == other.setId && setName == other.setName && items == other.items;
 }
 
 ReferenceImportReport& ReferenceImportReport::operator+=(const ReferenceImportReport& other) {
@@ -220,7 +220,7 @@ std::string referenceSetToJson(const ReferenceSet& set) {
     return root.dump(1) + "\n";
 }
 
-ReferenceSet referenceSetFromJson(std::string_view text, const std::string& styleId, size_t* dropped) {
+ReferenceSet referenceSetFromJson(std::string_view text, const std::string& styleId, size_t* dropped, size_t limit) {
     using nlohmann::json;
     ReferenceSet set;
     set.styleId = styleId;
@@ -243,7 +243,7 @@ ReferenceSet referenceSetFromJson(std::string_view text, const std::string& styl
             item.lengthBars = entry.at("bars").get<uint32_t>();
             const auto analysis = analysisFromJson(entry.at("analysis").dump());
             if (item.id.empty() || !role || !analysis || !isValidPatternLength(item.lengthBars) ||
-                set.items.size() >= kMaxReferenceItems ||
+                set.items.size() >= limit ||
                 std::any_of(set.items.begin(), set.items.end(), [&](const ReferenceItem& e) { return e.id == item.id; })) {
                 ++bad;
                 continue;

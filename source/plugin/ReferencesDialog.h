@@ -38,6 +38,8 @@ private:
     juce::Component* refreshComponentForRow(int row, bool selected, juce::Component* existing) override;
 
     void refresh();
+    void fillSetBox();
+    void showPoolMenu();
     void importPaths(std::vector<juce::File> paths);
     juce::String summaryText(const mm::core::ReferenceSet& set) const;
     juce::String statusText(const ReferenceStore::Progress& progress) const;
@@ -45,11 +47,18 @@ private:
     MidiMaidLookAndFeel look_; // first: the children use it until the end
     std::function<ReferenceStore&()> store_;
     std::string styleId_;
+    mm::core::ReferenceCollection collection_;
     mm::core::ReferenceSet set_;
+    std::vector<std::string> setIds_;
+    bool filling_ = false;
+    bool pendingDelete_ = false;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
     juce::Label summaryLabel_, statusLabel_, emptyLabel_;
     juce::ListBox list_{"list", this};
     juce::TextButton addFilesButton_, addFolderButton_, cancelButton_, closeButton_;
+    juce::ComboBox setBox_;
+    juce::TextEditor setNameEditor_;
+    juce::TextButton newSetButton_, renameSetButton_, deleteSetButton_, fromPoolButton_;
     std::unique_ptr<juce::FileChooser> chooser_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ReferencesDialog)

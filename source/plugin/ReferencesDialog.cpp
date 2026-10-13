@@ -1,5 +1,6 @@
 #include "plugin/ReferencesDialog.h"
 
+#include "core/Library.h"
 #include "core/TextKeys.h"
 #include "plugin/EmbeddedTranslation.h"
 
@@ -11,7 +12,7 @@ namespace keys = mm::core::text;
 
 namespace {
 
-constexpr int kWidth = 760;
+constexpr int kWidth = 900;
 constexpr int kRowHeight = 34;
 constexpr const char* kKeyNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
@@ -75,6 +76,11 @@ public:
             }
         };
         addAndMakeVisible(weight_);
+        tags_.setComponentID("tags");
+        tags_.setTextToShowWhenEmpty(tr(keys::kReferencesTagsHint), juce::Colours::white.withAlpha(0.45f));
+        tags_.onReturnKey = [this] { applyTags(); };
+        tags_.onFocusLost = [this] { applyTags(); };
+        addAndMakeVisible(tags_);
         active_.setComponentID("active");
         active_.setButtonText(tr(keys::kReferencesActive));
         active_.onClick = [this] {
@@ -89,8 +95,21 @@ public:
         addAndMakeVisible(remove_);
     }
 
+    void applyTags() {
+        if (!updating_ && !id_.empty()) {
+            const auto tags = mm::core::parseLibraryTags(tags_.getText().toStdString());
+            if (tags != shownTags_) {
+                owner_.store_().setTags(owner_.styleId_, id_, tags);
+            }
+        }
+    }
+
     void show(const mm::core::ReferenceItem& item) {
         updating_ = true;
+        shownTags_ = item.tags;
+        if (!tags_.hasKeyboardFocus(true) || id_ != item.id) {
+            tags_.setText(juce::String::fromUTF8(mm::core::libraryTagsToText(item.tags).c_str()), juce::dontSendNotification);
+        }
         id_ = item.id;
         name_.setText(juce::String::fromUTF8(item.name.c_str()), juce::dontSendNotification);
         info_.setText(infoText(item), juce::dontSendNotification);
@@ -112,6 +131,8 @@ public:
         active_.setBounds(area.removeFromRight(56));
         weight_.setBounds(area.removeFromRight(100));
         area.removeFromRight(6);
+        tags_.setBounds(area.removeFromRight(130));
+        area.removeFromRight(6);
         role_.setBounds(area.removeFromRight(110));
         area.removeFromRight(6);
         name_.setBounds(area.removeFromLeft(area.getWidth() / 2));
@@ -124,6 +145,8 @@ private:
     bool updating_ = false;
     juce::Label name_, info_;
     juce::ComboBox role_, weight_;
+    juce::TextEditor tags_;
+    std::vector<std::string> shownTags_;
     juce::ToggleButton active_;
     juce::TextButton remove_;
 };
@@ -132,6 +155,56 @@ ReferencesDialog::ReferencesDialog(std::function<ReferenceStore&()> store, std::
     : store_(std::move(store)), styleId_(std::move(styleId)) {
     (void)styleName;
     setLookAndFeel(&look_);
+    setBox_.setComponentID("set");
+    setBox_.onChange = [this] {
+        const auto index = static_cast<size_t>(setBox_.getSelectedId() - 1);
+        if (!filling_ && index < setIds_.size()) {
+            pendingDelete_ = false;
+            store_().setActiveSet(styleId_, setIds_[index]);
+            refresh();
+        }
+    };
+    addAndMakeVisible(setBox_);
+    setNameEditor_.setComponentID("setName");
+    setNameEditor_.setTextToShowWhenEmpty(tr(keys::kReferencesSetNameHint), juce::Colours::white.withAlpha(0.45f));
+    setNameEditor_.setInputRestrictions(static_cast<int>(mm::core::kMaxReferenceSetNameBytes));
+    addAndMakeVisible(setNameEditor_);
+    newSetButton_.setComponentID("newSet");
+    newSetButton_.setButtonText(tr(keys::kReferencesSetNew));
+    newSetButton_.onClick = [this] {
+        if (!store_().createSet(styleId_, setNameEditor_.getText().toStdString()).empty()) {
+            setNameEditor_.clear();
+        }
+        refresh();
+    };
+    addAndMakeVisible(newSetButton_);
+    renameSetButton_.setComponentID("renameSet");
+    renameSetButton_.setButtonText(tr(keys::kReferencesSetRename));
+    renameSetButton_.onClick = [this] {
+        if (store_().renameSet(styleId_, collection_.activeSetId, setNameEditor_.getText().toStdString())) {
+            setNameEditor_.clear();
+        }
+        refresh();
+    };
+    addAndMakeVisible(renameSetButton_);
+    deleteSetButton_.setComponentID("deleteSet");
+    deleteSetButton_.setButtonText(tr(keys::kReferencesSetDelete));
+    deleteSetButton_.onClick = [this] {
+        if (!pendingDelete_) {
+            pendingDelete_ = true; // the first click asks, the second one deletes
+            refresh();
+            return;
+        }
+        pendingDelete_ = false;
+        store_().deleteSet(styleId_, collection_.activeSetId);
+        refresh();
+    };
+    addAndMakeVisible(deleteSetButton_);
+    fromPoolButton_.setComponentID("fromPool");
+    fromPoolButton_.setButtonText(tr(keys::kReferencesFromPool));
+    fromPoolButton_.onClick = [this] { showPoolMenu(); };
+    addAndMakeVisible(fromPoolButton_);
+
     summaryLabel_.setComponentID("summary");
     summaryLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.85f));
     addAndMakeVisible(summaryLabel_);
@@ -201,7 +274,7 @@ ReferencesDialog::ReferencesDialog(std::function<ReferenceStore&()> store, std::
             refresh();
         }
     });
-    setSize(kWidth, 520);
+    setSize(kWidth, 560);
     refresh();
 }
 
@@ -279,8 +352,61 @@ juce::String ReferencesDialog::statusText(const ReferenceStore::Progress& progre
                           : tr(keys::kReferencesReportMore, {{"n", added}, {"list", more.joinIntoString(", ").toStdString()}});
 }
 
+void ReferencesDialog::fillSetBox() {
+    filling_ = true;
+    setIds_.clear();
+    setBox_.clear(juce::dontSendNotification);
+    int selected = 0;
+    for (const auto& set : collection_.sets) {
+        setIds_.push_back(set.id);
+        const int id = static_cast<int>(setIds_.size());
+        setBox_.addItem(set.id == mm::core::kFavoritesSetId ? tr(keys::kReferencesSetFavorites)
+                                                            : juce::String::fromUTF8(set.name.c_str()),
+                        id);
+        if (set.id == collection_.activeSetId) {
+            selected = id;
+        }
+    }
+    setBox_.setSelectedId(selected, juce::dontSendNotification);
+    filling_ = false;
+}
+
+void ReferencesDialog::showPoolMenu() {
+    // the items of the pool that the active set does not hold: they go in with one click (a file is in the pool once)
+    juce::PopupMenu menu;
+    std::vector<std::string> ids;
+    const auto* active = mm::core::findSet(collection_, collection_.activeSetId);
+    for (const auto& item : collection_.pool) {
+        const bool in = active != nullptr && std::any_of(active->members.begin(), active->members.end(),
+                                                         [&](const auto& m) { return m.id == item.id; });
+        if (!in && ids.size() < 60) {
+            ids.push_back(item.id);
+            menu.addItem(static_cast<int>(ids.size()), juce::String::fromUTF8(item.name.c_str()));
+        }
+    }
+    if (ids.empty()) {
+        menu.addItem(1, tr(keys::kReferencesFromPoolNone), false);
+    }
+    const auto alive = alive_;
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&fromPoolButton_),
+                       [this, alive, ids](int result) {
+                           if (*alive && result >= 1 && static_cast<size_t>(result) <= ids.size()) {
+                               store_().addToSet(styleId_, collection_.activeSetId, ids[static_cast<size_t>(result) - 1]);
+                           }
+                       });
+}
+
 void ReferencesDialog::refresh() {
-    set_ = store_().get(styleId_);
+    collection_ = store_().collection(styleId_);
+    set_ = mm::core::activeView(collection_);
+    fillSetBox();
+    const bool favorites = collection_.activeSetId == mm::core::kFavoritesSetId;
+    renameSetButton_.setEnabled(!favorites);
+    deleteSetButton_.setEnabled(!favorites);
+    deleteSetButton_.setButtonText(pendingDelete_ && !favorites ? tr(keys::kLibraryRemoveConfirm) : tr(keys::kReferencesSetDelete));
+    if (favorites) {
+        pendingDelete_ = false;
+    }
     list_.updateContent();
     for (int row = 0; row < static_cast<int>(set_.items.size()); ++row) {
         if (auto* component = dynamic_cast<RowComponent*>(list_.getComponentForRowNumber(row))) {
@@ -322,6 +448,17 @@ juce::Component* ReferencesDialog::refreshComponentForRow(int row, bool, juce::C
 
 void ReferencesDialog::resized() {
     auto area = getLocalBounds().reduced(16);
+    auto setRow = area.removeFromTop(32);
+    setBox_.setBounds(setRow.removeFromLeft(200));
+    setRow.removeFromLeft(8);
+    deleteSetButton_.setBounds(setRow.removeFromRight(130));
+    setRow.removeFromRight(8);
+    renameSetButton_.setBounds(setRow.removeFromRight(120));
+    setRow.removeFromRight(8);
+    newSetButton_.setBounds(setRow.removeFromRight(120));
+    setRow.removeFromRight(8);
+    setNameEditor_.setBounds(setRow);
+    area.removeFromTop(8);
     summaryLabel_.setBounds(area.removeFromTop(26));
     area.removeFromTop(6);
     auto bottom = area.removeFromBottom(32);
@@ -331,6 +468,8 @@ void ReferencesDialog::resized() {
     addFilesButton_.setBounds(bottom.removeFromLeft(120));
     bottom.removeFromLeft(8);
     addFolderButton_.setBounds(bottom.removeFromLeft(120));
+    bottom.removeFromLeft(8);
+    fromPoolButton_.setBounds(bottom.removeFromLeft(170));
     area.removeFromBottom(8);
     statusLabel_.setBounds(area.removeFromBottom(24));
     area.removeFromBottom(6);

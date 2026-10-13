@@ -193,6 +193,7 @@ namespace mm::core::text {
     X(kTransposeChannelN, "settings.transpose.channel.n")                                                              \
     X(kToggleTransposeExport, "settings.transpose.export")                                                             \
     X(kToggleExportAllNotes, "settings.exportAllNotes")                                                                \
+    X(kToggleFavoritesToActiveSet, "settings.favoritesToActiveSet")                                                    \
     X(kLabelRollView, "settings.rollView")                                                                             \
     X(kToggleRollFold, "settings.rollFold")                                                                            \
     X(kToggleRollGuides, "settings.rollGuides")                                                                        \
@@ -230,6 +231,14 @@ namespace mm::core::text {
     X(kReferencesRoleBass, "references.role.bass")                                                                 \
     X(kReferencesRoleMelody, "references.role.melody")                                                             \
     X(kReferencesWeight, "references.weight")                                                                      \
+    X(kReferencesSetFavorites, "references.set.favorites")                                                         \
+    X(kReferencesSetNew, "references.set.new")                                                                     \
+    X(kReferencesSetRename, "references.set.rename")                                                               \
+    X(kReferencesSetDelete, "references.set.delete")                                                               \
+    X(kReferencesSetNameHint, "references.set.nameHint")                                                           \
+    X(kReferencesFromPool, "references.fromPool")                                                                  \
+    X(kReferencesFromPoolNone, "references.fromPoolNone")                                                          \
+    X(kReferencesTagsHint, "references.tagsHint")                                                                  \
     X(kButtonLibrary, "button.library")                                                                            \
     X(kLibraryTitle, "library.title")                                                                              \
     X(kLibrarySaveSlot, "library.saveSlot")                                                                        \

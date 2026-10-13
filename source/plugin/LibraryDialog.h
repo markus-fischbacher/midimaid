@@ -51,6 +51,7 @@ private:
     void fillFilterBoxes();
     void fillDetail();
     void applyMeta();
+    void syncFavorite(const std::string& id); ///< the automatic set "Favoriten" follows the rating (D-238)
     void filterChanged();
     mm::core::LibraryFilter filter() const;
     void updateButtons();

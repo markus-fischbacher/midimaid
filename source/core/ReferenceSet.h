@@ -30,6 +30,7 @@ struct ReferenceItem {
     TrackRole role = TrackRole::Melody;
     bool active = true;
     int weight = kDefaultReferenceWeight;
+    std::vector<std::string> tags; ///< the tags of the item in a set (only in the view of a set, v1.1)
     uint32_t lengthBars = 1;
     std::vector<MidiClipNote> notes;
     TrackAnalysis analysis;
@@ -39,6 +40,8 @@ struct ReferenceItem {
 
 struct ReferenceSet {
     std::string styleId;
+    std::string setId;   ///< the id of the named set this is the view of (v1.1); empty for a set made by hand
+    std::string setName; ///< its name; empty for the favorites
     std::vector<ReferenceItem> items;
 
     bool operator==(const ReferenceSet&) const;
@@ -90,6 +93,7 @@ std::optional<TrackRole> trackRoleFromString(std::string_view text);
 /// out (counted in `dropped` when given), unknown fields are ignored, a file of a later version loads as far as it is
 /// understood.
 std::string referenceSetToJson(const ReferenceSet& set);
-ReferenceSet referenceSetFromJson(std::string_view text, const std::string& styleId, size_t* dropped = nullptr);
+ReferenceSet referenceSetFromJson(std::string_view text, const std::string& styleId, size_t* dropped = nullptr,
+                                  size_t limit = kMaxReferenceItems);
 
 } // namespace mm::core

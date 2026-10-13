@@ -2,6 +2,8 @@
 
 #include "core/TextKeys.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "plugin/Favorites.h"
+#include "plugin/GlobalSettingsStore.h"
 
 namespace mm::plugin {
 
@@ -178,6 +180,7 @@ LibraryDialog::LibraryDialog(ProcessorBase& processor, std::shared_ptr<bool> pro
     renameButton_.onClick = [this] {
         if (const auto entry = selected()) {
             if (store_().rename(entry->id, nameEditor_.getText().toStdString())) {
+                syncFavorite(entry->id);
                 nameEditor_.clear();
             }
         }
@@ -194,6 +197,7 @@ LibraryDialog::LibraryDialog(ProcessorBase& processor, std::shared_ptr<bool> pro
         }
         pendingRemove_.clear();
         store_().remove(entry->id);
+        syncFavorite(entry->id);
     };
     exportButton_.onClick = [this] {
         const auto entry = selected();
@@ -426,6 +430,11 @@ void LibraryDialog::applyMeta() {
     meta.bpmLow = static_cast<uint16_t>(std::clamp(bpmLowEditor_.getText().getIntValue(), 0, 65535));
     meta.bpmHigh = static_cast<uint16_t>(std::clamp(bpmHighEditor_.getText().getIntValue(), 0, 65535));
     store_().setMeta(entry->id, meta);
+    syncFavorite(entry->id);
+}
+
+void LibraryDialog::syncFavorite(const std::string& id) {
+    updateFavorite(store_(), referenceStore(), id, globalSettings().ready() && globalSettings().get().favoritesToActiveSet);
 }
 
 void LibraryDialog::updateButtons() {

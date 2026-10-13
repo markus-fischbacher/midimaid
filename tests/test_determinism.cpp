@@ -135,7 +135,8 @@ TEST_CASE("a saved pattern sounds bit for bit the same after the sets changed an
     original.generate();
     REQUIRE(pumpUntil([&] { return original.generationStatus() != GenerationStatus::Generating; }));
     const auto generated = *original.slotsSnapshot().slot(0)->pattern;
-    REQUIRE(generated.info.referenceSetId == "default");
+    REQUIRE(generated.info.referenceSetId == scoped.store.get("peak_time").setId); // the real id of the set (D-238)
+    REQUIRE_FALSE(generated.info.referenceSetId.empty());
 
     const auto before = render(original, 512, 8);
     REQUIRE_FALSE(before.empty());

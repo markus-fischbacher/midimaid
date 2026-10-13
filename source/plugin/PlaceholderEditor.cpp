@@ -124,6 +124,16 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 
     styleBox_.setComponentID("style");
 
+    referenceSetBox_.setComponentID("referenceSet");
+    referenceSetBox_.onChange = [this] {
+        const auto index = static_cast<size_t>(referenceSetBox_.getSelectedId() - 1);
+        if (index < referenceSetIds_.size()) {
+            referenceStore().setActiveSet(referenceStyleId(), referenceSetIds_[index]);
+        }
+    };
+    addAndMakeVisible(referenceSetBox_);
+    refreshReferenceSets();
+
     keyBox_.setComponentID("key");
     keyBox_.addItem(tr(keys::kKeyAuto), 1);
     for (int i = 0; i < 12; ++i) {
@@ -946,7 +956,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     rollView_.setVisible(voiceLayout);
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{
-             &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
+             &keyBox_, &referenceSetBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
              &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
              &expertButton_, &previewButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_, &evolveButton_, &evolveBackButton_,
              &evolveStageLabel_, &evolveKeepButton_}) {
@@ -1491,7 +1501,39 @@ void PlaceholderEditor::updateVoiceView() {
     }
 }
 
+std::string PlaceholderEditor::referenceStyleId() const {
+    const auto id = processor_.instanceSettings().generation.styleId;
+    const auto* style = processor_.styles().findOrFallback(id);
+    return style != nullptr ? style->id : id;
+}
+
+void PlaceholderEditor::refreshReferenceSets() {
+    auto& store = referenceStore();
+    const auto styleId = referenceStyleId();
+    const auto key = styleId + "#" + std::to_string(store.revision());
+    if (key == referenceSetKey_) {
+        return;
+    }
+    referenceSetKey_ = key;
+    const auto collection = store.collection(styleId);
+    referenceSetIds_.clear();
+    referenceSetBox_.clear(juce::dontSendNotification);
+    int selected = 0;
+    for (const auto& set : collection.sets) {
+        referenceSetIds_.push_back(set.id);
+        const int id = static_cast<int>(referenceSetIds_.size());
+        referenceSetBox_.addItem(set.id == mm::core::kFavoritesSetId ? tr(keys::kReferencesSetFavorites)
+                                                                     : juce::String::fromUTF8(set.name.c_str()),
+                                 id);
+        if (set.id == collection.activeSetId) {
+            selected = id;
+        }
+    }
+    referenceSetBox_.setSelectedId(selected, juce::dontSendNotification);
+}
+
 void PlaceholderEditor::timerCallback() {
+    refreshReferenceSets();
     if (auto& store = globalSettings(); store.ready() && store.revision() != namingRevision_) {
         namingRevision_ = store.revision();
         const int middleC = store.get().middleC;
@@ -1598,6 +1640,8 @@ void PlaceholderEditor::resized() {
     scaleBox_.setBounds(top.removeFromRight(190));
     top.removeFromRight(8);
     keyBox_.setBounds(top.removeFromRight(110));
+    top.removeFromRight(8);
+    referenceSetBox_.setBounds(top.removeFromRight(150));
     top.removeFromRight(8);
     styleBox_.setBounds(top);
 
