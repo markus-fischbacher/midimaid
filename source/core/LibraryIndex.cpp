@@ -27,6 +27,16 @@ std::string libraryIndexToString(std::vector<LibraryIndexRecord> records) {
                            {"created", i.createdUnixMs},
                            {"size", record.fileSize},
                            {"modified", record.modifiedMs}});
+        if (!i.tags.empty()) {
+            entries.back()["tags"] = i.tags;
+        }
+        if (i.rating > 0) {
+            entries.back()["rating"] = static_cast<int>(i.rating);
+        }
+        if (i.bpmHigh > 0) {
+            entries.back()["bpmLow"] = static_cast<int>(i.bpmLow);
+            entries.back()["bpmHigh"] = static_cast<int>(i.bpmHigh);
+        }
     }
     return json{{"indexVersion", kLibraryIndexVersion}, {"entries", std::move(entries)}}.dump(1);
 }
@@ -93,6 +103,26 @@ LibraryIndexLoad loadLibraryIndex(std::string_view text) {
         }
         if (const auto* v = integer("created")) {
             info.createdUnixMs = v->get<int64_t>();
+        }
+        {
+            LibraryMeta meta;
+            if (const auto it = item.find("tags"); it != item.end() && it->is_array()) {
+                for (const auto& tag : *it) {
+                    if (tag.is_string()) {
+                        meta.tags.push_back(tag.get<std::string>());
+                    }
+                }
+            }
+            if (const auto* v = integer("rating")) {
+                meta.rating = static_cast<uint8_t>(std::clamp<int64_t>(v->get<int64_t>(), 0, 5));
+            }
+            if (const auto* v = integer("bpmLow")) {
+                meta.bpmLow = static_cast<uint16_t>(std::clamp<int64_t>(v->get<int64_t>(), 0, 65535));
+            }
+            if (const auto* v = integer("bpmHigh")) {
+                meta.bpmHigh = static_cast<uint16_t>(std::clamp<int64_t>(v->get<int64_t>(), 0, 65535));
+            }
+            setMeta(info, meta);
         }
         record.fileSize = size->get<int64_t>();
         record.modifiedMs = modified->get<int64_t>();

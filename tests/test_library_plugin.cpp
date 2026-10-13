@@ -1099,3 +1099,317 @@ TEST_CASE("snapshot of the library", "[.snapshot]") {
     dynamic_cast<juce::ListBox*>(find(dialog, "list"))->selectRow(0);
     writeSnapshot(dialog, "library.png");
 }
+
+
+// ---- tags, rating, tempo range, search, filter and the preview (SPEC 3.12, v1.1, D-237) ------------------------------------
+
+TEST_CASE("the meta data of an entry change the list at once and are in the file and the index", "[library-plugin][store][meta]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    TempFolder folder;
+    LibraryStore store{folder.folder};
+    REQUIRE(pumpUntil([&] { return store.ready(); }));
+    const auto a = store.savePattern("a", made(1), "", 0);
+    const auto b = store.savePattern("b", made(2), "", 0);
+    store.waitForIdle();
+    LibraryMeta meta;
+    meta.tags = {" dark ", "Rolling", "dark"};
+    meta.rating = 9;
+    meta.bpmLow = 134;
+    meta.bpmHigh = 126;
+    CHECK(store.setMeta(a.id, meta));
+    CHECK(store.info(a.id)->tags == std::vector<std::string>{"dark", "Rolling"}); // sanitized
+    CHECK(store.info(a.id)->rating == 5);
+    CHECK(store.info(a.id)->bpmLow == 126);
+    CHECK(store.info(a.id)->bpmHigh == 134);
+    CHECK(store.info(b.id)->tags.empty()); // the other one is left alone
+    CHECK_FALSE(store.setMeta("nope", meta));
+    store.waitForIdle();
+    // the file and the index hold it: another store reads it back, without reading the file when the index is good
+    LibraryStore again{folder.folder};
+    REQUIRE(pumpUntil([&] { return again.ready(); }));
+    REQUIRE(again.info(a.id).has_value());
+    CHECK(again.info(a.id)->tags == std::vector<std::string>{"dark", "Rolling"});
+    CHECK(again.info(a.id)->rating == 5);
+    CHECK(again.info(a.id)->bpmHigh == 134);
+    CHECK(again.indexedCount() == 2);
+    CHECK(again.parsedCount() == 0);
+    // the entry loads with its pattern and the meta data
+    bool loaded = false;
+    again.load(a.id, [&](LibraryLoadResult result) {
+        loaded = result.ok() && result.entry->info.rating == 5 && result.entry->pattern.has_value();
+    });
+    CHECK(pumpUntil([&] { return loaded; }));
+    // clearing
+    CHECK(store.setMeta(a.id, {}));
+    CHECK(store.info(a.id)->tags.empty());
+    CHECK(store.info(a.id)->rating == 0);
+    CHECK(store.info(a.id)->bpmHigh == 0);
+    store.waitForIdle();
+}
+
+TEST_CASE("the meta data of the memory store follow too", "[library-plugin][store][meta]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    const auto saved = scoped.store.savePattern("x", made(3), "", 0);
+    CHECK(scoped.store.setMeta(saved.id, {{"acid"}, 3, 130, 130}));
+    CHECK(scoped.store.info(saved.id)->rating == 3);
+    bool ok = false;
+    scoped.store.load(saved.id, [&](LibraryLoadResult result) { ok = result.ok() && result.entry->info.tags.size() == 1; });
+    CHECK(pumpUntil([&] { return ok; }));
+}
+
+TEST_CASE("the window rates, tags and filters", "[library-plugin][dialog][meta]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    InstrumentProcessor processor("Test");
+    const auto a = scoped.store.savePattern("Rolling", made(1), "", 0);
+    const auto b = scoped.store.savePattern("Acid Line", made(2), "", 0);
+    const auto c = scoped.store.savePattern("Pad", made(3), "", 0);
+    scoped.store.setMeta(a.id, {{"dark", "warehouse"}, 5, 126, 132});
+    scoped.store.setMeta(b.id, {{"acid"}, 3, 138, 150});
+    LibraryDialog dialog(processor, processor.libraryAliveFlag(), [&]() -> LibraryStore& { return scoped.store; });
+    auto& list = *dynamic_cast<juce::ListBox*>(find(dialog, "list"));
+    auto& search = *dynamic_cast<juce::TextEditor*>(find(dialog, "search"));
+    auto& stars = *dynamic_cast<juce::ComboBox*>(find(dialog, "stars"));
+    auto& tags = *dynamic_cast<juce::TextEditor*>(find(dialog, "tags"));
+    auto& bpmLow = *dynamic_cast<juce::TextEditor*>(find(dialog, "bpmLow"));
+    auto& bpmHigh = *dynamic_cast<juce::TextEditor*>(find(dialog, "bpmHigh"));
+    auto& apply = *dynamic_cast<juce::TextButton*>(find(dialog, "applyMeta"));
+    auto& filterStars = *dynamic_cast<juce::ComboBox*>(find(dialog, "filterStars"));
+    auto& filterTag = *dynamic_cast<juce::ComboBox*>(find(dialog, "filterTag"));
+    auto& filterStyle = *dynamic_cast<juce::ComboBox*>(find(dialog, "filterStyle"));
+    auto& filterBpm = *dynamic_cast<juce::TextEditor*>(find(dialog, "filterBpm"));
+    CHECK(list.getListBoxModel()->getNumRows() == 3);
+    // nothing selected: the fields of the entry are off
+    CHECK_FALSE(tags.isEnabled());
+    CHECK_FALSE(stars.isEnabled());
+    CHECK_FALSE(apply.isEnabled());
+    // the entry that is selected shows its data (the newest first: Pad, Acid Line, Rolling)
+    list.selectRow(2);
+    CHECK(tags.isEnabled());
+    CHECK(tags.getText() == "dark, warehouse");
+    CHECK(stars.getSelectedId() == 6);
+    CHECK(bpmLow.getText() == "126");
+    CHECK(bpmHigh.getText() == "132");
+    list.selectRow(0); // Pad: nothing set
+    CHECK(tags.getText().isEmpty());
+    CHECK(stars.getSelectedId() == 1);
+    CHECK(bpmLow.getText().isEmpty());
+    // a rating is one click
+    stars.setSelectedId(5, juce::sendNotificationSync); // four stars
+    CHECK(scoped.store.info(c.id)->rating == 4);
+    // tags and tempo with the button
+    tags.setText("calm; Pad, calm", juce::dontSendNotification);
+    bpmLow.setText("90", juce::dontSendNotification);
+    bpmHigh.setText("100", juce::dontSendNotification);
+    apply.onClick();
+    CHECK(scoped.store.info(c.id)->tags == std::vector<std::string>{"calm", "Pad"});
+    CHECK(scoped.store.info(c.id)->bpmLow == 90);
+    CHECK(scoped.store.info(c.id)->bpmHigh == 100);
+    CHECK(scoped.store.info(c.id)->rating == 4); // the stars stayed
+    CHECK(scoped.store.info(c.id)->tags.size() == 2);
+
+    // the search narrows the list (name, tag, prompt), and the count follows
+    search.setText("acid", juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 1; }));
+    search.setText("WAREHOUSE", juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 1; }));
+    search.setText("nothing like it", juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 0; }));
+    CHECK_FALSE(find(dialog, "empty")->isVisible()); // the library is not empty, only the search finds nothing
+    search.setText("", juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 3; }));
+    // stars
+    filterStars.setSelectedId(5, juce::sendNotificationSync); // four stars and up
+    CHECK(list.getListBoxModel()->getNumRows() == 2);
+    filterStars.setSelectedId(6, juce::sendNotificationSync);
+    CHECK(list.getListBoxModel()->getNumRows() == 1);
+    filterStars.setSelectedId(1, juce::sendNotificationSync);
+    // a tag from the library
+    bool hasAcid = false;
+    for (int i = 0; i < filterTag.getNumItems(); ++i) {
+        if (filterTag.getItemText(i) == "acid") {
+            filterTag.setSelectedItemIndex(i, juce::sendNotificationSync);
+            hasAcid = true;
+        }
+    }
+    CHECK(hasAcid);
+    CHECK(list.getListBoxModel()->getNumRows() == 1);
+    filterTag.setSelectedId(1, juce::sendNotificationSync);
+    CHECK(list.getListBoxModel()->getNumRows() == 3);
+    // a tempo
+    filterBpm.setText("128", juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 1; }));
+    filterBpm.setText("95", juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 1; }));
+    filterBpm.setText("10", juce::sendNotificationSync);
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 0; }));
+    filterBpm.setText("", juce::sendNotificationSync);
+    // the style: all three are Peak Time here
+    CHECK(filterStyle.getNumItems() == 2);
+    filterStyle.setSelectedId(2, juce::sendNotificationSync);
+    CHECK(list.getListBoxModel()->getNumRows() == 3);
+    filterStyle.setSelectedId(1, juce::sendNotificationSync);
+    // a change in the store (a rating from elsewhere) shows through the filter
+    filterStars.setSelectedId(6, juce::sendNotificationSync);
+    CHECK(list.getListBoxModel()->getNumRows() == 1);
+    scoped.store.setMeta(b.id, {{"acid"}, 5, 138, 150});
+    CHECK(pumpUntil([&] { return list.getListBoxModel()->getNumRows() == 2; }));
+}
+
+TEST_CASE("the preview plays the entry in the slot with the internal clock and gives the slot back", "[library-plugin][processor][preview]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    InstrumentProcessor processor("Test");
+    // the slot plays 41, the entry 50
+    processor.editSlots([](SlotBank& bank) {
+        Pattern pattern = makeEmptyPattern(1, "peak_time");
+        Note note;
+        note.id = allocateNoteId(pattern);
+        note.pitch = 41;
+        note.startTick = 0;
+        note.lengthTicks = 240;
+        pattern.voices[0].notes.push_back(note);
+        REQUIRE(bank.setResult(0, pattern));
+    });
+    Pattern entryPattern = makeEmptyPattern(1, "peak_time");
+    Note entryNote;
+    entryNote.id = allocateNoteId(entryPattern);
+    entryNote.pitch = 50;
+    entryNote.startTick = 0;
+    entryNote.lengthTicks = 240;
+    entryPattern.voices[0].notes.push_back(entryNote);
+    const auto saved = scoped.store.savePattern("entry", entryPattern, "", 0);
+
+    class Head : public juce::AudioPlayHead {
+    public:
+        juce::Optional<PositionInfo> getPosition() const override { return info; }
+        PositionInfo info;
+    } head;
+    constexpr double kRate = 48000.0;
+    constexpr int kBlock = 512;
+    processor.setRateAndBufferSizeDetails(kRate, kBlock);
+    processor.setPlayHead(&head);
+    processor.prepareToPlay(kRate, kBlock);
+    head.info.setIsPlaying(false);
+    head.info.setBpm(120.0);
+    head.info.setPpqPosition(0.0);
+    juce::AudioBuffer<float> audio(2, kBlock);
+    juce::MidiBuffer midi;
+    const auto pitchesOf = [&](int blocks) {
+        std::set<int> pitches;
+        for (int i = 0; i < blocks; ++i) {
+            audio.clear();
+            midi.clear();
+            processor.processBlock(audio, midi);
+            for (const auto metadata : midi) {
+                if (metadata.getMessage().isNoteOn()) {
+                    pitches.insert(metadata.getMessage().getNoteNumber());
+                }
+            }
+        }
+        return pitches;
+    };
+    CHECK(pitchesOf(10).empty()); // the host stands still
+    CHECK_FALSE(processor.libraryPreviewing());
+    REQUIRE(processor.previewLibraryEntry(saved.id));
+    REQUIRE(pumpUntil([&] { return processor.libraryPreviewing(); }));
+    const auto heard = pitchesOf(250);
+    CHECK(heard == std::set<int>{50}); // the entry, not the slot
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices[0].notes[0].pitch == 41); // the slot is untouched
+    processor.stopLibraryPreview();
+    CHECK_FALSE(processor.libraryPreviewing());
+    CHECK_FALSE(processor.previewing());
+    // the slot comes back: it plays once the preview of the slot runs
+    processor.setPreview(true);
+    CHECK(pitchesOf(250) == std::set<int>{41});
+    processor.setPreview(false);
+    // an unknown entry and a voice
+    CHECK_FALSE(processor.previewLibraryEntry("nope"));
+    InstrumentProcessor voice("Voice");
+    auto settings = voice.instanceSettings();
+    settings.role = InstanceRole::Voice;
+    voice.setInstanceSettings(settings);
+    CHECK_FALSE(voice.previewLibraryEntry(saved.id));
+}
+
+TEST_CASE("the start of the host ends the preview of an entry and gives the slot back", "[library-plugin][processor][preview]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    InstrumentProcessor processor("Test");
+    fillSlot(processor, 0, 5);
+    const auto saved = scoped.store.savePattern("entry", made(6), "", 0);
+    class Head : public juce::AudioPlayHead {
+    public:
+        juce::Optional<PositionInfo> getPosition() const override { return info; }
+        PositionInfo info;
+    } head;
+    processor.setRateAndBufferSizeDetails(48000.0, 512);
+    processor.setPlayHead(&head);
+    processor.prepareToPlay(48000.0, 512);
+    head.info.setIsPlaying(false);
+    head.info.setBpm(120.0);
+    head.info.setPpqPosition(0.0);
+    juce::AudioBuffer<float> audio(2, 512);
+    juce::MidiBuffer midi;
+    REQUIRE(processor.previewLibraryEntry(saved.id));
+    REQUIRE(pumpUntil([&] { return processor.libraryPreviewing(); }));
+    processor.processBlock(audio, midi);
+    head.info.setIsPlaying(true); // the host starts
+    head.info.setPpqPosition(8.0);
+    processor.processBlock(audio, midi);
+    CHECK_FALSE(processor.previewing());
+    processor.pollPreview();
+    CHECK_FALSE(processor.libraryPreviewing());
+    // the slot of the user plays again, not the entry (the overlay is gone, not only hidden): the same as a processor
+    // that never previewed
+    InstrumentProcessor reference("Reference");
+    fillSlot(reference, 0, 5);
+    reference.setRateAndBufferSizeDetails(48000.0, 512);
+    reference.setPlayHead(&head);
+    reference.prepareToPlay(48000.0, 512);
+    const auto play = [&](InstrumentProcessor& target) {
+        std::vector<int> heard;
+        for (int block = 0; block < 400; ++block) {
+            head.info.setPpqPosition(8.0 + block * 512.0 / 48000.0 * 2.0);
+            audio.clear();
+            midi.clear();
+            target.processBlock(audio, midi);
+            for (const auto metadata : midi) {
+                if (metadata.getMessage().isNoteOn()) {
+                    heard.push_back(metadata.getMessage().getNoteNumber());
+                }
+            }
+        }
+        return heard;
+    };
+    const auto expected = play(reference);
+    CHECK_FALSE(expected.empty());
+    CHECK(play(processor) == expected);
+}
+
+TEST_CASE("the window starts and stops the preview and gives the slot back when it goes", "[library-plugin][dialog][preview]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    InstrumentProcessor processor("Test");
+    scoped.store.savePattern("entry", made(7), "", 0);
+    {
+        LibraryDialog dialog(processor, processor.libraryAliveFlag(), [&]() -> LibraryStore& { return scoped.store; });
+        auto& list = *dynamic_cast<juce::ListBox*>(find(dialog, "list"));
+        auto& preview = *dynamic_cast<juce::TextButton*>(find(dialog, "preview"));
+        CHECK_FALSE(preview.isEnabled()); // nothing selected
+        list.selectRow(0);
+        CHECK(preview.isEnabled());
+        CHECK(preview.getButtonText() == "Vorhören");
+        preview.onClick();
+        REQUIRE(pumpUntil([&] { return processor.libraryPreviewing(); }));
+        CHECK(pumpUntil([&] { return preview.getButtonText() == "Stopp"; }));
+        preview.onClick();
+        CHECK_FALSE(processor.libraryPreviewing());
+        CHECK(pumpUntil([&] { return preview.getButtonText() == "Vorhören"; }));
+        preview.onClick(); // and again: the dialog closes while it plays
+        REQUIRE(pumpUntil([&] { return processor.libraryPreviewing(); }));
+    }
+    CHECK_FALSE(processor.libraryPreviewing()); // the window is gone: the slot is back
+    CHECK_FALSE(processor.previewing());
+}

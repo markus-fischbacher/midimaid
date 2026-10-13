@@ -288,3 +288,168 @@ TEST_CASE("a newer version inside the entry counts as a newer entry", "[library]
     REQUIRE(loaded.ok());
     CHECK(loaded.fromNewerVersion);
 }
+
+// -- tags, rating, tempo range, search and filter (SPEC 3.12, v1.1, D-237) ---------------------------------------------
+
+TEST_CASE("tags are put in order", "[library][meta]") {
+    CHECK(sanitizeLibraryTags({"  dark ", "Rolling", "dark", "ROLLING", "", "  ", "a,b", "x;y"}) ==
+          std::vector<std::string>{"dark", "Rolling", "ab", "xy"});
+    // the control characters go, the tag is cut at a character boundary
+    CHECK(sanitizeLibraryTags({std::string("ta\tg\n")}) == std::vector<std::string>{"tag"});
+    const std::string umlauts = "üüüüüüüüüüüüüüüüüüüü"; // 40 bytes
+    const auto cut = sanitizeLibraryTags({umlauts});
+    REQUIRE(cut.size() == 1);
+    CHECK(cut[0].size() <= kMaxLibraryTagBytes);
+    CHECK(cut[0].size() % 2 == 0); // a whole character at the end
+    // at most twelve
+    std::vector<std::string> many;
+    for (int i = 0; i < 30; ++i) {
+        many.push_back("t" + std::to_string(i));
+    }
+    CHECK(sanitizeLibraryTags(many).size() == kMaxLibraryTags);
+    CHECK(sanitizeLibraryTags({}).empty());
+}
+
+TEST_CASE("the text of the tag editor is read and written", "[library][meta]") {
+    CHECK(parseLibraryTags("dark, rolling; 130 bpm ,, Dark") == std::vector<std::string>{"dark", "rolling", "130 bpm"});
+    CHECK(parseLibraryTags("").empty());
+    CHECK(parseLibraryTags(" , ; ").empty());
+    CHECK(libraryTagsToText({"dark", "rolling"}) == "dark, rolling");
+    CHECK(libraryTagsToText({}).empty());
+    CHECK(parseLibraryTags(libraryTagsToText({"a", "b c", "d"})) == std::vector<std::string>{"a", "b c", "d"});
+}
+
+TEST_CASE("the meta data are brought into range", "[library][meta]") {
+    LibraryMeta meta;
+    meta.rating = 9;
+    meta.bpmLow = 140;
+    meta.bpmHigh = 120;
+    meta.tags = {" a ", "A"};
+    const auto clean = sanitizeLibraryMeta(meta);
+    CHECK(clean.rating == 5);
+    CHECK(clean.bpmLow == 120); // swapped
+    CHECK(clean.bpmHigh == 140);
+    CHECK(clean.tags == std::vector<std::string>{"a"});
+    CHECK(sanitizeLibraryMeta({{}, 0, 0, 0}) == LibraryMeta{});
+    // one end only: the range is that tempo
+    LibraryMeta oneEnd;
+    oneEnd.bpmLow = 128;
+    CHECK(sanitizeLibraryMeta(oneEnd).bpmHigh == 128);
+    oneEnd = {};
+    oneEnd.bpmHigh = 130;
+    CHECK(sanitizeLibraryMeta(oneEnd).bpmLow == 130);
+    // outside 20 to 300: no range, or only the end that is inside
+    LibraryMeta wild;
+    wild.bpmLow = 5;
+    wild.bpmHigh = 999;
+    const auto none = sanitizeLibraryMeta(wild);
+    CHECK(none.bpmLow == 0);
+    CHECK(none.bpmHigh == 0);
+    wild.bpmHigh = 150;
+    const auto half = sanitizeLibraryMeta(wild);
+    CHECK(half.bpmLow == 150);
+    CHECK(half.bpmHigh == 150);
+    CHECK(sanitizeLibraryMeta(sanitizeLibraryMeta(meta)) == clean); // idempotent
+}
+
+TEST_CASE("meta data survive the entry file and an entry without them keeps its text", "[library][meta]") {
+    LibraryEntry entry = makePatternEntry("klirr", "Klirr", made(3), "Slot", 2, 123456);
+    const std::string plain = libraryEntryToString(entry);
+    CHECK(plain.find("tags") == std::string::npos); // nothing is written for what is not set
+    CHECK(plain.find("rating") == std::string::npos);
+    CHECK(plain.find("bpm") == std::string::npos);
+    setMeta(entry.info, {{"dark", "rolling"}, 4, 126, 132});
+    const std::string text = libraryEntryToString(entry);
+    const auto loaded = loadLibraryEntry(text, "klirr");
+    REQUIRE(loaded.ok());
+    CHECK(loaded.entry->info.tags == std::vector<std::string>{"dark", "rolling"});
+    CHECK(loaded.entry->info.rating == 4);
+    CHECK(loaded.entry->info.bpmLow == 126);
+    CHECK(loaded.entry->info.bpmHigh == 132);
+    CHECK(libraryEntryToString(*loaded.entry) == text);
+    // a file of before loads with none
+    const auto old = loadLibraryEntry(plain, "klirr");
+    REQUIRE(old.ok());
+    CHECK(old.entry->info.tags.empty());
+    CHECK(old.entry->info.rating == 0);
+    CHECK(old.entry->info.bpmHigh == 0);
+}
+
+TEST_CASE("bad meta data in a file are brought into range or left out", "[library][meta]") {
+    LibraryEntry entry = makePatternEntry("klirr", "Klirr", made(3), "Slot", 2, 1);
+    json document = json::parse(libraryEntryToString(entry));
+    document["tags"] = json::array({"ok", 5, nullptr, "ok", "x,y"});
+    document["rating"] = 77;
+    document["bpmLow"] = 500;
+    document["bpmHigh"] = 100;
+    const auto loaded = loadLibraryEntry(document.dump(), "klirr");
+    REQUIRE(loaded.ok());
+    CHECK(loaded.entry->info.tags == std::vector<std::string>{"ok", "xy"});
+    CHECK(loaded.entry->info.rating == 5);
+    CHECK(loaded.entry->info.bpmLow == 100);
+    CHECK(loaded.entry->info.bpmHigh == 100);
+    document["tags"] = "dark";
+    document["rating"] = "five";
+    const auto wrongTypes = loadLibraryEntry(document.dump(), "klirr");
+    REQUIRE(wrongTypes.ok());
+    CHECK(wrongTypes.entry->info.tags.empty());
+    CHECK(wrongTypes.entry->info.rating == 0);
+}
+
+namespace {
+
+LibraryEntryInfo infoOf(const std::string& id, const std::string& name, const std::string& style, LibraryMeta meta = {},
+                        const std::string& prompt = {}) {
+    LibraryEntryInfo info;
+    info.id = id;
+    info.name = name;
+    info.styleId = style;
+    info.prompt = prompt;
+    setMeta(info, meta);
+    return info;
+}
+
+std::vector<std::string> idsOf(const std::vector<LibraryEntryInfo>& entries) {
+    std::vector<std::string> ids;
+    for (const auto& e : entries) {
+        ids.push_back(e.id);
+    }
+    return ids;
+}
+
+} // namespace
+
+TEST_CASE("the filter narrows the list by text, tag, stars, tempo and style", "[library][meta][filter]") {
+    const std::vector<LibraryEntryInfo> all{
+        infoOf("a", "Rolling Bass", "peak_time", {{"dark", "Warehouse"}, 5, 126, 132}),
+        infoOf("b", "Acid Line", "hard_industrial", {{"acid"}, 3, 138, 150}, "squelchy 303 line"),
+        infoOf("c", "Pad", "melodic_techno", {{"calm"}, 0, 0, 0}),
+        infoOf("d", "Dark Stabs", "peak_time", {{}, 4, 120, 128}),
+    };
+    CHECK(filterLibrary(all, {}).size() == 4);
+    CHECK(LibraryFilter{}.empty());
+    // the text: name, prompt, style, tag; case does not count
+    CHECK(idsOf(filterLibrary(all, {"DARK", "", 0, std::nullopt, ""})) == std::vector<std::string>{"a", "d"}); // a by tag, d by name
+    CHECK(idsOf(filterLibrary(all, {"303", "", 0, std::nullopt, ""})) == std::vector<std::string>{"b"});        // prompt
+    CHECK(idsOf(filterLibrary(all, {"melodic", "", 0, std::nullopt, ""})) == std::vector<std::string>{"c"});    // style
+    CHECK(idsOf(filterLibrary(all, {"warehouse", "", 0, std::nullopt, ""})) == std::vector<std::string>{"a"});  // tag
+    CHECK(filterLibrary(all, {"nothing like it", "", 0, std::nullopt, ""}).empty());
+    // a tag
+    CHECK(idsOf(filterLibrary(all, {"", "WAREHOUSE", 0, std::nullopt, ""})) == std::vector<std::string>{"a"});
+    CHECK(filterLibrary(all, {"", "ware", 0, std::nullopt, ""}).empty()); // a whole tag
+    // stars
+    CHECK(idsOf(filterLibrary(all, {"", "", 4, std::nullopt, ""})) == std::vector<std::string>{"a", "d"});
+    CHECK(idsOf(filterLibrary(all, {"", "", 5, std::nullopt, ""})) == std::vector<std::string>{"a"});
+    CHECK(filterLibrary(all, {"", "", 1, std::nullopt, ""}).size() == 3);
+    // a tempo: inside the range, ends included; an entry without a range does not fit
+    CHECK(idsOf(filterLibrary(all, {"", "", 0, 128, ""})) == std::vector<std::string>{"a", "d"});
+    CHECK(idsOf(filterLibrary(all, {"", "", 0, 126, ""})) == std::vector<std::string>{"a", "d"}); // lower end of a, inside d
+    CHECK(idsOf(filterLibrary(all, {"", "", 0, 132, ""})) == std::vector<std::string>{"a"});      // upper end of a
+    CHECK(idsOf(filterLibrary(all, {"", "", 0, 133, ""})).empty());
+    CHECK(idsOf(filterLibrary(all, {"", "", 0, 150, ""})) == std::vector<std::string>{"b"});
+    CHECK(filterLibrary(all, {"", "", 0, 100, ""}).empty());
+    // a style
+    CHECK(idsOf(filterLibrary(all, {"", "", 0, std::nullopt, "peak_time"})) == std::vector<std::string>{"a", "d"});
+    // all together
+    CHECK(idsOf(filterLibrary(all, {"dark", "", 4, 130, "peak_time"})) == std::vector<std::string>{"a"});
+}

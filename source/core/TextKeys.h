@@ -235,6 +235,16 @@ namespace mm::core::text {
     X(kLibrarySaveSlot, "library.saveSlot")                                                                        \
     X(kLibrarySaveSet, "library.saveSet")                                                                          \
     X(kLibraryLoad, "library.load")                                                                                \
+    X(kLibrarySearch, "library.search")                                                                                \
+    X(kLibraryAllStars, "library.allStars")                                                                            \
+    X(kLibraryAllTags, "library.allTags")                                                                              \
+    X(kLibraryAllStyles, "library.allStyles")                                                                          \
+    X(kLibraryTagsHint, "library.tagsHint")                                                                            \
+    X(kLibraryBpmFilter, "library.bpmFilter")                                                                          \
+    X(kLibraryBpmLow, "library.bpmLow")                                                                                \
+    X(kLibraryBpmHigh, "library.bpmHigh")                                                                              \
+    X(kLibraryApply, "library.apply")                                                                                  \
+    X(kLibraryNoRating, "library.noRating")                                                                            \
     X(kLibraryRename, "library.rename")                                                                            \
     X(kLibraryRemove, "library.remove")                                                                            \
     X(kLibraryRemoveConfirm, "library.removeConfirm")                                                              \

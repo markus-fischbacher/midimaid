@@ -174,3 +174,31 @@ TEST_CASE("a negative or fractional seed is no seed", "[library-index]") {
         CHECK(loaded.records[0].info.seed == 0);
     }
 }
+
+TEST_CASE("the meta data of an entry are in the index and an index of before reads as none", "[library-index][meta]") {
+    auto withMeta = record("m1");
+    setMeta(withMeta.info, {{"dark", "Warehouse"}, 4, 126, 132});
+    const auto loaded = loadLibraryIndex(libraryIndexToString({withMeta, record("m2")}));
+    REQUIRE(loaded.ok);
+    REQUIRE(loaded.records.size() == 2);
+    CHECK(loaded.records[0] == withMeta);
+    CHECK(loaded.records[0].info.tags == std::vector<std::string>{"dark", "Warehouse"});
+    CHECK(loaded.records[0].info.rating == 4);
+    CHECK(loaded.records[0].info.bpmLow == 126);
+    CHECK(loaded.records[0].info.bpmHigh == 132);
+    CHECK(loaded.records[1].info.tags.empty()); // nothing is written for what is not set
+    const std::string text = libraryIndexToString({record("m2")});
+    CHECK(text.find("tags") == std::string::npos);
+    CHECK(text.find("rating") == std::string::npos);
+    CHECK(text.find("bpmLow") == std::string::npos);
+    // bad values are brought into range
+    json document = json::parse(libraryIndexToString({withMeta}));
+    document["entries"][0]["rating"] = 12;
+    document["entries"][0]["bpmLow"] = 400;
+    document["entries"][0]["tags"] = json::array({"a", 3, "a"});
+    const auto clean = loadLibraryIndex(document.dump());
+    REQUIRE(clean.ok);
+    CHECK(clean.records[0].info.rating == 5);
+    CHECK(clean.records[0].info.bpmLow == 132);
+    CHECK(clean.records[0].info.tags == std::vector<std::string>{"a"});
+}

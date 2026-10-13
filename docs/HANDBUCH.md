@@ -163,7 +163,7 @@ das *Gewicht* ändern und *Entfernen*. Es wirkt in dieser Form:
 *Bibliothek* öffnet die Liste aller gespeicherten Einträge. **Slot speichern** legt das Pattern des Slots ab, **Set
 speichern** alle belegten Slots. **Laden** bringt es zurück, mit Name und Farbe; das alte Pattern bleibt über ◀
 erreichbar. **Als .mid …** exportiert, **.mid importieren …** legt eine Datei als Eintrag ab. **Löschen** fragt einmal
-nach. Die Bibliothek fasst 5000 Einträge und liegt als Dateien im Datenordner (Abschnitt 12).
+nach. Zu jedem Eintrag setzt du **Sterne** (ein Klick), **Tags** (durch Komma getrennt) und einen **BPM-Bereich** und bestätigst mit *Übernehmen*. Oben im Fenster suchst du nach Name, Prompt oder Tag und filterst nach Sternen, Tag, Stil und Tempo. **Vorhören** spielt den gewählten Eintrag anstelle deines Slots (auch bei stehendem Transport) und gibt den Slot bei *Stopp*, beim Start der DAW oder beim Schließen des Fensters unverändert zurück. Die Bibliothek fasst 5000 Einträge und liegt als Dateien im Datenordner (Abschnitt 12).
 
 ## 9. MIDI herausziehen und aufnehmen
 

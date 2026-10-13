@@ -47,9 +47,16 @@ private:
     bool alive() const { return *processorAlive_; }
     std::optional<mm::core::LibraryEntryInfo> selected() const;
     void refresh();
+    /// The list as the filter narrows it, the lists of the filter boxes and the fields of the selected entry.
+    void fillFilterBoxes();
+    void fillDetail();
+    void applyMeta();
+    void filterChanged();
+    mm::core::LibraryFilter filter() const;
     void updateButtons();
     void importFile(const juce::File& file);
     juce::String infoText(const mm::core::LibraryEntryInfo& info) const;
+    juce::String infoTextBase(const mm::core::LibraryEntryInfo& info) const;
 
     MidiMaidLookAndFeel look_; // first: the children use it until the end
     ProcessorBase& processor_;
@@ -60,6 +67,16 @@ private:
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
     juce::Label summaryLabel_, statusLabel_, emptyLabel_;
     juce::TextEditor nameEditor_;
+    // search and filter (SPEC 3.12, v1.1, D-237)
+    juce::TextEditor searchEditor_, filterBpmEditor_;
+    juce::ComboBox filterStarsBox_, filterTagBox_, filterStyleBox_;
+    // tags, rating and tempo range of the selected entry, and the preview
+    juce::TextEditor tagsEditor_, bpmLowEditor_, bpmHighEditor_;
+    juce::ComboBox starsBox_;
+    juce::TextButton applyButton_, previewButton_;
+    juce::Label bpmDashLabel_;
+    std::vector<std::string> filterStyleIds_; ///< the ids behind the items of the style filter
+    bool filling_ = false; ///< the fields are being filled: no changes to save
     juce::ListBox list_{"list", this};
     juce::TextButton saveSlotButton_, saveSetButton_, importButton_, loadButton_, renameButton_, removeButton_,
         exportButton_, closeButton_;

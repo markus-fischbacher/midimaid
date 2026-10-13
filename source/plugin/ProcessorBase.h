@@ -413,6 +413,15 @@ public:
     /// slots a set holds (the others stay). Both are results: the pattern that was there stays in the history.
     bool loadFromLibrary(const std::string& id, std::optional<size_t> slot = std::nullopt);
     /// Writes the pattern entry as a .mid file at the DAW tempo, in the background.
+    /// The preview of a library entry (SPEC 3.12, v1.1, D-237): plays the pattern of the entry (the first filled slot of a
+    /// set) in the selected slot with the internal clock of the preview (§3.11) without touching the slot or the library;
+    /// the slot comes back when the preview ends (`stopLibraryPreview`, a second call, or the start of the host, seen by
+    /// `pollPreview`). Hub and solo only (a hub's voices keep playing their slot). False for an unknown entry. Message thread.
+    bool previewLibraryEntry(const std::string& id);
+    void stopLibraryPreview();
+    bool libraryPreviewing() const { return previewOverlaySlot_.has_value() && previewing(); }
+    /// Gives the slot back once the preview of an entry is over (the host started): call it from a timer.
+    void pollPreview();
     bool exportLibraryEntry(const std::string& id, const juce::File& target);
     /// Reads a MIDI file in the background and saves it as a library entry (a pattern with the file as a locked voice).
     bool importMidiToLibrary(const juce::File& file);
@@ -518,6 +527,9 @@ private:
     std::atomic<float>* slotValue_ = nullptr;                            // raw values, read in the audio thread
     std::array<std::atomic<float>*, mm::core::kMaxVoices> muteValues_{}; // raw values, read in the audio thread
     // The preview with the internal clock while the host stands still (SPEC 3.11, D-236).
+    std::optional<size_t> previewOverlaySlot_; // message thread: the slot that plays an entry of the library
+    void startLibraryPreview(mm::core::LibraryLoadResult loaded);
+    void endPreviewOverlay();
     std::atomic<bool> previewRequested_{false}; // the Play button (message thread) and the first block of the host
     bool previewRunning_ = false;               // audio thread: the internal clock runs
     double previewPpq_ = 0.0;                   // audio thread: its position
