@@ -1316,7 +1316,7 @@ TEST_CASE("the voice window sits on one grid: margins, one control height, no ov
     std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
     REQUIRE(editor->getWidth() == 600);
     REQUIRE(editor->getHeight() == 320);
-    const auto inner = editor->getLocalBounds().reduced(16, 0);
+    const auto inner = editor->getLocalBounds().reduced(12, 0);
     std::vector<juce::Component*> shown;
     for (auto* component : editor->getChildren()) {
         if (component->isVisible() && component->getWidth() > 0) {
@@ -1327,7 +1327,7 @@ TEST_CASE("the voice window sits on one grid: margins, one control height, no ov
     for (auto* component : shown) {
         INFO(component->getComponentID().toStdString());
         if (component->getComponentID() != "scaleCorner") { // the corner grip sits in the margin
-            CHECK(inner.contains(component->getBounds())); // 16 px at the sides
+            CHECK(inner.contains(component->getBounds())); // 12 px at the sides
         }
         // the controls share one height; the roll, the status line and the drag handle are not controls
         const bool control = dynamic_cast<juce::ComboBox*>(component) != nullptr ||
@@ -1343,22 +1343,28 @@ TEST_CASE("the voice window sits on one grid: margins, one control height, no ov
             CHECK_FALSE(shown[i]->getBounds().intersects(shown[j]->getBounds()));
         }
     }
-    // rows line up: the controls of one row have the same top edge, the first column starts at the margin
+    // the header, the strip and the dock line up: the controls of one row share the top edge, the strip its column
     auto* role = child<juce::ComboBox>(*editor, "role");
     auto* mute = child<juce::ToggleButton>(*editor, "mute");
     auto* zoom = child<juce::ComboBox>(*editor, "zoom");
-    REQUIRE((role != nullptr && mute != nullptr && zoom != nullptr));
-    CHECK(role->getX() == 16);
-    CHECK(mute->getX() == 16);
-    CHECK(zoom->getRight() == 600 - 16);
+    auto* octave = child<juce::ComboBox>(*editor, "octave");
+    auto* openHub = child<juce::TextButton>(*editor, "openHub");
     auto* help = child<juce::TextButton>(*editor, "help");
-    REQUIRE(help != nullptr);
-    CHECK(help->getY() == zoom->getY()); // help and size share the footer row
+    auto* generate = child<juce::TextButton>(*editor, "generate");
+    REQUIRE((role && mute && zoom && octave && openHub && help && generate));
+    CHECK(role->getX() == 12);
+    CHECK(mute->getX() == 12 + 8); // the strip has its own inset
+    CHECK(octave->getX() == mute->getX());
+    CHECK(openHub->getX() == mute->getX());
+    CHECK(octave->getWidth() == mute->getWidth());
+    CHECK(openHub->getWidth() == mute->getWidth());
+    CHECK(mute->getBottom() <= octave->getY());
+    CHECK(octave->getBottom() <= openHub->getY());
+    CHECK(help->getY() == zoom->getY()); // help, size and the main action share the dock row
+    CHECK(generate->getY() == zoom->getY());
     CHECK(help->getRight() <= zoom->getX());
-    CHECK(child<juce::TextButton>(*editor, "generate")->getRight() == 600 - 16);
-    CHECK(child<juce::TextButton>(*editor, "generate")->getY() == mute->getY());
-    CHECK(child<juce::ComboBox>(*editor, "octave")->getY() == mute->getY());
-    CHECK(child<juce::TextButton>(*editor, "openHub")->getY() == mute->getY());
+    CHECK(zoom->getRight() <= generate->getX());
+    CHECK(generate->getRight() <= 600 - 16); // clear of the grip of the size corner
 }
 
 TEST_CASE("the octave box sets the octave of the instance and shows it", "[group-wiring][editor]") {
@@ -3615,7 +3621,7 @@ TEST_CASE("the strip of a folded row keeps its action buttons", "[buttons][edito
     auto& row = *find(*rig.editor, "row_2");
     REQUIRE(row.getHeight() == 36);
     // Variation, Duplicate and Focus sit in the menu of "..." (D-252); the strip keeps what is used all the time
-    for (const char* id : {"renew_2", "more_2", "mute_2", "lock_2", "drag_2"}) {
+    for (const char* id : {"renew_2", "focus_2", "more_2", "mute_2", "lock_2", "drag_2"}) {
         auto* component = find(*rig.editor, id);
         REQUIRE(component != nullptr);
         INFO(id);
@@ -4215,16 +4221,16 @@ TEST_CASE("the voice window rows share their columns", "[group-wiring][editor][l
     auto* generate = child<juce::TextButton>(*editor, "generate");
     auto* takeOver = child<juce::TextButton>(*editor, "takeOver");
     REQUIRE((role && voiceBox && mute && octave && handle && generate && takeOver));
-    CHECK(mute->getX() == role->getX());
-    CHECK(mute->getWidth() == role->getWidth());
-    CHECK(octave->getX() == voiceBox->getX());
-    CHECK(octave->getWidth() == voiceBox->getWidth());
-    CHECK(child<juce::TextButton>(*editor, "openHub")->getX() == child<juce::ComboBox>(*editor, "follow")->getX());
-    CHECK(takeOver->getRight() == generate->getRight()); // the action buttons share the right edge
-    CHECK(takeOver->getWidth() == generate->getWidth());
-    // the file handle is wide enough to carry its label and spans the first two columns
-    CHECK(handle->getX() == role->getX());
-    CHECK(handle->getRight() == voiceBox->getRight());
+    // the strip: mute, octave, "open hub" and the file handle share one column; the header holds role, voice and slot
+    CHECK(octave->getX() == mute->getX());
+    CHECK(octave->getWidth() == mute->getWidth());
+    CHECK(child<juce::TextButton>(*editor, "openHub")->getX() == mute->getX());
+    CHECK(handle->getX() == mute->getX());
+    CHECK(handle->getWidth() == mute->getWidth());
+    CHECK(voiceBox->getX() > role->getRight());
+    CHECK(child<juce::ComboBox>(*editor, "follow")->getX() > voiceBox->getRight());
+    CHECK(takeOver->getY() == role->getY()); // the header's action at its right end
+    CHECK(generate->getY() > role->getY());
     CHECK(handle->getWidth() >= 120);
 }
 
@@ -7780,18 +7786,18 @@ TEST_CASE("the dock writes a new pattern until it is switched to change the patt
     CHECK(find(*editor, "generate")->isVisible());
 }
 
-TEST_CASE("a lane keeps its strip short, behind a menu for the rare actions", "[editor][inspector]") {
+TEST_CASE("a lane keeps Focus in reach and puts the rare actions behind a menu", "[editor][inspector]") {
     Quiet quiet;
     Instance solo("Solo");
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
     pumpMessages(60);
-    for (const char* id : {"more_1", "more_2", "mute_1", "lock_1", "renew_1", "drag_1"}) {
+    for (const char* id : {"more_1", "more_2", "mute_1", "lock_1", "renew_1", "focus_1", "focus_2", "drag_1"}) {
         INFO(id);
         REQUIRE(find(*editor, id) != nullptr);
         CHECK(find(*editor, id)->isVisible());
     }
     // what the menu holds is not a button of the lane any more
-    for (const char* id : {"vary_1", "duplicate_1", "focus_1"}) {
+    for (const char* id : {"vary_1", "duplicate_1"}) {
         INFO(id);
         REQUIRE(find(*editor, id) != nullptr);
         CHECK_FALSE(find(*editor, id)->isVisible());

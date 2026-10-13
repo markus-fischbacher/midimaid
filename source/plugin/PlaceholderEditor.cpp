@@ -1767,53 +1767,51 @@ void PlaceholderEditor::timerCallback() {
 void PlaceholderEditor::paint(juce::Graphics& g) {
     g.fillAll(juce::Colour(MidiMaidLookAndFeel::kBackground));
     if (voiceLayout_) {
-        return;
+        g.setColour(juce::Colour(MidiMaidLookAndFeel::kSurface));
+        g.fillRoundedRectangle(voiceStrip_.toFloat(), 6.0f);
     }
 }
 
 void PlaceholderEditor::layoutVoiceWindow() {
-    // One grid for the compact window (SPEC 8.1): 16 px at the sides, 10 px between controls, every control 34 px high
-    // in rows of 52 px; the roll takes what is left.
-    constexpr int kPad = 16;
-    constexpr int kGap = 10;
-    constexpr int kControl = 34;
-    constexpr int kRow = 52;
-    constexpr int kInset = (kRow - kControl) / 2;
+    // The voice window in the style of the hub (D-253): a header with the role and the voice, the lane with a strip of
+    // its own on the left and the roll, the status line and a dock at the bottom with the one main action.
+    constexpr int kPad = 12;
+    constexpr int kGap = 8;
+    constexpr int kControl = 34; // one height for every control of the window
     auto area = getLocalBounds();
 
-    // Three columns that both rows share (110, 110 and 170 px), and the main action of each row at the right edge.
-    constexpr int kCol1 = 110;
-    constexpr int kCol2 = 110;
-    constexpr int kCol3 = 170;
-    constexpr int kAction = 130;
-
-    auto footer = area.removeFromBottom(kRow).reduced(kPad, kInset);
-    zoomBox_.setBounds(footer.removeFromRight(120));
-    footer.removeFromRight(kGap);
-    helpButton_.setBounds(footer.removeFromRight(90));
-    footer.removeFromRight(kGap);
-    followButton_.setBounds(footer.removeFromRight(90));
-    dragHandle_->setBounds(footer.removeFromLeft(kCol1 + kGap + kCol2));
-
-    auto roles = area.removeFromTop(kRow).reduced(kPad, kInset);
-    takeOverButton_.setBounds(roles.removeFromRight(kAction));
-    roleBox_.setBounds(roles.removeFromLeft(kCol1));
-    roles.removeFromLeft(kGap);
-    voiceBox_.setBounds(roles.removeFromLeft(kCol2));
-    roles.removeFromLeft(kGap);
-    followBox_.setBounds(roles.removeFromLeft(kCol3));
+    auto header = area.removeFromTop(44).reduced(kPad, 5);
+    takeOverButton_.setBounds(header.removeFromRight(130));
+    roleBox_.setBounds(header.removeFromLeft(110));
+    header.removeFromLeft(kGap);
+    voiceBox_.setBounds(header.removeFromLeft(110));
+    header.removeFromLeft(kGap);
+    followBox_.setBounds(header.removeFromLeft(170));
     outputBox_.setBounds(followBox_.getBounds()); // never visible together
 
-    auto actions = area.removeFromTop(kRow).reduced(kPad, kInset);
-    generateButton_.setBounds(actions.removeFromRight(kAction));
-    muteButton_.setBounds(actions.removeFromLeft(kCol1));
-    actions.removeFromLeft(kGap);
-    octaveBox_.setBounds(actions.removeFromLeft(kCol2));
-    actions.removeFromLeft(kGap);
-    openHubButton_.setBounds(actions.removeFromLeft(kCol2));
+    auto dock = area.removeFromBottom(48).reduced(kPad, 7);
+    dock.removeFromRight(8); // the grip of the size corner stays free
+    generateButton_.setBounds(dock.removeFromRight(130));
+    dock.removeFromRight(kGap);
+    zoomBox_.setBounds(dock.removeFromRight(110));
+    dock.removeFromRight(kGap);
+    helpButton_.setBounds(dock.removeFromRight(80));
+    dock.removeFromRight(kGap);
+    followButton_.setBounds(dock.removeFromRight(90));
 
-    statusLabel_.setBounds(area.removeFromBottom(30).reduced(kPad, 0));
-    rollView_.setBounds(area.reduced(kPad, 2));
+    statusLabel_.setBounds(area.removeFromBottom(26).reduced(kPad, 0));
+
+    auto lane = area.reduced(kPad, 2);
+    voiceStrip_ = lane.removeFromLeft(150);
+    auto strip = voiceStrip_.reduced(8, 8);
+    muteButton_.setBounds(strip.removeFromTop(kControl));
+    strip.removeFromTop(kGap);
+    octaveBox_.setBounds(strip.removeFromTop(kControl));
+    strip.removeFromTop(kGap);
+    openHubButton_.setBounds(strip.removeFromTop(kControl));
+    dragHandle_->setBounds(strip.removeFromBottom(40));
+    lane.removeFromLeft(kGap);
+    rollView_.setBounds(lane);
 }
 
 void PlaceholderEditor::resized() {

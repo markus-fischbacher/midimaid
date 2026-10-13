@@ -144,7 +144,7 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
             onFocusClicked(voice_);
         }
     };
-    addChildComponent(focusButton_); // reached through the menu of the lane (D-252)
+    addAndMakeVisible(focusButton_); // always in reach: it is what the user works with most (D-253)
 
     renewButton_.setComponentID("renew_" + juce::String(voice));
     renewButton_.setButtonText(tr(mm::core::text::kButtonRenew));
@@ -237,7 +237,6 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
         juce::PopupMenu menu;
         menu.addItem(1, tr(mm::core::text::kButtonVary), varyButton_.isEnabled());
         menu.addItem(2, tr(mm::core::text::kButtonDuplicate), duplicateButton_.isEnabled());
-        menu.addItem(3, tr(mm::core::text::kRollFocus), true, focusButton_.getToggleState());
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&moreButton_),
                            [safe = juce::Component::SafePointer<VoiceRow>(this)](int result) {
                                if (safe == nullptr) {
@@ -247,8 +246,6 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
                                    safe->varyButton_.triggerClick();
                                } else if (result == 2) {
                                    safe->duplicateButton_.triggerClick();
-                               } else if (result == 3) {
-                                   safe->focusButton_.triggerClick();
                                }
                            });
     };
@@ -542,16 +539,17 @@ void VoiceRow::filesDropped(const juce::StringArray& files, int, int) {
 }
 
 void VoiceRow::resized() {
-    // A lane: the strip on the left (name, the three actions of every voice, the grip) and the roll; the rarer actions
-    // (Variation, Duplicate, Focus) are in the menu of the strip (D-252).
+    // A lane: the strip on the left (name, the actions of every voice, the grip) and the roll; the rarer actions
+    // (Variation, Duplicate) are in the menu of the strip, Focus stays outside (D-252, D-253).
     auto area = getLocalBounds().reduced(12, 2);
     constexpr int kStripWidth = 180;
     if (collapsed_) {
-        auto strip = area.removeFromLeft(kStripWidth + 8 + 120);
-        nameLabel_.setBounds(strip.removeFromLeft(90));
-        muteButton_.setBounds(strip.removeFromLeft(64).reduced(0, 4));
-        lockButton_.setBounds(strip.removeFromLeft(74).reduced(0, 4));
+        auto strip = area.removeFromLeft(kCollapsedStripWidth);
+        nameLabel_.setBounds(strip.removeFromLeft(80));
+        muteButton_.setBounds(strip.removeFromLeft(60).reduced(0, 4));
+        lockButton_.setBounds(strip.removeFromLeft(70).reduced(0, 4));
         renewButton_.setBounds(strip.removeFromLeft(44).reduced(2, 4));
+        focusButton_.setBounds(strip.removeFromLeft(64).reduced(2, 4));
         moreButton_.setBounds(strip.removeFromLeft(32).reduced(2, 4));
         drag_.setBounds(area.removeFromLeft(60).withHeight(area.getHeight()));
         roll_.setBounds({});
@@ -566,10 +564,12 @@ void VoiceRow::resized() {
     nameLabel_.setBounds(head);
     left.removeFromTop(4);
     auto actions = left.removeFromTop(28);
-    const int third = actions.getWidth() / 3;
-    muteButton_.setBounds(actions.removeFromLeft(third));
-    lockButton_.setBounds(actions.removeFromLeft(third));
-    renewButton_.setBounds(actions);
+    muteButton_.setBounds(actions.removeFromLeft(actions.getWidth() / 2));
+    lockButton_.setBounds(actions);
+    left.removeFromTop(4);
+    actions = left.removeFromTop(28);
+    renewButton_.setBounds(actions.removeFromLeft(actions.getWidth() / 2));
+    focusButton_.setBounds(actions);
     drag_.setBounds(left.removeFromBottom(40));
     roll_.setBounds(area);
     // The groove controls sit in the title strip of the roll, at its right end (the name stands at the left).
@@ -585,7 +585,7 @@ void VoiceRow::paint(juce::Graphics& g) {
     // Flat: the strip is a tonal surface, the roll paints its own.
     auto area = getLocalBounds().reduced(12, 2);
     g.setColour(juce::Colour(MidiMaidLookAndFeel::kSurface));
-    g.fillRoundedRectangle(area.removeFromLeft(collapsed_ ? 180 + 8 + 120 : 180).toFloat(), 6.0f);
+    g.fillRoundedRectangle(area.removeFromLeft(collapsed_ ? kCollapsedStripWidth : 180).toFloat(), 6.0f);
 }
 
 SlotButton::SlotButton(int slot) : slot_(slot) {}
