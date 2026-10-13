@@ -234,6 +234,9 @@ namespace mm::core::text {
     X(kReferencesSetFavorites, "references.set.favorites")                                                         \
     X(kReferencesRoleUnsure, "references.roleUnsure")                                                              \
     X(kReferencesSummaryUnsure, "references.summaryUnsure")                                                        \
+    X(kReferencesProfile, "references.profile")                                                                    \
+    X(kReferencesProfileTooSmall, "references.profileTooSmall")                                                    \
+    X(kReferencesProfileDensity, "references.profileDensity")                                                      \
     X(kReferencesSetNew, "references.set.new")                                                                     \
     X(kReferencesSetRename, "references.set.rename")                                                               \
     X(kReferencesSetDelete, "references.set.delete")                                                               \

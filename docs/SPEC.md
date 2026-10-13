@@ -527,7 +527,7 @@ nach dem eigenen Sound klingt statt nach dem Durchschnitt.
   zugeordnet (Bass, Melodie, Akkorde, Drums); Tonart- und Skalenerkennung; Akkordfolgen fließen in den
   Progressions-Generator; KI-Beispiele aus dem Set; Kopierschutz; Set-ID pro Pattern
 - **[v1.1]:** mehrere benannte Sets (umgesetzt, D-238), automatisches Set „Favoriten“ (umgesetzt, D-238), automatische Rollen-Erkennung (umgesetzt, D-239),
-  Motiv-Zellen, Rhythmus-Statistik, Profil pro Set mit Regler „Persönlich“ und Bewertungskriterium
+  Motiv-Zellen, Rhythmus-Statistik (Analyse umgesetzt, D-240), Profil pro Set mit Regler „Persönlich“ und Bewertungskriterium
   „Nähe zum Set“, Profil-Schnappschuss
 Die folgenden Unterpunkte beschreiben den Zielzustand nach v1.1.
 

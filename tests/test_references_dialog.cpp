@@ -375,3 +375,30 @@ TEST_CASE("an unsure role is marked in the row and counted in the summary", "[re
     env.store.setRole("peak_time", unsure->id, TrackRole::Melody);
     CHECK(pumpUntil([&] { return !env.text("summary").contains("unsicher"); }));
 }
+
+TEST_CASE("the view shows the profile of the set once it is large enough", "[references-dialog][profile]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    CHECK(env.text("profile").isEmpty()); // nothing in the set
+    std::vector<juce::File> files;
+    for (int i = 0; i < 3; ++i) {
+        files.push_back(env.data.write("b" + juce::String(i) + ".mid", bassFile(i)));
+    }
+    env.importAndWait(files);
+    CHECK(env.text("profile") == "Das Profil wirkt ab 5 aktiven Einträgen.");
+    files.clear();
+    for (int i = 3; i < 5; ++i) {
+        files.push_back(env.data.write("b" + juce::String(i) + ".mid", bassFile(i)));
+    }
+    env.importAndWait(files);
+    const auto text = env.text("profile");
+    CHECK(text.startsWith("Profil: häufigste Progression "));
+    CHECK(text.contains("Dichte Bass 4.0, Melodie 0.0 Noten pro Takt"));
+    CHECK(text.contains("Skala "));
+    CHECK(text.contains(" %"));
+    CHECK(text.contains("Motiv-Zellen"));
+    // switching an item off takes the profile away again
+    const auto items = env.store.get("peak_time").items;
+    env.store.setActive("peak_time", items[0].id, false);
+    CHECK(pumpUntil([&] { return env.text("profile") == "Das Profil wirkt ab 5 aktiven Einträgen."; }));
+}
