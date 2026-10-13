@@ -127,6 +127,48 @@ void addRatchets(Pattern& pattern, const StyleProfile& style, int energyPct, uin
     }
 }
 
+/// The reference profile a generation works with and the "Persönlich" share that goes with it (SPEC 3.20): the one of the
+/// request, else the snapshot of `pattern` when a variation works on it, else none.
+struct Resolved {
+    std::optional<SetProfile> snapshot; ///< owns the profile read from a pattern
+    const SetProfile* profile = nullptr;
+    int personalPct = 50;
+};
+
+Resolved resolve(const GenerationRequest& request, const Pattern* pattern) {
+    Resolved resolved;
+    resolved.personalPct = request.settings.personalPct;
+    if (request.profile && request.profile->valid) {
+        resolved.profile = &*request.profile;
+    } else if (pattern != nullptr && !pattern->info.profile.empty()) {
+        resolved.snapshot = setProfileFromJson(pattern->info.profile);
+        if (resolved.snapshot) {
+            resolved.profile = &*resolved.snapshot;
+            resolved.personalPct = pattern->info.personalPct;
+        }
+    }
+    return resolved;
+}
+
+/// The settings the generators get: those of the request with the profile (non-owning, `resolved` must outlive them).
+ArchetypeSettings settingsOf(const GenerationRequest& request, const Resolved& resolved) {
+    ArchetypeSettings settings = request.settings;
+    settings.profile = resolved.profile;
+    settings.personalPct = resolved.personalPct;
+    return settings;
+}
+
+/// The style a generation works with (SPEC 3.20, 3.8): the base style moved towards the profile, then with the chromatic
+/// share of the request, else that of `pattern`, else the style's.
+StyleProfile styleFor(const StyleProfile& base, const GenerationRequest& request, const Pattern* pattern,
+                      const Resolved& resolved) {
+    const StyleProfile moved =
+        resolved.profile != nullptr ? personalizeStyle(base, *resolved.profile, resolved.personalPct) : base;
+    const int chromatic =
+        request.settings.chromaticPct >= 0 ? request.settings.chromaticPct : (pattern != nullptr ? pattern->info.chromaticPct : -1);
+    return withChromatic(moved, chromatic);
+}
+
 /// One candidate around the locked voices of `current` (a pure function of `seed`, like `generateCandidate`): harmony,
 /// length, form plan, kick grid and locked voices stay; the other voices are generated again. A candidate that cannot
 /// be generated is an empty pattern without archetypes, which the hard check rejects.
@@ -135,6 +177,8 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
     if (request.cancel != nullptr && request.cancel->load(std::memory_order_relaxed)) {
         return makeEmptyPattern(current.lengthBars, style.id);
     }
+    const Resolved resolved = resolve(request, nullptr);
+    const ArchetypeSettings settings = settingsOf(request, resolved);
     Pcg32 rng = Pcg32::fromSeed(seed);
     Pattern pattern = current;
     std::vector<bool> keep;
@@ -156,7 +200,7 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
     const auto failed = [&] { return makeEmptyPattern(current.lengthBars, style.id); };
     if (pattern.phrases.size() <= 1) {
         for (const size_t index : generationOrder(pattern)) {
-            if (!keep[index] && !fillVoice(pattern, index, style, request.settings, rng)) {
+            if (!keep[index] && !fillVoice(pattern, index, style, settings, rng)) {
                 return failed();
             }
         }
@@ -165,18 +209,18 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
             for (size_t i = 0; i < keep.size(); ++i) {
                 varies[i] = !keep[i];
             }
-            applyTurnaround(pattern, pattern.phrases[0], request.settings.energyPct,
+            applyTurnaround(pattern, pattern.phrases[0], settings.energyPct,
                             phraseSeed(seed, pattern.phrases[0].role), varies);
         }
     } else {
         std::vector<std::string> archetypes(pattern.voices.size());
         for (const size_t index : generationOrder(pattern)) {
             archetypes[index] = keep[index] ? pattern.voices[index].archetypeId
-                                            : resolveArchetype(pattern.voices[index], style, request.settings.energyPct,
-                                                               rng, request.settings.creativityPct);
+                                            : resolveArchetype(pattern.voices[index], style, settings.energyPct,
+                                                               rng, settings.creativityPct);
         }
         for (const Phrase& phrase : pattern.phrases) {
-            const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, request.settings,
+            const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, settings,
                                                    phraseSeed(seed, phrase.role), keep);
             if (!notes.has_value()) {
                 return failed();
@@ -194,21 +238,21 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
         }
     }
     restorePartialLocks();
-    addRatchets(pattern, style, request.settings.energyPct, seed, 0, pattern.lengthBars, keep);
+    addRatchets(pattern, style, settings.energyPct, seed, 0, pattern.lengthBars, keep);
     applyConstraints(pattern, constraintSettingsFor(pattern, style));
     pattern.info.source = "algorithm";
     pattern.info.seed = request.seed;
     pattern.info.winnerSeed = seed;
     pattern.info.styleProfileVersion = style.version;
-    pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
-    pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
-    pattern.info.chromaticPct = request.settings.chromaticPct < 0
+    pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(settings.creativityPct, 0, 100));
+    pattern.info.energyPct = static_cast<uint8_t>(std::clamp(settings.energyPct, 0, 100));
+    pattern.info.chromaticPct = settings.chromaticPct < 0
                                     ? int16_t{-1}
-                                    : static_cast<int16_t>(std::min(request.settings.chromaticPct, 100));
+                                    : static_cast<int16_t>(std::min(settings.chromaticPct, 100));
     pattern.info.referenceSetId = request.referenceSetId;
     if (request.profile && request.profile->valid) { // the snapshot of what the style was moved towards (SPEC 3.20)
         pattern.info.profile = setProfileToJson(*request.profile);
-        pattern.info.personalPct = static_cast<uint8_t>(std::clamp(request.settings.personalPct, 0, 100));
+        pattern.info.personalPct = static_cast<uint8_t>(std::clamp(settings.personalPct, 0, 100));
     }
     return pattern;
 }
@@ -219,6 +263,8 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
     if (request.cancel != nullptr && request.cancel->load(std::memory_order_relaxed)) {
         return makeEmptyPattern(request.lengthBars, style.id); // no archetype: never a valid candidate
     }
+    const Resolved resolved = resolve(request, nullptr);
+    const ArchetypeSettings settings = settingsOf(request, resolved);
     Pcg32 rng = Pcg32::fromSeed(seed);
     Pattern pattern = makeEmptyPattern(request.lengthBars, style.id);
     pattern.voicing.chordMemory = style.melody.chordMemory; // the style decides (STYLES.md 1.10, D-229)
@@ -233,10 +279,10 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
         }
     }
     applyHarmony(pattern, style, rng, request.root, request.scaleId,
-                 scaledProgressions(!request.personalProgressions.empty() || !request.profile
+                 scaledProgressions(!request.personalProgressions.empty() || !request.profile || !request.profile->valid
                                         ? request.personalProgressions
                                         : request.profile->progressions,
-                                    request.settings.personalPct));
+                                    settings.personalPct));
     applyStyleGroove(pattern, style);
     for (Track& track : pattern.voices) {
         setManualArchetype(track, track.role == VoiceRole::Bass ? request.bassArchetype : request.melodyArchetype);
@@ -246,23 +292,23 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
         phrases = *request.formPlan;
     }
     if (!request.formPlan.has_value() || !isValidFormPlan(request.lengthBars, *request.formPlan)) {
-        assignTurnarounds(phrases, request.settings.energyPct, seed);
+        assignTurnarounds(phrases, settings.energyPct, seed);
     }
     pattern.phrases = phrases;
     if (phrases.size() == 1) {
         for (const size_t index : generationOrder(pattern)) {
-            fillVoice(pattern, index, style, request.settings, rng);
+            fillVoice(pattern, index, style, settings, rng);
         }
-        applyTurnaround(pattern, phrases[0], request.settings.energyPct, phraseSeed(seed, phrases[0].role));
+        applyTurnaround(pattern, phrases[0], settings.energyPct, phraseSeed(seed, phrases[0].role));
     } else {
         std::vector<std::string> archetypes(pattern.voices.size());
         for (const size_t index : generationOrder(pattern)) {
-            archetypes[index] = resolveArchetype(pattern.voices[index], style, request.settings.energyPct, rng,
-                                                 request.settings.creativityPct);
+            archetypes[index] = resolveArchetype(pattern.voices[index], style, settings.energyPct, rng,
+                                                 settings.creativityPct);
         }
         std::vector<bool> complete(pattern.voices.size(), true);
         for (const Phrase& phrase : phrases) {
-            const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, request.settings,
+            const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, settings,
                                                    phraseSeed(seed, phrase.role));
             for (size_t i = 0; i < pattern.voices.size(); ++i) {
                 if (notes.has_value()) {
@@ -278,22 +324,22 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
             }
         }
     }
-    addRatchets(pattern, style, request.settings.energyPct, seed, 0, pattern.lengthBars);
+    addRatchets(pattern, style, settings.energyPct, seed, 0, pattern.lengthBars);
     applyConstraints(pattern, constraintSettingsFor(pattern, style));
 
     pattern.info.source = "algorithm";
     pattern.info.seed = request.seed;
     pattern.info.winnerSeed = seed;
     pattern.info.styleProfileVersion = style.version;
-    pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(request.settings.creativityPct, 0, 100));
-    pattern.info.energyPct = static_cast<uint8_t>(std::clamp(request.settings.energyPct, 0, 100));
-    pattern.info.chromaticPct = request.settings.chromaticPct < 0
+    pattern.info.creativityPct = static_cast<uint8_t>(std::clamp(settings.creativityPct, 0, 100));
+    pattern.info.energyPct = static_cast<uint8_t>(std::clamp(settings.energyPct, 0, 100));
+    pattern.info.chromaticPct = settings.chromaticPct < 0
                                     ? int16_t{-1}
-                                    : static_cast<int16_t>(std::min(request.settings.chromaticPct, 100));
+                                    : static_cast<int16_t>(std::min(settings.chromaticPct, 100));
     pattern.info.referenceSetId = request.referenceSetId;
     if (request.profile && request.profile->valid) { // the snapshot of what the style was moved towards (SPEC 3.20)
         pattern.info.profile = setProfileToJson(*request.profile);
-        pattern.info.personalPct = static_cast<uint8_t>(std::clamp(request.settings.personalPct, 0, 100));
+        pattern.info.personalPct = static_cast<uint8_t>(std::clamp(settings.personalPct, 0, 100));
     }
     return pattern;
 }
@@ -329,40 +375,18 @@ static SelectionResult selectProtected(const GenerationRequest& request, const S
     return result;
 }
 
-namespace {
-
-/// The style a generation works with (SPEC 3.20, 3.8): the base style moved towards the reference profile (the one of the
-/// request, else the snapshot of `pattern` when a variation works on it), then with the chromatic share of the request,
-/// else that of the pattern, else the style's.
-StyleProfile styleFor(const StyleProfile& base, const GenerationRequest& request, const Pattern* pattern) {
-    std::optional<SetProfile> snapshot;
-    const SetProfile* profile = request.profile && request.profile->valid ? &*request.profile : nullptr;
-    int personalPct = request.settings.personalPct;
-    if (profile == nullptr && pattern != nullptr && !pattern->info.profile.empty()) {
-        snapshot = setProfileFromJson(pattern->info.profile);
-        if (snapshot) {
-            profile = &*snapshot;
-            personalPct = pattern->info.personalPct;
-        }
-    }
-    const StyleProfile moved = profile != nullptr ? personalizeStyle(base, *profile, personalPct) : base;
-    const int chromatic =
-        request.settings.chromaticPct >= 0 ? request.settings.chromaticPct : (pattern != nullptr ? pattern->info.chromaticPct : -1);
-    return withChromatic(moved, chromatic);
-}
-
-} // namespace
-
 SelectionResult generatePatternAroundLocks(const StyleProfile& baseStyle, const GenerationRequest& request,
                                            const Pattern& current) {
-    const StyleProfile style = styleFor(baseStyle, request, nullptr);
+    const Resolved resolved = resolve(request, nullptr);
+    const ArchetypeSettings settings = settingsOf(request, resolved);
+    const StyleProfile style = styleFor(baseStyle, request, nullptr, resolved);
     const bool anythingToGenerate = std::any_of(current.voices.begin(), current.voices.end(),
                                                 [](const Track& track) { return !isVoiceLocked(track); });
     if (!anythingToGenerate) {
         return {};
     }
     const auto generate = [&](uint64_t seed) { return generateAroundLocks(style, request, current, seed); };
-    const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
+    const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, settings); };
     // the voices that are generated have an archetype; a locked one may have none (an imported or drawn line); the copy
     // and repetition protection leave locked voices alone
     return selectProtected(
@@ -370,25 +394,31 @@ SelectionResult generatePatternAroundLocks(const StyleProfile& baseStyle, const 
 }
 
 SelectionResult generatePattern(const StyleProfile& baseStyle, const GenerationRequest& request) {
-    const StyleProfile style = styleFor(baseStyle, request, nullptr);
+    const Resolved resolved = resolve(request, nullptr);
+    const ArchetypeSettings settings = settingsOf(request, resolved);
+    const StyleProfile style = styleFor(baseStyle, request, nullptr, resolved);
     const auto generate = [&](uint64_t seed) { return generateCandidate(style, request, seed); };
-    const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
+    const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, settings); };
     // a candidate with a voice that could not be generated (it has no archetype) is never valid
     return selectProtected(request, style, generate, contextFor,
                            [](const Track& track) { return !track.archetypeId.empty(); });
 }
 
 Pattern replayWinner(const StyleProfile& baseStyle, const GenerationRequest& request, uint64_t winnerSeed) {
-    const StyleProfile style = styleFor(baseStyle, request, nullptr);
+    const Resolved resolved = resolve(request, nullptr);
+    const ArchetypeSettings settings = settingsOf(request, resolved);
+    const StyleProfile style = styleFor(baseStyle, request, nullptr, resolved);
     Pattern pattern = generateCandidate(style, request, winnerSeed);
-    pattern.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(pattern, style, request.settings), 0, 100));
+    pattern.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(pattern, style, settings), 0, 100));
     return pattern;
 }
 
 bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& baseStyle, const GenerationRequest& request,
                      uint64_t seed) {
     // the share chosen in the request, else the one the pattern was made with, else the style's (SPEC 3.8)
-    const StyleProfile style = styleFor(baseStyle, request, &pattern);
+    const Resolved resolved = resolve(request, &pattern);
+    const ArchetypeSettings settings = settingsOf(request, resolved);
+    const StyleProfile style = styleFor(baseStyle, request, &pattern, resolved);
     if (voiceIndex >= pattern.voices.size()) {
         return false;
     }
@@ -398,24 +428,26 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& ba
     }
     Pattern next = pattern;
     Pcg32 rng = Pcg32::fromSeed(seed);
-    if (!fillVoice(next, voiceIndex, style, request.settings, rng)) {
+    if (!fillVoice(next, voiceIndex, style, settings, rng)) {
         return false;
     }
     if (hasAnyLock(pattern.voices[voiceIndex])) { // the locked dimensions come back (D-231)
         next.voices[voiceIndex].notes = restoreLocks(pattern.voices[voiceIndex].notes, next.voices[voiceIndex].notes,
                                                      next.voices[voiceIndex].lock);
     }
-    applyRatchets(next, voiceIndex, style.id, request.settings.energyPct, seed, 0, next.lengthBars);
-    applyChances(next, voiceIndex, style, request.settings.energyPct, seed, 0, next.lengthBars);
+    applyRatchets(next, voiceIndex, style.id, settings.energyPct, seed, 0, next.lengthBars);
+    applyChances(next, voiceIndex, style, settings.energyPct, seed, 0, next.lengthBars);
     applyConstraints(next, constraintSettingsFor(next, style));
-    next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));
+    next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, settings), 0, 100));
     pattern = std::move(next);
     return true;
 }
 
 bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& baseStyle, const GenerationRequest& request,
                       uint64_t seed) {
-    const StyleProfile style = styleFor(baseStyle, request, &pattern);
+    const Resolved resolved = resolve(request, &pattern);
+    const ArchetypeSettings settings = settingsOf(request, resolved);
+    const StyleProfile style = styleFor(baseStyle, request, &pattern, resolved);
     if (phraseIndex >= pattern.phrases.size() || pattern.phrases[phraseIndex].locked) {
         return false;
     }
@@ -427,7 +459,7 @@ bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& 
         archetypes.push_back(track.archetypeId);
     }
     const Phrase phrase = pattern.phrases[phraseIndex];
-    const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, request.settings, seed);
+    const auto notes = generatePhraseNotes(pattern, phrase, archetypes, style, settings, seed);
     if (!notes.has_value()) {
         return false;
     }
@@ -460,14 +492,14 @@ bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& 
     for (size_t i = 0; i < next.voices.size(); ++i) {
         const LockFlags& lock = next.voices[i].lock;
         if (!(lock.pitch && lock.rhythm && lock.velocity)) {
-            applyRatchets(next, i, style.id, request.settings.energyPct, seed, phrase.startBar,
+            applyRatchets(next, i, style.id, settings.energyPct, seed, phrase.startBar,
                           phrase.startBar + phrase.lengthBars);
-            applyChances(next, i, style, request.settings.energyPct, seed, phrase.startBar,
+            applyChances(next, i, style, settings.energyPct, seed, phrase.startBar,
                          phrase.startBar + phrase.lengthBars);
         }
     }
     applyConstraints(next, constraintSettingsFor(next, style));
-    next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));
+    next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, settings), 0, 100));
     pattern = std::move(next);
     return true;
 }

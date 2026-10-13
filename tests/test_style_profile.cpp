@@ -376,3 +376,21 @@ TEST_CASE("random changes to a profile never crash and never yield an invalid pr
         }
     }
 }
+
+TEST_CASE("the proximity weight is optional, two when absent, and not negative", "[core][style]") {
+    // the shipped styles name no proximity weight: the default of the profile
+    for (const char* name : {"peak_time", "melodic_techno", "hard_industrial"}) {
+        CHECK(loadShipped(name).quality.proximity == 2);
+    }
+    const auto five = loadWith([](json& d) { d["quality"]["weights"]["proximity"] = 5; });
+    REQUIRE(five.ok());
+    CHECK(five.profile->quality.proximity == 5);
+    const auto zero = loadWith([](json& d) { d["quality"]["weights"]["proximity"] = 0; });
+    REQUIRE(zero.ok());
+    CHECK(zero.profile->quality.proximity == 0);
+    const auto negative = loadWith([](json& d) { d["quality"]["weights"]["proximity"] = -1; });
+    CHECK_FALSE(negative.ok());
+    CHECK(negative.error.find("quality.weights") != std::string::npos);
+    const auto wrong = loadWith([](json& d) { d["quality"]["weights"]["proximity"] = "much"; });
+    CHECK_FALSE(wrong.ok());
+}

@@ -12,6 +12,8 @@
 
 namespace mm::core {
 
+struct SetProfile;
+
 /// Internal part of `core/Archetype`: the melody archetypes (STYLES.md 2-4). Not meant for other modules.
 struct MelodyInput {
     const Pattern& pattern;
@@ -21,6 +23,8 @@ struct MelodyInput {
     const Scale& scale;
     int energyPct = 50;
     int creativityPct = 40;
+    const SetProfile* profile = nullptr; ///< the profile of the reference set (non-owning, D-242)
+    int personalPct = 50;
 };
 
 /// The notes of a melody archetype, sorted by start and pitch, with ids 0 and velocity 100 plus the micro-variation

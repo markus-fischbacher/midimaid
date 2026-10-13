@@ -265,7 +265,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Automatische Rollen-Erkennung mit Konfidenz (D-239)
 - [x] Motiv-Zellen, Rhythmus-Statistik, Profil pro Set, Zusammenfassung (D-240)
 - [x] Regler „Persönlich“ und Profil-Schnappschuss (SPEC §3.20, D-241; Host-Prüfung H90)
-- [ ] Wirkung des Profils: Motiv-Zelle als Start, Rhythmusmuster, Kriterium „Nähe zum Set“ (SPEC §3.20)
+- [x] Wirkung des Profils: Motiv-Zelle als Start, Rhythmusmuster, Kriterium „Nähe zum Set“ (SPEC §3.20, D-242; Host-Prüfung H91)
 - [x] Melodie „mit/gegen Hats“ (SPEC §3.14, D-228)
 
 **Komfort**

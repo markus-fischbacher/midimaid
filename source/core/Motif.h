@@ -100,6 +100,26 @@ std::vector<Motif> buildMotifSequence(const Motif& motif, const MotifRules& rule
 /// Share of blocks that equal the first block, in permille (0 for an empty sequence).
 uint32_t repetitionPermille(const std::vector<Motif>& sequence);
 
+/// A motif from a typical cell of a reference set (SPEC 3.20, v1.1, D-242): the notes on the 16th steps of the cell, the
+/// pitches as the scale steps that come nearest to the intervals of the cell (the first note starts at a degree that is
+/// tried from the anchor outwards), strong steps moved to the nearest chord tone, every length up to the next note (at
+/// most a beat). The whole motif is shifted by scale steps until `isValidMotif` accepts it. `steps` and `intervals` have
+/// the length of the notes (3 to 16), the first interval is 0. nullopt when the cell does not fit `bars` or no shift
+/// gives a valid motif.
+std::optional<Motif> motifFromCell(const std::vector<uint8_t>& steps, const std::vector<int8_t>& intervals, uint8_t bars,
+                                   const MotifRules& rules);
+
+struct SetProfile;
+
+/// The motif a line starts from when a reference set acts (D-242): with a valid profile that has melody cells of the
+/// length (`params.bars`) and the number of notes the line wants (`params.minNotes - 1` to `params.maxNotes + 2`, at least
+/// 3), and a draw of `personalPct * 60 / 100` percent, a cell chosen by its count becomes a motif (`motifFromCell`) and is
+/// varied once (a shifted note or a new ending), so it is never the cell as it is. Up to three cells are tried. nullopt:
+/// the caller generates a motif. The draw is made only when there are such cells, so without a set the random sequence
+/// is the one it always was.
+std::optional<Motif> motifFromProfile(const MotifParams& params, const MotifRules& rules, const SetProfile* profile,
+                                      int personalPct, Pcg32& rng);
+
 /// Notes of a motif placed at `startTick`. The scale steps shift by `stepShift` (to follow a chord); pitches outside
 /// the range move by octaves into it. Note ids stay 0, the caller allocates them. Velocity is 100 plus the offset.
 std::vector<Note> realizeMotif(const Motif& motif, const MotifRules& rules, int stepShift, uint32_t startTick);
