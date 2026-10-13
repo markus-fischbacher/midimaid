@@ -7136,3 +7136,81 @@ TEST_CASE("the hub shows the reference sets of its style and switches the active
     std::unique_ptr<juce::AudioProcessorEditor> voiceEditor(voice.processor.createEditor());
     CHECK_FALSE(child<juce::ComboBox>(*voiceEditor, "referenceSet")->isVisible());
 }
+
+// --- the "Persönlich" setting (SPEC 3.20, D-241) ----------------------------------------------------------------
+
+TEST_CASE("the personal setting is saved with the instance, only when changed, and kept in range", "[group-wiring][personal]") {
+    Quiet quiet;
+    Instance source("Source");
+    CHECK(source.processor.instanceSettings().generation.personalPct == 50);
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("genPersonal")); // states of before stay as they were
+    auto settings = source.processor.instanceSettings();
+    settings.generation.personalPct = 80;
+    source.processor.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.processor.instanceSettings().generation.personalPct == 80);
+    settings.generation.personalPct = 0; // 0 % is a choice
+    source.processor.setInstanceSettings(settings);
+    CHECK(source.processor.instanceSettings().generation.personalPct == 0);
+    juce::MemoryBlock zero;
+    source.processor.getStateInformation(zero);
+    target.processor.setStateInformation(zero.getData(), static_cast<int>(zero.getSize()));
+    CHECK(target.processor.instanceSettings().generation.personalPct == 0);
+    settings.generation.personalPct = 400;
+    source.processor.setInstanceSettings(settings);
+    CHECK(source.processor.instanceSettings().generation.personalPct == 100);
+    settings.generation.personalPct = -7;
+    source.processor.setInstanceSettings(settings);
+    CHECK(source.processor.instanceSettings().generation.personalPct == 0);
+    // a state without the attribute loads as 50
+    target.processor.setStateInformation(standard.getData(), static_cast<int>(standard.getSize()));
+    CHECK(target.processor.instanceSettings().generation.personalPct == 50);
+}
+
+TEST_CASE("the personal slider is an expert control that follows the instance", "[group-wiring][personal][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    auto* slider = child<juce::Slider>(*editor, "personal");
+    REQUIRE(slider != nullptr);
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK_FALSE(slider->isVisible()); // basic level
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(true, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK(slider->isVisible());
+    CHECK(slider->getValue() == 50.0);
+    CHECK(slider->getTextFromValue(35.0) == "35 %");
+    CHECK(editor->getLocalBounds().contains(slider->getBounds()));
+    for (auto* other : editor->getChildren()) {
+        if (other != slider && other->isVisible() && other->getWidth() > 0 &&
+            dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+            INFO(other->getComponentID().toStdString());
+            CHECK_FALSE(slider->getBounds().intersects(other->getBounds()));
+        }
+    }
+    // five columns share the row: the slider and the hat mode both have room
+    CHECK(slider->getWidth() > 60);
+    CHECK(child<juce::ComboBox>(*editor, "hatMode")->getWidth() > 60);
+    CHECK(slider->getRight() <= child<juce::ComboBox>(*editor, "hatMode")->getX());
+    slider->setValue(80.0, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().generation.personalPct == 80);
+    slider->setValue(0.0, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().generation.personalPct == 0);
+    auto settings = hub.processor.instanceSettings();
+    settings.generation.personalPct = 20;
+    hub.processor.setInstanceSettings(settings);
+    CHECK(waitFor([&] { return slider->getValue() == 20.0; }));
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+}

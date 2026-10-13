@@ -38,6 +38,7 @@ struct GenerationSettings {
     std::string prompt; ///< what the musician asks the AI for (SPEC 3.1); offline: ignored
     std::optional<int> chromaticPct{}; ///< 0 to 100: the chromatic share of SPEC 3.8; none: the style's
     HatMode hatMode = HatMode::Free;   ///< melody rhythm relative to the hats of a drum reference (SPEC 3.14, D-228)
+    int personalPct = 50;              ///< 0 to 100: how strongly the reference set acts (SPEC 3.20, v1.1, D-241)
 
     bool operator==(const GenerationSettings&) const = default;
 };

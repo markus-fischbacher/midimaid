@@ -7,7 +7,9 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace mm::core {
@@ -85,5 +87,39 @@ struct ProfileFacts {
     size_t cells = 0;
 };
 ProfileFacts factsOf(const SetProfile& profile);
+
+/// ---- the snapshot (SPEC 3.20, 4.3) ----
+
+/// The profile as compact JSON text: what a pattern keeps of the set it was made with, so that a variation or a replay
+/// uses the same profile after the set has changed. Only a valid profile is written (an invalid one gives "").
+std::string setProfileToJson(const SetProfile& profile);
+/// nullopt for text that is not such a document (bad syntax, wrong types, values out of range, unknown scales or
+/// chords, a cell that does not fit its bars); never throws. A valid result has `valid == true`.
+std::optional<SetProfile> setProfileFromJson(std::string_view text);
+
+/// ---- the effect on the style (SPEC 3.20, D-241) ----
+
+/// The largest change the set makes to a weight of the style profile, in permille of the weight: 50 %.
+constexpr int kMaxPersonalDeviationPermille = 500;
+/// `personalizeStyle` returns the weights it changes in this multiple of the style's (all of one list alike).
+constexpr int kWeightResolution = 100;
+/// The chromatic default of a style moves by at most half of itself, but at least this many percentage points can
+/// be reached (a style without chromatics would never move otherwise).
+constexpr int kMinChromaticDeviationPercent = 5;
+
+/// The style profile moved towards the set (`personalPct` 0 to 100; 0 or an invalid profile changes nothing):
+/// - **scales:** the weight of every scale of the style times the ratio of its share in the set to its share in the
+///   style, cut to 50 % to 150 %, then moved by `personalPct` percent of the way (so 50 gives at most 25 %);
+/// - **archetypes:** the same for the weights of the bass and melody archetypes, per density class (calm, neutral, dense),
+///   with the shares of the classes of the lines of the set (a role with no line in the set stays as it is);
+/// - **chromatic default:** the share of the set, moved by `personalPct` percent of the way, by at most half of the
+///   style's value (at least `kMinChromaticDeviationPercent` points).
+/// No weight falls to 0 (a scale or archetype that the style has stays possible). Pure integer arithmetic.
+StyleProfile personalizeStyle(const StyleProfile& style, const SetProfile& profile, int personalPct);
+
+/// The personal progressions with their weights scaled by `personalPct` / 50 (50 leaves them as they are, 100 doubles
+/// them, 0 drops them); the generator still cuts their sum to that of the style's own progressions.
+std::vector<WeightedProgression> scaledProgressions(const std::vector<WeightedProgression>& progressions,
+                                                    int personalPct);
 
 } // namespace mm::core

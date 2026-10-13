@@ -45,6 +45,7 @@ namespace mm::core::text {
     X(kLabelEnergy, "label.energy")                                                                                    \
     X(kLabelCreativity, "label.creativity")                                                                            \
     X(kLabelChromatic, "label.chromatic")                                                                              \
+    X(kLabelPersonal, "label.personal")                                                                                \
     X(kStartRestart, "start.restart")                                                                                  \
     X(kStartLegato, "start.legato")                                                                                    \
     X(kLabelHatMode, "label.hatMode")                                                                                  \

@@ -1,10 +1,15 @@
 #include "core/MidiFile.h"
+#include "core/PatternGenerator.h"
+#include "core/PatternJson.h"
+#include "core/PatternValidation.h"
 #include "core/ReferenceProfile.h"
 #include "core/SetProfile.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <fstream>
+#include <functional>
+#include <nlohmann/json.hpp>
 #include <sstream>
 
 using namespace mm::core;
@@ -413,4 +418,420 @@ TEST_CASE("intervals of a cell are cut to two octaves", "[set-profile][cells]") 
     const auto cells = motifCellsOf(setOf(items), TrackRole::Bass);
     REQUIRE(cells.size() == 1);
     CHECK(cells[0].intervals == std::vector<int8_t>{0, 24, -15, -20});
+}
+
+// ---- the snapshot and the effect on the style (D-241) ------------------------------------------------------------------
+
+namespace {
+
+/// A valid profile made by hand: the scales, the density classes (calm, neutral, dense in permille) of both roles and the
+/// chromatic share.
+SetProfile handProfile(std::vector<WeightedId> scales, std::array<int, 3> bassClasses, std::array<int, 3> melodyClasses,
+                       int chromaticPermille = 0) {
+    SetProfile profile = profileOf(fiveBass());
+    REQUIRE(profile.valid);
+    profile.scales = std::move(scales);
+    profile.bass.classPermille = bassClasses;
+    profile.melody.items = 3;
+    profile.melody.classPermille = melodyClasses;
+    profile.chromaticPermille = chromaticPermille;
+    return profile;
+}
+
+int weightOf(const std::vector<WeightedId>& weights, const std::string& id) {
+    const auto it = std::find_if(weights.begin(), weights.end(), [&](const WeightedId& w) { return w.id == id; });
+    return it == weights.end() ? -1 : it->weight;
+}
+
+} // namespace
+
+TEST_CASE("the profile is kept as text and read back", "[set-profile][snapshot]") {
+    auto profile = profileOf(fiveBass());
+    REQUIRE(profile.valid);
+    REQUIRE_FALSE(profile.cells.empty());
+    REQUIRE_FALSE(profile.progressions.empty());
+    const auto text = setProfileToJson(profile);
+    REQUIRE_FALSE(text.empty());
+    const auto back = setProfileFromJson(text);
+    REQUIRE(back.has_value());
+    CHECK(*back == profile);
+    CHECK(setProfileToJson(*back) == text); // stable
+    CHECK(text.find('\n') == std::string::npos); // compact
+    // an invalid profile has no text
+    CHECK(setProfileToJson(SetProfile{}).empty());
+    // a profile with cells of both roles and several progressions
+    profile.cells.push_back({TrackRole::Melody, 2, {0, 4, 20}, {0, 2, -3}, 7});
+    profile.progressions.push_back({{Chord{0, ChordQuality::Minor}, Chord{8, ChordQuality::Major}}, 11});
+    CHECK(setProfileFromJson(setProfileToJson(profile)) == profile);
+}
+
+TEST_CASE("text that is no profile is refused", "[set-profile][snapshot]") {
+    const auto good = nlohmann::json::parse(setProfileToJson(profileOf(fiveBass())));
+    for (const char* text : {"", "not json", "[]", "{}", "null", "42", "\"x\""}) {
+        INFO(text);
+        CHECK_FALSE(setProfileFromJson(text).has_value());
+    }
+    const auto broken = [&](const std::function<void(nlohmann::json&)>& change) {
+        auto copy = good;
+        change(copy);
+        return setProfileFromJson(copy.dump()).has_value();
+    };
+    CHECK(broken([](nlohmann::json&) {})); // the good one
+    CHECK_FALSE(broken([](nlohmann::json& j) { j.erase("scales"); }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j.erase("cells"); }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j.erase("progressions"); }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["items"] = 4; })); // fewer than five items: no profile
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["items"] = "5"; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["chromatic"] = 1001; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["bass"]["steps"][3] = 1001; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["bass"]["steps"].erase(j["bass"]["steps"].begin()); }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["bass"]["classes"][0] = -1; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["melody"] = 5; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["scales"][0][0] = "klingon"; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["scales"][0][1] = 0; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["scales"].push_back(j["scales"][0]); })); // a scale twice
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["role"] = "drums"; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["bars"] = 3; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["count"] = 0; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["steps"] = nlohmann::json::array({0, 4}); })); // fewer than 3 notes
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["steps"][1] = 0; }));  // not ascending
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["steps"][3] = 16; })); // outside the bar
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["intervals"][1] = 25; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["intervals"][0] = 2; })); // the first is 0
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["cells"][0]["intervals"].push_back(0); }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["progressions"][0]["weight"] = 0; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["progressions"][0]["chords"] = nlohmann::json::array({"i"}); }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["progressions"][0]["chords"][0] = "H#9"; }));
+    CHECK_FALSE(broken([](nlohmann::json& j) { j["progressions"][0]["chords"][0] = 7; }));
+}
+
+TEST_CASE("a profile without effect changes nothing", "[set-profile][personal]") {
+    const auto style = shipped();
+    const auto profile = handProfile({{"phrygian", 100}}, {1000, 0, 0}, {0, 0, 1000}, 400);
+    CHECK(personalizeStyle(style, profile, 0) == style);
+    CHECK(personalizeStyle(style, SetProfile{}, 100) == style);
+    auto invalid = profile;
+    invalid.valid = false;
+    CHECK(personalizeStyle(style, invalid, 100) == style);
+}
+
+TEST_CASE("the scales of the style move towards the set, by at most half", "[set-profile][personal]") {
+    const auto style = shipped(); // natural_minor 3, phrygian 2, dorian 2, minor_pentatonic 1
+    const auto profile = handProfile({{"phrygian", 100}}, {0, 1000, 0}, {0, 1000, 0});
+    const auto full = personalizeStyle(style, profile, 100);
+    // the set has only phrygian: its share is far above the style's (25 % to 100 %), the others fall to nothing
+    REQUIRE(full.scales.size() == style.scales.size());
+    CHECK(weightOf(full.scales, "phrygian") == 2 * kWeightResolution * 3 / 2);        // +50 %
+    CHECK(weightOf(full.scales, "natural_minor") == 3 * kWeightResolution / 2);        // -50 %
+    CHECK(weightOf(full.scales, "dorian") == 2 * kWeightResolution / 2);
+    CHECK(weightOf(full.scales, "minor_pentatonic") == 1 * kWeightResolution / 2);
+    // half the way at 50: at most 25 %
+    const auto half = personalizeStyle(style, profile, 50);
+    CHECK(weightOf(half.scales, "phrygian") == 2 * kWeightResolution * 5 / 4);
+    CHECK(weightOf(half.scales, "natural_minor") == 3 * kWeightResolution * 3 / 4);
+    // the ids and the order stay
+    for (size_t i = 0; i < style.scales.size(); ++i) {
+        CHECK(full.scales[i].id == style.scales[i].id);
+    }
+    // a set that is like the style changes the ratios not at all
+    const auto alike = handProfile({{"natural_minor", 3}, {"phrygian", 2}, {"dorian", 2}, {"minor_pentatonic", 1}}, {0, 1000, 0}, {0, 1000, 0});
+    const auto same = personalizeStyle(style, alike, 100);
+    for (size_t i = 0; i < style.scales.size(); ++i) {
+        CHECK(same.scales[i].weight == style.scales[i].weight * kWeightResolution);
+    }
+    // scales of the set that the style does not have are of no interest; none in common: unchanged
+    const auto foreign = handProfile({{"locrian", 100}}, {0, 1000, 0}, {0, 1000, 0});
+    const auto untouched = personalizeStyle(style, foreign, 100);
+    for (size_t i = 0; i < style.scales.size(); ++i) {
+        CHECK(untouched.scales[i].weight == style.scales[i].weight);
+    }
+    // no weight falls to 0
+    for (const auto& scale : full.scales) {
+        CHECK(scale.weight >= 1);
+    }
+}
+
+TEST_CASE("the archetypes move by the density classes of the set", "[set-profile][personal]") {
+    const auto style = shipped(); // bass: rolling16 4 (dense), offbeat 3 and gallop 3 (neutral)
+    // a set of only dense bass lines: the dense archetype gains, the neutral ones lose
+    const auto dense = handProfile({{"natural_minor", 1}}, {0, 0, 1000}, {0, 1000, 0});
+    const auto moved = personalizeStyle(style, dense, 100);
+    CHECK(weightOf(moved.bass.archetypes, "rolling16") == 4 * kWeightResolution * 3 / 2);
+    CHECK(weightOf(moved.bass.archetypes, "offbeat") == 3 * kWeightResolution / 2);
+    CHECK(weightOf(moved.bass.archetypes, "gallop") == 3 * kWeightResolution / 2);
+    // melody: a set of only neutral lines: hypnotic_motif, stabs and polymeter_seq (neutral, 10 of 13 in the style: 77 %)
+    // gain 100 / 77 = 130 %, arp and acid_siren (dense, 3 of 13) lose half
+    CHECK(weightOf(moved.melody.archetypes, "hypnotic_motif") == 4 * kWeightResolution * 13 / 10);
+    CHECK(weightOf(moved.melody.archetypes, "stabs") == 3 * kWeightResolution * 13 / 10);
+    CHECK(weightOf(moved.melody.archetypes, "arp") == 2 * kWeightResolution / 2);
+    CHECK(weightOf(moved.melody.archetypes, "acid_siren") == 1 * kWeightResolution / 2);
+    // the half way
+    const auto half = personalizeStyle(style, dense, 50);
+    CHECK(weightOf(half.bass.archetypes, "rolling16") == 4 * kWeightResolution * 5 / 4);
+    // a role with no line in the set stays as it is
+    auto noMelody = dense;
+    noMelody.melody = RoleStats{};
+    const auto kept = personalizeStyle(style, noMelody, 100);
+    CHECK(kept.melody.archetypes == style.melody.archetypes);
+    CHECK(kept.bass.archetypes != style.bass.archetypes);
+    // the ids, their order and the rest of the profile stay
+    CHECK(moved.bass.archetypes.size() == style.bass.archetypes.size());
+    CHECK(moved.bass.archetypes[0].id == "rolling16");
+    CHECK(moved.harmony == style.harmony);
+    CHECK(moved.bass.range == style.bass.range);
+}
+
+TEST_CASE("the chromatic default moves towards the set, by at most half of itself", "[set-profile][personal]") {
+    auto style = shipped();
+    style.chromaticDefaultPercent = 20;
+    // a set with 80 % chromatic: the way is long, the limit is half of 20: 10
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 800), 100).chromaticDefaultPercent == 30);
+    // half the way at 50 %, cut by the limit: 60 * 50 / 100 = 30 -> 10
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 800), 50).chromaticDefaultPercent == 30);
+    // a set with 30 %: 10 points of the way, at 50 % five
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 300), 100).chromaticDefaultPercent == 30);
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 300), 50).chromaticDefaultPercent == 25);
+    // downwards
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 0), 100).chromaticDefaultPercent == 10);
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 150), 100).chromaticDefaultPercent == 15);
+    // the share of the set is rounded to whole percent: 45.5 % is 46
+    auto rounded = style;
+    rounded.chromaticDefaultPercent = 40;
+    CHECK(personalizeStyle(rounded, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 455), 100).chromaticDefaultPercent == 46);
+    CHECK(personalizeStyle(rounded, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 454), 100).chromaticDefaultPercent == 45);
+    // a style without chromatics can still move, by the minimum of five points
+    style.chromaticDefaultPercent = 0;
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 900), 100).chromaticDefaultPercent == 5);
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 20), 100).chromaticDefaultPercent == 2);
+    // never outside 0 to 100
+    style.chromaticDefaultPercent = 100;
+    CHECK(personalizeStyle(style, handProfile({{"natural_minor", 1}}, {0, 1000, 0}, {0, 1000, 0}, 1000), 100).chromaticDefaultPercent == 100);
+}
+
+TEST_CASE("the personal progressions are scaled by the setting", "[set-profile][personal]") {
+    const std::vector<WeightedProgression> list{{{Chord{0, ChordQuality::Minor}, Chord{8, ChordQuality::Major}}, 10},
+                                                {{Chord{0, ChordQuality::Minor}, Chord{10, ChordQuality::Major}}, 1}};
+    CHECK(scaledProgressions(list, 50) == list);
+    const auto doubled = scaledProgressions(list, 100);
+    REQUIRE(doubled.size() == 2);
+    CHECK(doubled[0].weight == 20);
+    CHECK(doubled[1].weight == 2);
+    CHECK(scaledProgressions(list, 0).empty());
+    const auto low = scaledProgressions(list, 4); // 10 * 4 / 50 = 0: dropped; 1 * 4 / 50 = 0: dropped
+    CHECK(low.empty());
+    const auto some = scaledProgressions(list, 10);
+    REQUIRE(some.size() == 1);
+    CHECK(some[0].weight == 2);
+    CHECK(scaledProgressions(list, 500) == scaledProgressions(list, 100)); // cut to 100
+    CHECK(scaledProgressions({}, 50).empty());
+}
+
+// ---- the profile in a generation ------------------------------------------------------------------------------------------
+
+namespace {
+
+GenerationRequest requestWith(const std::optional<SetProfile>& profile, int personalPct = 50, uint64_t seed = 31) {
+    GenerationRequest request;
+    request.lengthBars = 4;
+    request.seed = seed;
+    request.settings.personalPct = personalPct;
+    request.profile = profile;
+    return request;
+}
+
+/// A profile that only wants phrygian, dense bass lines and a lot of chromatics.
+SetProfile phrygianProfile() {
+    return handProfile({{"phrygian", 100}}, {0, 0, 1000}, {0, 0, 1000}, 600);
+}
+
+} // namespace
+
+TEST_CASE("a pattern keeps the profile it was made with and the setting", "[set-profile][generation]") {
+    const auto style = shipped();
+    const auto profile = phrygianProfile();
+    const auto result = generatePattern(style, requestWith(profile, 70));
+    REQUIRE(result.success);
+    CHECK(result.pattern.info.profile == setProfileToJson(profile));
+    CHECK(result.pattern.info.personalPct == 70);
+    CHECK(validatePattern(result.pattern).empty());
+    // without a profile (a set that is too small) the pattern has none, as before
+    const auto plain = generatePattern(style, requestWith(std::nullopt));
+    REQUIRE(plain.success);
+    CHECK(plain.pattern.info.profile.empty());
+    CHECK(plain.pattern.info.personalPct == 50);
+    // an invalid profile is as good as none
+    const auto invalid = generatePattern(style, requestWith(SetProfile{}));
+    REQUIRE(invalid.success);
+    CHECK(invalid.pattern.info.profile.empty());
+    CHECK(invalid.pattern == plain.pattern);
+    // a candidate carries it too (the winner is one of them) and a replay of the winner is the pattern
+    const auto replay = replayWinner(style, requestWith(profile, 70), result.pattern.info.winnerSeed);
+    CHECK(replay.voices == result.pattern.voices);
+    CHECK(replay.info.profile == result.pattern.info.profile);
+}
+
+TEST_CASE("the profile changes what is generated, the same request the same pattern", "[set-profile][generation]") {
+    const auto style = shipped();
+    const auto profile = phrygianProfile();
+    const auto a = generatePattern(style, requestWith(profile, 100));
+    const auto b = generatePattern(style, requestWith(profile, 100));
+    REQUIRE((a.success && b.success));
+    CHECK(a.pattern == b.pattern); // deterministic
+    // over several seeds the personal results are not all the plain ones
+    int different = 0;
+    for (uint64_t seed = 1; seed <= 12; ++seed) {
+        const auto personal = generatePattern(style, requestWith(profile, 100, seed));
+        const auto plain = generatePattern(style, requestWith(std::nullopt, 100, seed));
+        REQUIRE((personal.success && plain.success));
+        different += personal.pattern.voices != plain.pattern.voices ? 1 : 0;
+    }
+    CHECK(different >= 6);
+    // phrygian is what the set wants: it comes up more often than in plain generation
+    int personalPhrygian = 0;
+    int plainPhrygian = 0;
+    for (uint64_t seed = 1; seed <= 40; ++seed) {
+        auto personal = requestWith(profile, 100, seed);
+        auto plain = requestWith(std::nullopt, 100, seed);
+        const auto p = generatePattern(style, personal);
+        const auto q = generatePattern(style, plain);
+        personalPhrygian += p.success && p.pattern.context.scaleId == "phrygian" ? 1 : 0;
+        plainPhrygian += q.success && q.pattern.context.scaleId == "phrygian" ? 1 : 0;
+    }
+    CHECK(personalPhrygian > plainPhrygian);
+}
+
+TEST_CASE("with the setting at 0 the set does nothing but is remembered", "[set-profile][generation]") {
+    const auto style = shipped();
+    const auto profile = phrygianProfile();
+    for (uint64_t seed = 1; seed <= 5; ++seed) {
+        const auto zero = generatePattern(style, requestWith(profile, 0, seed));
+        auto plainRequest = requestWith(std::nullopt, 0, seed);
+        const auto plain = generatePattern(style, plainRequest);
+        REQUIRE((zero.success && plain.success));
+        CHECK(zero.pattern.voices == plain.pattern.voices);
+        CHECK(zero.pattern.context == plain.pattern.context);
+        CHECK(zero.pattern.info.personalPct == 0);
+        CHECK_FALSE(zero.pattern.info.profile.empty());
+    }
+}
+
+TEST_CASE("the personal progressions join at 50 and are scaled by the setting", "[set-profile][generation]") {
+    const auto style = shipped();
+    // a profile with one progression the style does not have, very heavy
+    auto profile = phrygianProfile();
+    profile.progressions = {{{Chord{0, ChordQuality::Minor}, Chord{3, ChordQuality::Diminished}}, 100000}};
+    int own100 = 0;
+    int own0 = 0;
+    for (uint64_t seed = 1; seed <= 60; ++seed) {
+        const auto high = generatePattern(style, requestWith(profile, 100, seed));
+        const auto none = generatePattern(style, requestWith(profile, 0, seed));
+        REQUIRE((high.success && none.success));
+        const auto ownChords = [](const Pattern& pattern) {
+            for (const auto& event : pattern.context.progression) {
+                if (event.chord.quality == ChordQuality::Diminished && event.chord.rootOffset == 3) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        own100 += ownChords(high.pattern) ? 1 : 0;
+        own0 += ownChords(none.pattern) ? 1 : 0;
+    }
+    CHECK(own100 > 0);
+    CHECK(own0 == 0); // at 0 the set's progressions are dropped
+}
+
+TEST_CASE("a variation works with the profile of the pattern, not with the set of today", "[set-profile][generation]") {
+    const auto style = shipped();
+    const auto profile = phrygianProfile();
+    const auto made = generatePattern(style, requestWith(profile, 100));
+    REQUIRE(made.success);
+    // the request of a variation carries no profile: the snapshot of the pattern is used
+    auto plainRequest = requestWith(std::nullopt, 20); // not the setting of the pattern: that one is in its snapshot
+    Pattern byFlag = made.pattern;
+    Pattern bySnapshot = made.pattern;
+    REQUIRE(regenerateVoice(bySnapshot, 0, style, plainRequest, 777));
+    auto withProfile = requestWith(profile, 100);
+    const auto withProfile0 = [&] { return requestWith(profile, 100); };
+    REQUIRE(regenerateVoice(byFlag, 0, style, withProfile, 777));
+    CHECK(bySnapshot.voices == byFlag.voices);
+    CHECK(bySnapshot.info.profile == made.pattern.info.profile); // the snapshot stays
+    // more variations: the setting of the snapshot (100), not that of the request (20), decides every time
+    for (uint64_t seed = 1; seed <= 25; ++seed) {
+        Pattern a = made.pattern;
+        Pattern b = made.pattern;
+        for (size_t voice = 0; voice < 2; ++voice) {
+            REQUIRE(regenerateVoice(a, voice, style, plainRequest, seed * 7919));
+            REQUIRE(regenerateVoice(b, voice, style, withProfile0(), seed * 7919));
+        }
+        CHECK(a.voices == b.voices);
+    }
+    // a pattern without a snapshot is regenerated with the style as it is
+    Pattern old = made.pattern;
+    old.info.profile.clear();
+    Pattern oldPlain = old;
+    REQUIRE(regenerateVoice(old, 0, style, plainRequest, 777));
+    REQUIRE(regenerateVoice(oldPlain, 0, style, requestWith(std::nullopt, 100), 777));
+    CHECK(old.voices == oldPlain.voices);
+    // phrases too
+    Pattern phrased = made.pattern;
+    Pattern phrasedByRequest = made.pattern;
+    if (!phrased.phrases.empty()) {
+        const bool a = regeneratePhrase(phrased, 0, style, plainRequest, 5);
+        const bool b = regeneratePhrase(phrasedByRequest, 0, style, withProfile, 5);
+        CHECK(a == b);
+        CHECK(phrased.voices == phrasedByRequest.voices);
+    }
+}
+
+TEST_CASE("the snapshot is saved with the pattern and checked when it is read", "[set-profile][snapshot]") {
+    const auto style = shipped();
+    const auto made = generatePattern(style, requestWith(phrygianProfile(), 65));
+    REQUIRE(made.success);
+    const auto text = patternToString(made.pattern);
+    const auto back = loadPattern(text);
+    REQUIRE(back.ok());
+    CHECK(back.pattern->info.profile == made.pattern.info.profile);
+    CHECK(back.pattern->info.personalPct == 65);
+    CHECK(*back.pattern == made.pattern);
+    // a pattern without a snapshot has no such field (patterns of before stay as they were)
+    const auto plain = generatePattern(style, requestWith(std::nullopt));
+    REQUIRE(plain.success);
+    const auto plainJson = nlohmann::json::parse(patternToString(plain.pattern));
+    CHECK_FALSE(plainJson["info"].contains("profile"));
+    CHECK_FALSE(plainJson["info"].contains("personalPct"));
+    // a snapshot that is no profile is refused, a setting above 100 too
+    auto broken = nlohmann::json::parse(text);
+    broken["info"]["profile"] = nlohmann::json::object({{"items", 2}});
+    CHECK_FALSE(loadPatternJson(broken).ok());
+    broken = nlohmann::json::parse(text);
+    broken["info"]["personalPct"] = 101;
+    CHECK_FALSE(loadPatternJson(broken).ok());
+    broken = nlohmann::json::parse(text);
+    broken["info"]["profile"] = "text";
+    CHECK_FALSE(loadPatternJson(broken).ok());
+    // the pattern itself validates
+    auto direct = made.pattern;
+    direct.info.profile = "{}";
+    CHECK_FALSE(validatePattern(direct).empty());
+    direct.info.profile = made.pattern.info.profile;
+    direct.info.personalPct = 101;
+    CHECK_FALSE(validatePattern(direct).empty());
+}
+
+TEST_CASE("generation around locks moves the style towards the profile and keeps the snapshot too", "[set-profile][generation]") {
+    const auto style = shipped();
+    const auto profile = phrygianProfile();
+    const auto base = generatePattern(style, requestWith(std::nullopt, 100));
+    REQUIRE(base.success);
+    Pattern current = base.pattern;
+    current.voices[0].lock = LockFlags{true, true, true};
+    const auto result = generatePatternAroundLocks(style, requestWith(profile, 90), current);
+    REQUIRE(result.success);
+    CHECK(result.pattern.info.profile == setProfileToJson(profile));
+    CHECK(result.pattern.info.personalPct == 90);
+    // the same request without a profile leaves no snapshot
+    const auto plain = generatePatternAroundLocks(style, requestWith(std::nullopt, 90), current);
+    REQUIRE(plain.success);
+    CHECK(plain.pattern.info.profile.empty());
 }

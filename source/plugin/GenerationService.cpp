@@ -35,6 +35,10 @@ mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atom
     request.settings.energyPct = job.settings.energyPct;
     request.settings.creativityPct = job.settings.creativityPct;
     request.settings.chromaticPct = job.settings.chromaticPct.value_or(-1);
+    request.settings.personalPct = job.settings.personalPct;
+    if (job.references.profile.valid) {
+        request.profile = job.references.profile;
+    }
     request.root = job.settings.root;
     request.scaleId = job.settings.scaleId;
     request.referenceSet = job.references.entries;

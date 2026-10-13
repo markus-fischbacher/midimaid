@@ -153,6 +153,7 @@ liest Tonart, Skala, Rolle (Bass, Melodie, Akkorde, Schlagzeug) und Akkordfolge.
 das *Gewicht* ändern, *Tags* vergeben und *Entfernen*. Es wirkt in dieser Form:
 
 - **Profil:** Ab **5 aktiven Einträgen** zeigt das Fenster das Profil deines Sets: häufigste Progression, Dichte von Bass und Melodie, bevorzugte Skala und die Zahl der typischen **Motiv-Zellen** (Rhythmus- und Intervallfolgen, die mindestens zwei Einträge haben). Es wird immer aus den aktiven Einträgen berechnet.
+- **Persönlich (Experten-Ebene):** Der Regler *Persönlich* (Standard 50 %) bestimmt, wie stark dein aktives Set wirkt, sobald es mindestens fünf aktive Einträge hat: Er verschiebt die Wahl der Skala, der Bass- und Melodie-Typen und der Chromatik um höchstens die Hälfte in Richtung deines Sets und verstärkt oder streicht deine Akkordfolgen (0 % = das Set tut nichts). Jedes Pattern merkt sich das Profil, mit dem es entstand; eine Variation bleibt dabei, auch wenn du das Set später änderst.
 - **Rolle:** MidiMaid schätzt die Rolle jeder Spur (Bass, Melodie, Akkorde, Schlagzeug). Ist es sich nicht sicher, steht in der Zeile orange „Rolle unsicher“ mit Prozent; ändere die Rolle dann in der Auswahl der Zeile, danach gilt sie als sicher.
 - **Sets:** Je Stil kannst du mehrere benannte Sets führen (z. B. „Warehouse“, „Live-Set Berlin“). Oben im Fenster wählst du das Set,
   legst mit dem Namensfeld ein neues an, benennst um oder löschst es. Eine Datei liegt nur einmal in deiner Sammlung und kann in

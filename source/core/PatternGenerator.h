@@ -5,6 +5,7 @@
 #include "core/Pattern.h"
 #include "core/Progression.h"
 #include "core/Quality.h"
+#include "core/SetProfile.h"
 #include "core/StyleProfile.h"
 
 #include <atomic>
@@ -36,6 +37,10 @@ struct GenerationRequest {
     /// The progressions of the musician's own set that join those of the style (SPEC 3.20; empty = none). Used by the
     /// harmony of every candidate, so a replayed winner seed gives the same chords as the generation did.
     std::vector<WeightedProgression> personalProgressions;
+    /// The profile of the active reference set (valid profiles only, SPEC 3.20, v1.1): the style is moved towards it by
+    /// `settings.personalPct` and the pattern keeps it as its snapshot, so a variation or a replay works with the same
+    /// profile after the set has changed.
+    std::optional<SetProfile> profile;
     /// The id of the set the pattern is made with, stored in `info.referenceSetId` (empty = no set).
     std::string referenceSetId;
     /// Optional cancel flag (background jobs). Once set, every further candidate is an empty one that the hard check

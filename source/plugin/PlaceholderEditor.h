@@ -129,7 +129,8 @@ private:
     juce::ComboBox startBox_; // expert level: a new pattern restarts at the switch or continues the position (SPEC 3.4)
     juce::Label hatModeLabel_;
     juce::ComboBox hatModeBox_; // expert level: melody rhythm relative to the hats (SPEC 3.14)
-    juce::Label chromaticLabel_;
+    juce::Label chromaticLabel_, personalLabel_;
+    juce::Slider personalSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight}; // expert: how strongly the reference set acts (SPEC 3.20)
     juce::Slider chromaticSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight}; // expert: -1 = the style's
     juce::Label energyLabel_;
     juce::Label creativityLabel_;

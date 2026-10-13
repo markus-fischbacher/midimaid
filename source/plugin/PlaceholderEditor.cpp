@@ -414,6 +414,17 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         processor_.setInstanceSettings(next);
     };
     addChildComponent(chromaticSlider_);
+    // How strongly the reference set acts (SPEC 3.20, expert level, 50 % by default).
+    personalSlider_.setComponentID("personal");
+    personalSlider_.setRange(0.0, 100.0, 1.0);
+    personalSlider_.setValue(50.0, juce::dontSendNotification);
+    personalSlider_.textFromValueFunction = [](double value) { return juce::String(static_cast<int>(value)) + " %"; };
+    personalSlider_.onValueChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.generation.personalPct = static_cast<int>(personalSlider_.getValue());
+        processor_.setInstanceSettings(next);
+    };
+    addChildComponent(personalSlider_);
     startBox_.setComponentID("startMode");
     startBox_.addItem(tr(keys::kStartRestart), 1);
     startBox_.addItem(tr(keys::kStartLegato), 2);
@@ -444,6 +455,9 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     chromaticLabel_.setText(tr(keys::kLabelChromatic), juce::dontSendNotification);
     chromaticLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
     addChildComponent(chromaticLabel_);
+    personalLabel_.setText(tr(keys::kLabelPersonal), juce::dontSendNotification);
+    personalLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
+    addChildComponent(personalLabel_);
     energyLabel_.setText(tr(keys::kLabelEnergy), juce::dontSendNotification);
     creativityLabel_.setText(tr(keys::kLabelCreativity), juce::dontSendNotification);
     for (auto* label : {&energyLabel_, &creativityLabel_}) {
@@ -1023,6 +1037,9 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
     if (static_cast<int>(chromaticSlider_.getValue()) != generation.chromaticPct.value_or(-1)) {
         chromaticSlider_.setValue(generation.chromaticPct.value_or(-1), juce::dontSendNotification);
     }
+    if (static_cast<int>(personalSlider_.getValue()) != generation.personalPct) {
+        personalSlider_.setValue(generation.personalPct, juce::dontSendNotification);
+    }
     const int hatId = generation.hatMode == mm::core::HatMode::With      ? 2
                       : generation.hatMode == mm::core::HatMode::Against ? 3
                                                                          : 1;
@@ -1239,7 +1256,7 @@ void PlaceholderEditor::applyLevel() {
     const bool show = expert_ && !voiceLayout_;
     for (auto* component :
          std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
-                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &hatModeLabel_, &hatModeBox_, &startBox_,
+                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &personalLabel_, &personalSlider_, &hatModeLabel_, &hatModeBox_, &startBox_,
                                                  &evolveEveryBox_,
                                                  &evolveOriginalButton_, &evolveStrengthLabel_,
                                                  &evolveStrengthSlider_}) {
@@ -1654,7 +1671,7 @@ void PlaceholderEditor::resized() {
     refineEditor_.setBounds(refineRow);
 
     auto sliders = area.removeFromTop(40).reduced(16, 6);
-    const int columns = expert_ ? 4 : 2; // the expert level adds the chromatic share (SPEC 3.8) and the hat mode (3.14)
+    const int columns = expert_ ? 5 : 2; // the expert level adds the chromatic share (SPEC 3.8) and the hat mode (3.14)
     const int column = (sliders.getWidth() - (columns - 1) * 16) / columns;
     auto left = sliders.removeFromLeft(column);
     energyLabel_.setBounds(left.removeFromLeft(80));
@@ -1668,6 +1685,10 @@ void PlaceholderEditor::resized() {
         auto third = sliders.removeFromLeft(column);
         chromaticLabel_.setBounds(third.removeFromLeft(80));
         chromaticSlider_.setBounds(third);
+        sliders.removeFromLeft(16);
+        auto fourth = sliders.removeFromLeft(column);
+        personalLabel_.setBounds(fourth.removeFromLeft(80));
+        personalSlider_.setBounds(fourth);
         sliders.removeFromLeft(16);
         hatModeLabel_.setBounds(sliders.removeFromLeft(110));
         hatModeBox_.setBounds(sliders);
