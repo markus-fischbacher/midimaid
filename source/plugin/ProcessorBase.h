@@ -145,6 +145,7 @@ public:
         bool swingActive = true;    ///< false: the template has swing of its own and the control is off
         bool swingFlam = false;     ///< a bass with swing over 56 %: flams with the straight kick are possible (STYLES 1.15)
         bool drumReference = false; ///< the pattern has a drum reference to choose
+        bool canSaveGroove = false; ///< the groove can be saved as a template of its own (D-245): not for a library template with swing
         mm::core::TransposeInfo transposeInfo; ///< key, range and extremes of the voice (live transposition, SPEC 3.16)
         /// True when `other` shows the same thing (no need to redraw or export again).
         bool sameSource(const VoiceView& other) const {
@@ -295,6 +296,10 @@ public:
     /// empty slot, an unknown template or when nothing changes.
     bool setVoiceGroove(size_t slotIndex, size_t voice, const std::optional<std::string>& templateId,
                         std::optional<float> swing, bool mergeWithPrevious = false);
+    /// Message thread: saves the groove a voice has now as a groove template of the user (SPEC 3.9, D-245) under `name` and
+    /// sets it for the voice (an undo step). Returns the id of the template, "" when the name is empty or too long, the
+    /// slot is empty or the groove changes nothing (straight, no swing).
+    std::string saveVoiceGrooveAsTemplate(size_t slotIndex, size_t voice, const std::string& name);
     /// Message thread: locks or unlocks a voice of the slot (0-based indices, SPEC 3.5). An undo step like a note edit.
     /// False in a voice, for an empty slot or when the lock is already as asked.
     bool setVoiceLocked(size_t slotIndex, size_t voice, bool locked);

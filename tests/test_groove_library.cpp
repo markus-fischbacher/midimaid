@@ -394,3 +394,165 @@ TEST_CASE("a template may carry an English name", "[groove-library]") {
     REQUIRE(wrong.groove.has_value());
     CHECK(wrong.groove->nameEn.empty());
 }
+
+// -- the groove of a voice as a template of its own (D-245) ---------------------------------------------------------
+
+namespace {
+
+/// The library with the captured template, and the output of the track with it against the track as it was.
+void checkCapture(const Pattern& pattern, const GrooveLibrary& base, const char* what) {
+    INFO(what);
+    const auto captured = captureGroove(pattern, pattern.voices[0], &base, "user_mine", "Mein Groove");
+    REQUIRE(captured.has_value());
+    CHECK(captured->swing);
+    const std::string text = grooveTemplateToJson(*captured);
+    const auto library = GrooveLibrary::withTexts(base, {text});
+    REQUIRE(library.find("user_mine") != nullptr);
+    Pattern with = pattern;
+    with.voices[0].groove.templateId = "user_mine";
+    with.voices[0].groove.swing = 0.5f; // the control is off for it
+    with.voices[0].groove.amount = 1.0f;
+    CHECK(renderOutput(with, noKickWith(&library)) == renderOutput(pattern, noKickWith(&base)));
+}
+
+} // namespace
+
+TEST_CASE("a captured groove sounds like the groove it was taken from", "[groove-library][output][capture]") {
+    const auto base = shipped();
+    Pattern pattern = bassLine();
+    for (size_t i = 0; i < pattern.voices[0].notes.size(); ++i) {
+        pattern.voices[0].notes[i].velocity = static_cast<uint8_t>(60 + (i * 7) % 60);
+    }
+    pattern.voices[0].groove.swing = 0.62f;
+    checkCapture(pattern, base, "swing control");
+    pattern.voices[0].groove.amount = 0.5f;
+    checkCapture(pattern, base, "swing control, half amount");
+    pattern.voices[0].groove.amount = 1.0f;
+    pattern.voices[0].groove.templateId = "laid_back";
+    pattern.voices[0].groove.swing = 0.58f;
+    checkCapture(pattern, base, "template without swing and the control on top");
+    pattern.voices[0].groove.templateId = "swing_66";
+    checkCapture(pattern, base, "template with swing");
+    pattern.voices[0].groove.templateId = "shuffle";
+    pattern.voices[0].groove.amount = 0.6f;
+    checkCapture(pattern, base, "shuffle with velocity profile, 60 %");
+    pattern.voices[0].groove.templateId = kGrooveDrumReference;
+    pattern.voices[0].groove.amount = 0.7f;
+    RhythmReference ref;
+    ref.bars = 2;
+    for (size_t i = 0; i < 32; ++i) {
+        ref.timingOffsetTicks[i] = static_cast<int16_t>((i % 5) * 9 - 12);
+        ref.velocity[i] = static_cast<uint8_t>(i % 3 == 0 ? 0 : 70 + (i * 11) % 50);
+    }
+    pattern.rhythmRef = ref;
+    checkCapture(pattern, base, "drum reference of two bars, 70 %");
+}
+
+TEST_CASE("a captured groove has the swing in the offsets and the velocity factors of the template", "[groove-library][capture]") {
+    const auto base = shipped();
+    Pattern pattern = bassLine();
+    pattern.voices[0].groove.swing = 0.58f;
+    const auto groove = captureGroove(pattern, pattern.voices[0], &base, "user_x", "X");
+    REQUIRE(groove.has_value());
+    CHECK(groove->bars == 1);
+    CHECK(groove->id == "user_x");
+    CHECK(groove->nameDe == "X");
+    REQUIRE(groove->offsetTicks.size() == 16);
+    for (size_t i = 0; i < 16; ++i) {
+        CHECK(groove->offsetTicks[i] == (i % 2 == 1 ? swingOffsetTicks(0.58f, 1.0f) : 0));
+        CHECK(groove->velocityPermille[i] == 1000);
+    }
+    // Humanize keeps its deviation
+    pattern.voices[0].groove.templateId = "humanize";
+    const auto human = captureGroove(pattern, pattern.voices[0], &base, "user_h", "H");
+    REQUIRE(human.has_value());
+    CHECK(human->humanizeTicks == base.find("humanize")->humanizeTicks);
+    CHECK(human->humanizeVelocityPermille == base.find("humanize")->humanizeVelocityPermille);
+}
+
+TEST_CASE("nothing is captured from a groove that changes nothing", "[groove-library][capture]") {
+    const auto base = shipped();
+    Pattern pattern = bassLine();
+    CHECK_FALSE(captureGroove(pattern, pattern.voices[0], &base, "user_x", "X").has_value()); // straight
+    pattern.voices[0].groove.swing = 0.62f;
+    pattern.voices[0].groove.amount = 0.0f;
+    CHECK_FALSE(captureGroove(pattern, pattern.voices[0], &base, "user_x", "X").has_value()); // no amount
+    pattern.voices[0].groove.amount = 1.0f;
+    pattern.voices[0].groove.templateId = kGrooveDrumReference; // a missing reference is straight with the swing control
+    pattern.voices[0].groove.amount = 1.0f;
+    CHECK(captureGroove(pattern, pattern.voices[0], &base, "user_x", "X").has_value());
+    RhythmReference odd;
+    odd.bars = 1;
+    pattern.rhythmRef = odd;
+    // a one-bar reference with no offsets and one velocity everywhere changes nothing
+    for (auto& v : odd.velocity) {
+        v = 0;
+    }
+    pattern.rhythmRef = odd;
+    CHECK_FALSE(captureGroove(pattern, pattern.voices[0], &base, "user_x", "X").has_value());
+}
+
+TEST_CASE("a template is written as JSON that reads back the same", "[groove-library][capture]") {
+    GrooveTemplate groove;
+    groove.id = "user_round";
+    groove.nameDe = "Rund \"herum\"";
+    groove.nameEn = "Round";
+    groove.bars = 2;
+    for (int i = 0; i < 32; ++i) {
+        groove.offsetTicks.push_back(i % 7 - 3);
+        groove.velocityPermille.push_back(900 + i);
+    }
+    groove.swing = true;
+    groove.humanizeTicks = 12;
+    groove.humanizeVelocityPermille = 33;
+    const auto back = loadGrooveTemplate(grooveTemplateToJson(groove));
+    REQUIRE(back.ok());
+    CHECK(*back.groove == groove);
+    groove.humanizeTicks = 0;
+    groove.humanizeVelocityPermille = 0;
+    groove.nameEn.clear();
+    groove.swing = false;
+    const auto plain = loadGrooveTemplate(grooveTemplateToJson(groove));
+    REQUIRE(plain.ok());
+    CHECK(*plain.groove == groove);
+}
+
+TEST_CASE("the id of an own template comes from its name and is free", "[groove-library][capture]") {
+    const auto base = shipped();
+    CHECK(grooveIdFromName("Mein Groove 2", base) == "user_mein_groove_2");
+    CHECK(grooveIdFromName("  Laid-Back!! ", base) == "user_laid_back");
+    CHECK(grooveIdFromName("Schöne Größe über Äpfel", base) == "user_schoene_groesse_ueber_aepfel");
+    CHECK(grooveIdFromName("!!!", base) == "user_groove");
+    CHECK(grooveIdFromName("日本", base) == "user_groove");
+    CHECK(grooveIdFromName(std::string(100, 'a'), base).size() == 5 + 30);
+    CHECK(loadGrooveTemplate(valid()).ok());
+    // taken ids get a number
+    GrooveTemplate groove = *loadGrooveTemplate(valid()).groove;
+    groove.id = "user_mein_groove";
+    const auto library = GrooveLibrary::withTexts(base, {grooveTemplateToJson(groove)});
+    CHECK(grooveIdFromName("Mein Groove", library) == "user_mein_groove_2");
+    groove.id = "user_mein_groove_2";
+    const auto more = GrooveLibrary::withTexts(library, {grooveTemplateToJson(groove)});
+    CHECK(grooveIdFromName("Mein Groove", more) == "user_mein_groove_3");
+}
+
+TEST_CASE("own templates come after the shipped ones, bad and doubled ones are reported", "[groove-library][capture]") {
+    const auto base = shipped();
+    GrooveTemplate a = *loadGrooveTemplate(valid()).groove;
+    a.id = "user_b";
+    GrooveTemplate b = a;
+    b.id = "user_a";
+    GrooveTemplate shippedTwin = a;
+    shippedTwin.id = "laid_back";
+    const std::string bad = "{ nonsense";
+    const auto library = GrooveLibrary::withTexts(
+        base, {grooveTemplateToJson(a), grooveTemplateToJson(b), bad, grooveTemplateToJson(shippedTwin), grooveTemplateToJson(a)});
+    REQUIRE(library.size() == base.size() + 2);
+    for (size_t i = 0; i < base.size(); ++i) {
+        CHECK(library.templates()[i] == base.templates()[i]);
+    }
+    CHECK(library.templates()[base.size()].id == "user_a"); // in the order of the ids
+    CHECK(library.templates()[base.size() + 1].id == "user_b");
+    CHECK(library.problems().size() == base.problems().size() + 3);
+    CHECK(base.find("user_a") == nullptr); // the base is not changed
+}

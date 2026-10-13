@@ -100,6 +100,7 @@ juce::File firstMidiFile(const juce::StringArray& files);
 class VoiceRow : public juce::Component, public juce::FileDragAndDropTarget {
 public:
     VoiceRow(ProcessorBase& processor, int voice);
+    ~VoiceRow() override;
 
     int voice() const { return voice_; }
     /// `view` is null for a slot without pattern.
@@ -119,6 +120,9 @@ public:
     juce::PopupMenu lockMenu() const;
     void runLockAction(int id);
     static constexpr int kLockMenuBase = 30;
+    /// Saves the groove of the voice as a template of the user under `name` (D-245; the groove box asks for the name and
+    /// calls this). False when nothing was saved. Message thread.
+    bool saveGrooveAs(const juce::String& name);
     void mouseDown(const juce::MouseEvent& event) override;
     /// The slot the row shows (0-based), -1 while there is none.
     int slotIndex() const { return slotIndex_; }
@@ -157,7 +161,10 @@ private:
     bool flam_ = false;           // the hint is due (shown when the row is not collapsed)
     bool updatingGroove_ = false; // the controls are being filled: no change to send
     bool swingDragStart_ = false; // the next change of the slider begins a drag: a new undo step
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+    int grooveSelection_ = 1;     // the item of the groove box that shows the voice
     void fillGroove(const ProcessorBase::VoiceView* view);
+    void askGrooveName();
     bool collapsed_ = false;
     int slotIndex_ = -1; // the slot the row shows (0-based), -1 while there is none
     EditableRoll roll_;

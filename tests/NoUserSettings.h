@@ -1,8 +1,10 @@
 #pragma once
 
+#include "plugin/EmbeddedGrooves.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/ReferenceStore.h"
+#include "plugin/UserGrooveStore.h"
 
 namespace mmtest {
 
@@ -16,6 +18,12 @@ inline mm::plugin::GlobalSettingsStore& disabledSettings() {
 /// The same for the reference sets: a store without folder, in memory only.
 inline mm::plugin::ReferenceStore& disabledReferences() {
     static mm::plugin::ReferenceStore store{juce::File(), mm::plugin::embeddedStyles()};
+    return store;
+}
+
+/// The same for the groove templates of the user: the embedded ones only, nothing is written.
+inline mm::plugin::UserGrooveStore& disabledUserGrooves() {
+    static mm::plugin::UserGrooveStore store{juce::File(), mm::plugin::embeddedGrooves()};
     return store;
 }
 

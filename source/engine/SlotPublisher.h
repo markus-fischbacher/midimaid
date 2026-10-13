@@ -7,6 +7,8 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <optional>
 
 namespace mm::engine {
@@ -22,6 +24,10 @@ class SlotPublisher {
 public:
     SlotPublisher(PatternHandover& handover, const core::StyleLibrary& styles, const core::GrooveLibrary* grooves = nullptr)
         : handover_(handover), styles_(styles), grooves_(grooves) {}
+    /// With a source that hands out the groove templates as they are now (the plug-in's own ones change at run time, D-245).
+    using GrooveSource = std::function<std::shared_ptr<const core::GrooveLibrary>()>;
+    SlotPublisher(PatternHandover& handover, const core::StyleLibrary& styles, GrooveSource grooves)
+        : handover_(handover), styles_(styles), grooveSource_(std::move(grooves)) {}
 
     /// The voice to play, 1 to `kMaxVoices`. A change republishes every slot at the next `sync`.
     void setOutputVoice(int voice);
@@ -62,6 +68,7 @@ private:
     PatternHandover& handover_;
     const core::StyleLibrary& styles_;
     const core::GrooveLibrary* grooves_ = nullptr; ///< the groove templates a track may name (SPEC 3.9)
+    GrooveSource grooveSource_;                    ///< when set, it wins over `grooves_`
     int outputVoice_ = 1;
     int octave_ = 0;
     uint64_t origin_ = 0;                                         ///< origin of the bank that was last synced

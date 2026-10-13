@@ -26,6 +26,7 @@
 #include "plugin/LibraryStore.h"
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ReferenceStore.h"
+#include "plugin/UserGrooveStore.h"
 #include "plugin/StateMigration.h"
 
 #include <algorithm>
@@ -139,7 +140,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout ProcessorBase::createParamet
 ProcessorBase::ProcessorBase(const BusesProperties& buses, juce::String name)
     : juce::AudioProcessor(buses), name_(std::move(name)),
       parameters_(*this, nullptr, "MidiMaid", createParameterLayout()), styles_(embeddedStyles()),
-      publisher_(handover_, styles_, &embeddedGrooves()), player_(mm::core::PatternView{nullptr, 0, mm::core::kTicksPerBar}),
+      publisher_(handover_, styles_, [] { return userGrooves().library(); }), player_(mm::core::PatternView{nullptr, 0, mm::core::kTicksPerBar}),
       returnCollector_(handover_), importer_([this](const ImportRequest& request, ImportOutcome outcome) {
           onImported(request, std::move(outcome));
       }),
@@ -716,7 +717,7 @@ bool ProcessorBase::editNotes(size_t slotIndex, const std::function<size_t(mm::c
 bool ProcessorBase::setVoiceGroove(size_t slotIndex, size_t voice, const std::optional<std::string>& templateId,
                                    std::optional<float> swing, bool mergeWithPrevious) {
     if (templateId && *templateId != mm::core::kGrooveStraight && *templateId != mm::core::kGrooveDrumReference &&
-        embeddedGrooves().find(*templateId) == nullptr) {
+        userGrooves().library()->find(*templateId) == nullptr) {
         return false; // a template that does not exist
     }
     return editNotes(
@@ -741,6 +742,29 @@ bool ProcessorBase::setVoiceGroove(size_t slotIndex, size_t voice, const std::op
             return changed;
         },
         mergeWithPrevious);
+}
+
+std::string ProcessorBase::saveVoiceGrooveAsTemplate(size_t slotIndex, size_t voice, const std::string& name) {
+    std::optional<mm::core::GrooveTemplate> captured;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        const auto* slot = slots_.slot(slotIndex);
+        if (settings_.role == mm::core::InstanceRole::Voice || slot == nullptr || !slot->pattern ||
+            voice >= slot->pattern->voices.size()) {
+            return {};
+        }
+        const auto grooves = userGrooves().library();
+        captured = mm::core::captureGroove(*slot->pattern, slot->pattern->voices[voice], grooves.get(), "user", name);
+    }
+    if (!captured) {
+        return {};
+    }
+    const auto id = userGrooves().add(std::move(*captured));
+    if (id.empty()) {
+        return {};
+    }
+    setVoiceGroove(slotIndex, voice, id, std::nullopt);
+    return id;
 }
 
 bool ProcessorBase::setVoiceLocked(size_t slotIndex, size_t voice, bool locked) {
@@ -2265,11 +2289,12 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     if (style == nullptr) {
         return;
     }
-    auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave, &embeddedGrooves());
+    const auto grooves = userGrooves().library();
+    auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave, grooves.get());
     view.hasPattern = true;
     view.gridNotes.clear();
     if (globalSettings().ready() && !globalSettings().get().exportGroove) {
-        view.gridNotes = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave, &embeddedGrooves(), false).notes;
+        view.gridNotes = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave, grooves.get(), false).notes;
     }
     view.notes = std::move(rendered.notes);
     view.lengthTicks = rendered.lengthTicks;
@@ -2289,11 +2314,14 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.drumReference = pattern.rhythmRef.has_value();
     if (voiceIndex < pattern.voices.size()) {
         const auto& track = pattern.voices[voiceIndex];
-        const auto groove = mm::core::effectiveGroove(pattern, track, &embeddedGrooves());
+        const auto groove = mm::core::effectiveGroove(pattern, track, grooves.get());
         view.grooveId = track.groove.templateId.empty() ? mm::core::kGrooveStraight : track.groove.templateId;
         view.swing = groove.swing;
         view.swingActive = groove.controlActive;
         view.swingFlam = mm::core::bassSwingMayFlam(track.role, groove.swing);
+        // a template of the library with swing of its own is saved already; the drum reference is worth saving
+        view.canSaveGroove = (groove.controlActive || track.groove.templateId == mm::core::kGrooveDrumReference) &&
+                             mm::core::captureGroove(pattern, track, grooves.get(), "user", "x").has_value();
     }
     view.source.clear();
     if (voiceIndex < pattern.voices.size()) {

@@ -40,6 +40,9 @@ GrooveTemplateLoad loadGrooveTemplate(std::string_view text);
 class GrooveLibrary {
 public:
     static GrooveLibrary fromTexts(const std::vector<std::string_view>& texts);
+    /// `base` and, after its templates, the ones from `texts` (the user's own, D-245) in the order of their ids. A text that
+    /// does not load or whose id is taken is left out and reported.
+    static GrooveLibrary withTexts(const GrooveLibrary& base, const std::vector<std::string_view>& texts);
 
     size_t size() const { return templates_.size(); }
     /// All templates in load order (for the pick list).
@@ -52,6 +55,13 @@ private:
     std::vector<GrooveTemplate> templates_;
     std::vector<std::string> problems_;
 };
+
+/// The JSON text of a template (what `loadGrooveTemplate` reads back; pretty-printed).
+std::string grooveTemplateToJson(const GrooveTemplate& groove);
+
+/// An id for a template that the user names: "user_" and the name in lower case letters, digits and underscore (umlauts
+/// as ae, oe, ue, ss), at most 40 characters, with a number appended while the library knows it.
+std::string grooveIdFromName(std::string_view name, const GrooveLibrary& library);
 
 /// The deviation of one note from the grid for a template with `humanize` (deterministic: a hash of the seed, the note
 /// and the template, so a bounce is the same every time): ticks in [-limit, +limit].

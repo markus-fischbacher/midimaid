@@ -137,6 +137,85 @@ GrooveLibrary GrooveLibrary::fromTexts(const std::vector<std::string_view>& text
     return library;
 }
 
+GrooveLibrary GrooveLibrary::withTexts(const GrooveLibrary& base, const std::vector<std::string_view>& texts) {
+    GrooveLibrary library = base;
+    std::vector<GrooveTemplate> added;
+    for (size_t i = 0; i < texts.size(); ++i) {
+        auto loaded = loadGrooveTemplate(texts[i]);
+        const bool taken = loaded.ok() && (library.find(loaded.groove->id) != nullptr ||
+                                           std::any_of(added.begin(), added.end(), [&](const GrooveTemplate& other) {
+                                               return other.id == loaded.groove->id;
+                                           }));
+        if (!loaded.ok()) {
+            library.problems_.push_back("own groove " + std::to_string(i) + ": " + loaded.error);
+        } else if (taken) {
+            library.problems_.push_back("own groove " + std::to_string(i) + ": duplicate id " + loaded.groove->id);
+        } else {
+            added.push_back(std::move(*loaded.groove));
+        }
+    }
+    std::stable_sort(added.begin(), added.end(), [](const GrooveTemplate& a, const GrooveTemplate& b) { return a.id < b.id; });
+    for (auto& groove : added) {
+        library.templates_.push_back(std::move(groove));
+    }
+    return library;
+}
+
+std::string grooveTemplateToJson(const GrooveTemplate& groove) {
+    json root;
+    root["id"] = groove.id;
+    root["nameDe"] = groove.nameDe;
+    if (!groove.nameEn.empty()) {
+        root["nameEn"] = groove.nameEn;
+    }
+    root["bars"] = groove.bars;
+    root["offsets"] = groove.offsetTicks;
+    root["velocity"] = groove.velocityPermille;
+    root["swing"] = groove.swing;
+    if (groove.humanizeTicks > 0 || groove.humanizeVelocityPermille > 0) {
+        root["humanize"] = {{"ticks", groove.humanizeTicks}, {"velocity", groove.humanizeVelocityPermille}};
+    }
+    return root.dump(2);
+}
+
+std::string grooveIdFromName(std::string_view name, const GrooveLibrary& library) {
+    std::string slug;
+    const auto add = [&slug](const char* text) { slug += text; };
+    for (size_t i = 0; i < name.size(); ++i) {
+        const auto c = static_cast<unsigned char>(name[i]);
+        if (c >= 'A' && c <= 'Z') {
+            slug += static_cast<char>(c - 'A' + 'a');
+        } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+            slug += static_cast<char>(c);
+        } else if (c == 0xC3 && i + 1 < name.size()) { // the umlauts of German names (UTF-8)
+            const auto next = static_cast<unsigned char>(name[++i]);
+            if (next == 0xA4 || next == 0x84) {
+                add("ae");
+            } else if (next == 0xB6 || next == 0x96) {
+                add("oe");
+            } else if (next == 0xBC || next == 0x9C) {
+                add("ue");
+            } else if (next == 0x9F) {
+                add("ss");
+            }
+        } else if (!slug.empty() && slug.back() != '_') {
+            slug += '_'; // a space or a sign (a letter of another script is a gap)
+        }
+    }
+    while (!slug.empty() && slug.back() == '_') {
+        slug.pop_back();
+    }
+    if (slug.empty()) {
+        slug = "groove";
+    }
+    const std::string base = "user_" + slug.substr(0, 30);
+    std::string id = base;
+    for (int n = 2; library.find(id) != nullptr; ++n) {
+        id = base + "_" + std::to_string(n);
+    }
+    return id;
+}
+
 const GrooveTemplate* GrooveLibrary::find(std::string_view id) const {
     for (const auto& groove : templates_) {
         if (groove.id == id) {

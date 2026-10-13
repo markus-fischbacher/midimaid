@@ -15,10 +15,12 @@ public:
         mm::plugin::overrideGlobalSettings(&mmtest::disabledSettings());
         mm::plugin::setUiLanguage("de"); // the texts of the tests do not depend on the computer
         mm::plugin::overrideReferenceStore(&mmtest::disabledReferences());
+        mm::plugin::overrideUserGrooves(&mmtest::disabledUserGrooves());
     }
     void testRunEnded(const Catch::TestRunStats&) override {
         mm::plugin::overrideGlobalSettings(nullptr);
         mm::plugin::overrideReferenceStore(nullptr);
+        mm::plugin::overrideUserGrooves(nullptr);
     }
 };
 
