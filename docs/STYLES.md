@@ -313,6 +313,8 @@ Cluster (mit ♭2) 40 % · Quinte 40 % · Moll-Triade 20 %
       { "id": "acid_siren", "w": 1 }
     ],
     "chord_colors": [{ "id": "min", "w": 40 }, { "id": "fifth", "w": 30 }, { "id": "min7", "w": 20 }, { "id": "sus", "w": 10 }]
+
+*[v1.1, D-251]* Zusätzlich je Stil optionale Listen `stabs_archetypes`, `arp_archetypes`, `counter_archetypes` im Abschnitt `melody` für die Stimmen-Rollen Stabs, Arp und Gegenmelodie (Werte in den ausgelieferten Profilen, `resources/styles/`); fehlt eine Liste, gilt die Melodie-Liste, gefiltert nach der Familie der Rolle.
   },
   "quality": {
     "min_score": 50,

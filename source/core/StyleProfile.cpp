@@ -170,6 +170,13 @@ std::vector<std::string> validateStyleProfile(const StyleProfile& profile) {
     }
     checkWeighted(profile.melody.archetypes, "melody.archetypes", issues, 1, isIdentifier);
     checkWeighted(profile.melody.chordColors, "melody.chord_colors", issues, 1, isChordColorId);
+    for (const auto& [list, name] : {std::pair{&profile.melody.stabsArchetypes, "melody.stabs_archetypes"},
+                                     std::pair{&profile.melody.arpArchetypes, "melody.arp_archetypes"},
+                                     std::pair{&profile.melody.counterArchetypes, "melody.counter_archetypes"}}) {
+        if (!list->empty()) {
+            checkWeighted(*list, name, issues, 1, isIdentifier);
+        }
+    }
 
     // quality
     const QualityProfile& q = profile.quality;
@@ -320,6 +327,9 @@ void readMelody(Reader& r, const json& root, MelodyProfile& melody) {
     melody.swingDefault = static_cast<float>(swing);
     readWeighted(r, *object, "archetypes", "melody", melody.archetypes);
     readWeighted(r, *object, "chord_colors", "melody", melody.chordColors);
+    readWeighted(r, *object, "stabs_archetypes", "melody", melody.stabsArchetypes);
+    readWeighted(r, *object, "arp_archetypes", "melody", melody.arpArchetypes);
+    readWeighted(r, *object, "counter_archetypes", "melody", melody.counterArchetypes);
 }
 
 void readQuality(Reader& r, const json& root, QualityProfile& quality) {

@@ -220,3 +220,47 @@ TEST_CASE("the extra voices of the settings are written, read and limited", "[co
     settings.extraVoices = {VoiceRole::Counter};
     CHECK(sanitize(settings).extraVoices == settings.extraVoices);
 }
+
+TEST_CASE("a style's own role lists decide what a role plays (D-251)", "[core][roles][archetype]") {
+    const StyleProfile style = loadShipped("hard_industrial");
+    CHECK_FALSE(style.melody.arpArchetypes.empty());
+    Pcg32 rng = Pcg32::fromSeed(11);
+    std::set<std::string> arp, counter, stabs;
+    for (int i = 0; i < 300; ++i) {
+        arp.insert(chooseArchetype(style, VoiceRole::Arp, 50, rng));
+        counter.insert(chooseArchetype(style, VoiceRole::Counter, 50, rng));
+        stabs.insert(chooseArchetype(style, VoiceRole::Stabs, 50, rng));
+    }
+    CHECK(arp == std::set<std::string>{"arp", "pluck_seq"});
+    CHECK(counter == std::set<std::string>{"sparse_hits", "hypnotic_motif"});
+    CHECK(stabs == std::set<std::string>{"aggro_stabs", "stabs"});
+}
+
+TEST_CASE("without a role list the melody list is used, filtered by the family", "[core][roles][archetype]") {
+    StyleProfile style = loadShipped("peak_time");
+    style.melody.arpArchetypes.clear();
+    Pcg32 rng = Pcg32::fromSeed(5);
+    std::set<std::string> arp;
+    for (int i = 0; i < 300; ++i) {
+        arp.insert(chooseArchetype(style, VoiceRole::Arp, 50, rng));
+    }
+    CHECK(arp == std::set<std::string>{"arp"}); // the only arp family member in peak_time's melody list
+}
+
+TEST_CASE("role lists load, compare and are validated", "[core][roles][style]") {
+    for (const char* name : {"peak_time", "melodic_techno", "hard_industrial"}) {
+        const StyleProfile style = loadShipped(name);
+        CHECK_FALSE(style.melody.stabsArchetypes.empty());
+        CHECK_FALSE(style.melody.counterArchetypes.empty());
+        CHECK(validateStyleProfile(style).empty());
+        for (const auto* list : {&style.melody.stabsArchetypes, &style.melody.arpArchetypes,
+                                 &style.melody.counterArchetypes}) {
+            for (const auto& entry : *list) {
+                CHECK(findArchetype(entry.id) != nullptr);
+            }
+        }
+    }
+    StyleProfile bad = loadShipped("peak_time");
+    bad.melody.counterArchetypes.push_back({"", 1});
+    CHECK_FALSE(validateStyleProfile(bad).empty());
+}

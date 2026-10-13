@@ -603,11 +603,29 @@ bool inRoleFamily(VoiceRole role, std::string_view id) {
     return true;
 }
 
+/// The style's list for the role: its own when it has one (D-251), else the melody list.
+const std::vector<WeightedId>& roleArchetypes(const StyleProfile& style, VoiceRole role) {
+    const MelodyProfile& melody = style.melody;
+    switch (role) {
+    case VoiceRole::Bass:
+        return style.bass.archetypes;
+    case VoiceRole::Stabs:
+        return melody.stabsArchetypes.empty() ? melody.archetypes : melody.stabsArchetypes;
+    case VoiceRole::Arp:
+        return melody.arpArchetypes.empty() ? melody.archetypes : melody.arpArchetypes;
+    case VoiceRole::Counter:
+        return melody.counterArchetypes.empty() ? melody.archetypes : melody.counterArchetypes;
+    case VoiceRole::Melody:
+        return melody.archetypes;
+    }
+    return melody.archetypes;
+}
+
 } // namespace
 
 std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energyPct, Pcg32& rng, int creativityPct) {
     const int energy = std::clamp(energyPct, 0, 100);
-    const std::vector<WeightedId>& entries = role == VoiceRole::Bass ? style.bass.archetypes : style.melody.archetypes;
+    const std::vector<WeightedId>& entries = roleArchetypes(style, role);
     std::vector<std::string> ids;
     std::vector<uint32_t> weights;
     const int range = archetypeScatterRange(creativityPct);
