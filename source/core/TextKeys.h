@@ -64,6 +64,11 @@ namespace mm::core::text {
     X(kSectionWishes, "section.wishes")                                                                                \
     X(kSectionSwitch, "section.switch")                                                                                \
     X(kSectionEvolve, "section.evolve")                                                                                \
+    X(kInspectorInstance, "inspector.instance")                                                                       \
+    X(kInspectorEdit, "inspector.edit")                                                                               \
+    X(kButtonInspector, "button.inspector")                                                                           \
+    X(kModeNew, "dock.new")                                                                                           \
+    X(kModeRefine, "dock.refine")                                                                                     \
     X(kStartLegato, "start.legato")                                                                                    \
     X(kQuantBar, "quant.bar")                                                                                          \
     X(kQuantBeat, "quant.beat")                                                                                        \

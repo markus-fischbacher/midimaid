@@ -31,12 +31,13 @@ Eine neue Instanz ist **still**, bis du etwas erzeugt hast.
 | Bereich | Was du dort tust |
 |---|---|
 | **Rolle** | *Solo* (eine Instanz allein), *Hub* (steuert alle Stimmen), *Stimme* (spielt genau eine Stimme des Hubs) |
-| **Stil, Referenz-Set, Erzeugen** | Oben links im Hauptbereich; darunter die Slot-Leiste |
-| **Seitenleiste rechts** | In Abschnitten: *Generator* (Tonart, Skala auf *auto* lassen oder festlegen, 1 bis 16 Takte, Energie, Kreativität; im Experten-Modus Seed, Chromatik, Persönlich, Melodie zu Hats), *Wünsche und Verfeinern*, *Wechsel* (Experte) und *Evolve* |
-| **Stimmen-Leiste** | Acht Punkte über den Stimmen: gefüllt sind die Stimmen des Patterns, die Farbe zeigt die Rolle, ein Klick springt zur Stimme. *+ Stimme* fügt Stabs, Arpeggio oder Gegenmelodie hinzu (nur diese Stimme wird erzeugt, die anderen bleiben), *– Stimme* nimmt die letzte heraus; Bass und Melodie bleiben immer. Jede Stimme spielt eine Instanz auf der passenden Voice-Nummer |
+| **Kopfzeile** | Stil, Tonart, Skala, Takte, Rückgängig, Wiederholen, *Details* (öffnet den Inspektor) und Einstellungen; darunter die Slot-Leiste |
+| **Dock unten** | Schreibe in *Neu*, was du hören willst, stelle Energie und Kreativität ein und klicke **Erzeugen**. *Ändern* (nur bei gefülltem Slot) tauscht das Dock gegen Verfeinern: Text, Bereich, Knopf |
+| **Inspektor (Details)** | Rechts, standardmäßig zu. Seiten: *Instanz* (Rolle, Stimme, Ausgabe, Größe, Referenzen, Bibliothek, Hilfe, Experte), *Muster* (Referenz-Set, Bewertung; Experte: Seed, Chromatik, Persönlich, Melodie zu Hats, Einsatz, Wechsel), *Bearbeiten* (Vorhören, Folgen, Drums lösen, Verlauf; Experte: Raster, Triolen, Einrasten, Stärke, Variation alle), *Evolve* |
+| **Stimmen-Leiste** (Inspektor, Seite *Instanz*) | Acht Punkte über den Stimmen: gefüllt sind die Stimmen des Patterns, die Farbe zeigt die Rolle, ein Klick springt zur Stimme. Unter den Spuren fügt *+ Stimme* (Geisterspur) Stabs, Arpeggio oder Gegenmelodie hinzu (nur diese Stimme wird erzeugt, die anderen bleiben), *– Stimme* nimmt die letzte heraus; Bass und Melodie bleiben immer. Jede Stimme spielt eine Instanz auf der passenden Voice-Nummer |
 | **Slots 1–16** | 16 Pattern-Plätze je Instanz bzw. Hub; ein Klick wählt den Slot (Wechsel zum nächsten Takt); Rechtsklick: kopieren, einfügen, leeren, tauschen; ein Feld auf ein anderes ziehen tauscht die Slots, mit Alt kopiert es |
-| **Piano-Roll** je Stimme | Noten ansehen und bearbeiten (Abschnitt 6). Hat das Pattern mehr als zwei Stimmen, ist nur eine Roll offen und die anderen sind schmale Leisten: ein Klick auf *Fokus* öffnet eine andere |
-| **Größe** | Fenstergröße von 75 bis 200 %: Auswahl „Größe“ (Hub oben rechts, Stimme unten rechts) oder **stufenlos** am Griff in der unteren rechten Ecke ziehen; wird je Instanz im Projekt gespeichert |
+| **Piano-Roll** je Stimme | Noten ansehen und bearbeiten (Abschnitt 6). Hat das Pattern mehr als zwei Stimmen, ist nur eine Roll offen und die anderen sind schmale Leisten: im Menü „…“ der Spur öffnet *Fokus* eine andere (Variation und Duplizieren stehen ebenfalls dort) |
+| **Größe** | Fenstergröße von 75 bis 200 %: Auswahl „Größe“ (Hub: Inspektor, Seite *Instanz*; Stimme unten rechts) oder **stufenlos** am Griff in der unteren rechten Ecke ziehen; wird je Instanz im Projekt gespeichert |
 | **Hilfe** | Öffnet die Anleitung für Hub und Voices, Schritt für Schritt, auf der Seite für deine DAW (Live, Logic oder andere Hosts) |
 | **Statuszeile** | Was gerade passiert, auch Fehler und Hinweise |
 

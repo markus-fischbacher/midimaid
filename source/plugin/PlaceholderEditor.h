@@ -7,6 +7,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <array>
+
 namespace mm::plugin {
 
 /// The editor until the full hub UI of later phases exists (SPEC 8.1). Solo and Hub get the simple hub UI (D-151):
@@ -39,6 +41,15 @@ public:
     /// Runs the action with this id (`core/Shortcuts`); false for an unknown id or when nothing was there to act on.
     bool runShortcut(const std::string& action);
     int variationStrength() const { return static_cast<int>(strengthSlider_.getValue()); }
+
+    /// The pages of the inspector, the column of details that is closed by default (D-252).
+    enum class InspectorPage { Instance, Pattern, Edit, Evolve };
+    bool inspectorOpen() const { return inspectorOpen_; }
+    void setInspectorOpen(bool open);
+    InspectorPage inspectorPage() const { return inspectorPage_; }
+    void setInspectorPage(InspectorPage page);
+    /// True while the dock refines the pattern of the slot instead of generating a new one.
+    bool refining() const { return refineMode_ && shownInfo_.filled; }
 
 private:
     void timerCallback() override;
@@ -86,14 +97,11 @@ private:
     void applyStoredSettings();
     void saveEditSettings();
 
-    /// The settings of the hub UI sit in a column on the right in sections (D-249).
-    static constexpr int kSidebarWidth = 300;
+    /// Everything but the lanes, the header and the dock sits in the inspector on the right (D-252).
+    static constexpr int kInspectorWidth = 300;
     static constexpr size_t kOpenRollsMax = 2; ///< more voices than this: one open roll, the others strips
-    struct Section {
-        juce::Rectangle<int> bounds;
-        std::string_view key;
-    };
-    std::vector<Section> sections_;
+    /// Shows the controls of the open inspector page, the dock of the current mode and hides the rest (hub layout).
+    void applyPanels();
 
     ProcessorBase& processor_;
     MidiMaidLookAndFeel lookAndFeel_; // declared before the components that use it
@@ -120,6 +128,12 @@ private:
     VoiceBar voiceBar_;              ///< the eight voices as dots above the rows (D-250)
     juce::TextButton addVoiceButton_;    ///< "+ Voice": the menu of the roles to add
     juce::TextButton removeVoiceButton_; ///< takes the last voice out (never bass and melody)
+    juce::TextButton inspectorButton_;   ///< opens and closes the inspector
+    std::array<juce::TextButton, 4> inspectorTabs_; ///< one per `InspectorPage`
+    juce::TextButton modeButton_;        ///< the dock: write a new pattern or change the one of the slot
+    bool inspectorOpen_ = false;
+    InspectorPage inspectorPage_ = InspectorPage::Pattern;
+    bool refineMode_ = false;
     juce::Label strengthLabel_;
     juce::Slider strengthSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
     juce::TextButton previewButton_; // hub and solo: plays the slot with the internal clock while the host stands still

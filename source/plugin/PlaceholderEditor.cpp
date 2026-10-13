@@ -661,6 +661,31 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     statusLabel_.setMinimumHorizontalScale(1.0f); // the hub hint is long: wrap instead of squeezing
     addAndMakeVisible(statusLabel_);
 
+    inspectorButton_.setComponentID("inspector");
+    inspectorButton_.setButtonText(tr(keys::kButtonInspector));
+    inspectorButton_.setClickingTogglesState(true);
+    inspectorButton_.onClick = [this] { setInspectorOpen(inspectorButton_.getToggleState()); };
+    addChildComponent(inspectorButton_);
+    const std::array<std::string_view, 4> tabKeys{keys::kInspectorInstance, keys::kSectionGenerator,
+                                                  keys::kInspectorEdit, keys::kSectionEvolve};
+    for (size_t i = 0; i < inspectorTabs_.size(); ++i) {
+        auto& tab = inspectorTabs_[i];
+        tab.setComponentID("inspector_tab_" + juce::String(static_cast<int>(i)));
+        tab.setButtonText(tr(tabKeys[i]));
+        tab.setRadioGroupId(701);
+        tab.setClickingTogglesState(true);
+        tab.setToggleState(static_cast<InspectorPage>(i) == inspectorPage_, juce::dontSendNotification);
+        tab.onClick = [this, i] { setInspectorPage(static_cast<InspectorPage>(i)); };
+        addChildComponent(tab);
+    }
+    modeButton_.setComponentID("dock_mode");
+    modeButton_.onClick = [this] {
+        refineMode_ = !refineMode_;
+        applyPanels();
+        resized();
+    };
+    addChildComponent(modeButton_);
+
     processor_.updateExport();
     applyStoredSettings();
     updateStatus();  // chooses the layout and the size
@@ -719,7 +744,7 @@ void PlaceholderEditor::updateStatus() {
     generateButton_.setEnabled(!isVoice || processor_.groupStatus() == GroupStatus::VoiceConnected);
     followBox_.setVisible(isVoice);
     openHubButton_.setEnabled(processor_.groupStatus() == GroupStatus::VoiceConnected);
-    outputBox_.setVisible(role == mm::core::InstanceRole::Hub);
+    applyPanels();
     if (role != mm::core::InstanceRole::Solo && processor_.otherFormatInProcess()) {
         group += tr(keys::kGroupMixedFormats);
     }
@@ -1032,11 +1057,9 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     openHubButton_.setVisible(voiceLayout);
     rollView_.setVisible(voiceLayout);
     dragHandle_->setVisible(voiceLayout);
-    for (auto* component : std::initializer_list<juce::Component*>{
-             &keyBox_, &referenceSetBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
-             &infoLabel_, &ratingBox_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
-             &expertButton_, &previewButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_, &evolveButton_, &evolveBackButton_,
-             &evolveStageLabel_, &evolveKeepButton_, &voiceBar_, &addVoiceButton_, &removeVoiceButton_}) {
+    for (auto* component : std::initializer_list<juce::Component*>{&keyBox_, &scaleBox_, &barsBox_, &infoLabel_,
+                                                                   &settingsButton_, &undoButton_, &redoButton_,
+                                                                   &addVoiceButton_, &inspectorButton_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -1317,18 +1340,77 @@ void PlaceholderEditor::applyFocus() {
     resized();
 }
 
-void PlaceholderEditor::applyLevel() {
-    // The expert controls: seed, edit grid, snapping, strength of the variation (SPEC 8.1).
-    const bool show = expert_ && !voiceLayout_;
-    for (auto* component :
-         std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
-                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &personalLabel_, &personalSlider_, &hatModeLabel_, &hatModeBox_, &startBox_, &quantBox_,
-                                                 &evolveEveryBox_,
-                                                 &evolveOriginalButton_, &evolveStrengthLabel_,
-                                                 &evolveStrengthSlider_}) {
-        component->setVisible(show);
+void PlaceholderEditor::setInspectorOpen(bool open) {
+    inspectorOpen_ = open;
+    inspectorButton_.setToggleState(open, juce::dontSendNotification);
+    applyPanels();
+    resized();
+}
+
+void PlaceholderEditor::setInspectorPage(InspectorPage page) {
+    inspectorPage_ = page;
+    for (size_t i = 0; i < inspectorTabs_.size(); ++i) {
+        inspectorTabs_[i].setToggleState(static_cast<InspectorPage>(i) == page, juce::dontSendNotification);
     }
+    applyPanels();
+    resized();
+}
+
+void PlaceholderEditor::applyPanels() {
+    using Page = InspectorPage;
+    const bool hub = !voiceLayout_;
+    const bool open = hub && inspectorOpen_;
+    const bool role = processor_.instanceSettings().role == mm::core::InstanceRole::Hub;
+    const auto page = [&](Page which, std::initializer_list<juce::Component*> basic,
+                          std::initializer_list<juce::Component*> advanced) {
+        const bool here = open && inspectorPage_ == which;
+        for (auto* component : basic) {
+            component->setVisible(here);
+        }
+        for (auto* component : advanced) {
+            component->setVisible(here && expert_);
+        }
+    };
+    for (auto& tab : inspectorTabs_) {
+        tab.setVisible(open);
+    }
+    page(Page::Instance, {&voiceBar_, &removeVoiceButton_, &referencesButton_, &libraryButton_, &expertButton_}, {});
+    page(Page::Pattern, {&referenceSetBox_, &ratingBox_},
+         {&seedEditor_, &randomButton_, &chromaticLabel_, &chromaticSlider_, &personalLabel_, &personalSlider_,
+          &hatModeLabel_, &hatModeBox_, &startBox_, &quantBox_});
+    page(Page::Edit, {&previewButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_},
+         {&gridBox_, &tripletButton_, &snapBox_, &strengthLabel_, &strengthSlider_, &varyAllButton_});
+    page(Page::Evolve, {&evolveButton_, &evolveBackButton_, &evolveStageLabel_, &evolveKeepButton_},
+         {&evolveEveryBox_, &evolveOriginalButton_, &evolveStrengthLabel_, &evolveStrengthSlider_});
+    // Both windows show these; the hub keeps them in the inspector.
+    const bool onInstance = open && inspectorPage_ == Page::Instance;
+    roleBox_.setVisible(!hub || onInstance);
+    voiceBox_.setVisible(!hub || onInstance);
+    zoomBox_.setVisible(!hub || onInstance);
+    helpButton_.setVisible(!hub || onInstance);
+    outputBox_.setVisible(hub && onInstance && role);
+    followButton_.setVisible(!hub || (open && inspectorPage_ == Page::Edit));
+    // The dock writes a new pattern or changes the one of the slot (D-252).
+    const bool changing = refining();
+    modeButton_.setVisible(hub);
+    modeButton_.setEnabled(shownInfo_.filled);
+    modeButton_.setButtonText(tr(changing ? keys::kModeRefine : keys::kModeNew));
+    for (auto* component : std::initializer_list<juce::Component*>{&promptEditor_, &energySlider_, &creativitySlider_,
+                                                                   &energyLabel_, &creativityLabel_}) {
+        component->setVisible(hub && !changing);
+    }
+    for (auto* component :
+         std::initializer_list<juce::Component*>{&refineEditor_, &refineScopeBox_, &refineButton_}) {
+        component->setVisible(hub && changing);
+    }
+    generateButton_.setVisible(!hub || !changing);
+}
+
+void PlaceholderEditor::applyLevel() {
+    // The expert controls (seed, grid, snapping, strength of the variation, ...) are the advanced part of the pages of
+    // the inspector (SPEC 8.1, D-252).
     expertButton_.setToggleState(expert_, juce::dontSendNotification);
+    applyPanels();
     resized();
 }
 
@@ -1687,12 +1769,6 @@ void PlaceholderEditor::paint(juce::Graphics& g) {
     if (voiceLayout_) {
         return;
     }
-    g.setColour(juce::Colours::white.withAlpha(0.5f));
-    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-    for (const auto& section : sections_) {
-        g.drawText(tr(section.key), section.bounds, juce::Justification::centredLeft);
-        g.fillRect(section.bounds.getX(), section.bounds.getBottom() - 1, section.bounds.getWidth(), 1);
-    }
 }
 
 void PlaceholderEditor::layoutVoiceWindow() {
@@ -1747,30 +1823,112 @@ void PlaceholderEditor::resized() {
         layoutVoiceWindow();
         return;
     }
+    // The hub window (D-252): a header with the musical basics and the slots, the lanes with all the height that is
+    // left, the dock at the bottom and, only when asked for, the inspector on the right with everything else.
     auto area = getLocalBounds();
-    auto roles = area.removeFromTop(48).reduced(16, 10);
-    zoomBox_.setBounds(roles.removeFromRight(110));
-    roles.removeFromRight(8);
-    helpButton_.setBounds(roles.removeFromRight(80));
-    roles.removeFromRight(8);
-    settingsButton_.setBounds(roles.removeFromRight(120));
-    roles.removeFromRight(8);
-    referencesButton_.setBounds(roles.removeFromRight(110));
-    roles.removeFromRight(8);
-    libraryButton_.setBounds(roles.removeFromRight(110));
-    roles.removeFromRight(8);
-    takeOverButton_.setBounds({}); // only a voice offers to take over: no room reserved here, the role box needs it
-    followBox_.setBounds(roles.removeFromRight(150));
-    outputBox_.setBounds(followBox_.getBounds()); // never visible together
-    roles.removeFromRight(8);
-    voiceBox_.setBounds(roles.removeFromRight(120));
-    roles.removeFromRight(8);
-    roleBox_.setBounds(roles.removeFromLeft(150));
+    constexpr int kPad = 12;
+    takeOverButton_.setBounds({});
+    followBox_.setBounds({});
 
-    // The status row spans the window; the right column holds the settings in sections (D-249), the left one the
-    // slot strip, the edit bars and the voices, which get all the height that is left.
-    auto statusRow = area.removeFromBottom(40).reduced(16, 0);
-    // Only the buttons that are shown take room: without an error the message has the whole width.
+    auto header = area.removeFromTop(40).reduced(kPad, 6);
+    settingsButton_.setBounds(header.removeFromRight(90));
+    header.removeFromRight(6);
+    inspectorButton_.setBounds(header.removeFromRight(90));
+    header.removeFromRight(6);
+    redoButton_.setBounds(header.removeFromRight(90));
+    header.removeFromRight(6);
+    undoButton_.setBounds(header.removeFromRight(90));
+    styleBox_.setBounds(header.removeFromLeft(170));
+    header.removeFromLeft(6);
+    keyBox_.setBounds(header.removeFromLeft(70));
+    header.removeFromLeft(6);
+    scaleBox_.setBounds(header.removeFromLeft(120));
+    header.removeFromLeft(6);
+    barsBox_.setBounds(header.removeFromLeft(80));
+
+    auto strip = area.removeFromTop(30).reduced(kPad, 2);
+    const int buttonWidth = strip.getWidth() / static_cast<int>(slotButtons_.size());
+    for (auto& button : slotButtons_) {
+        button->setBounds(strip.removeFromLeft(buttonWidth).reduced(1, 0));
+    }
+
+    if (inspectorOpen_) {
+        auto side = area.removeFromRight(kInspectorWidth).reduced(kPad, 4);
+        constexpr int kRow = 28;
+        const auto row = [&side](int height) { return side.removeFromTop(height).reduced(0, 2); };
+        auto tabs = row(kRow);
+        const int tabWidth = tabs.getWidth() / static_cast<int>(inspectorTabs_.size());
+        for (auto& tab : inspectorTabs_) {
+            tab.setBounds(tabs.removeFromLeft(tabWidth).reduced(1, 0));
+        }
+        side.removeFromTop(6);
+        const auto page = side; // every page starts at the same place; only one is visible
+        const auto next = [&](juce::Rectangle<int>& rest) { return rest.removeFromTop(kRow).reduced(0, 2); };
+        const auto pair = [&](juce::Rectangle<int> line, juce::Component& label, juce::Component& control, int labelWidth) {
+            label.setBounds(line.removeFromLeft(labelWidth));
+            control.setBounds(line);
+        };
+        {   // instance
+            auto rest = page;
+            roleBox_.setBounds(next(rest));
+            voiceBox_.setBounds(next(rest));
+            outputBox_.setBounds(next(rest));
+            zoomBox_.setBounds(next(rest));
+            referencesButton_.setBounds(next(rest));
+            libraryButton_.setBounds(next(rest));
+            helpButton_.setBounds(next(rest));
+            expertButton_.setBounds(next(rest));
+            voiceBar_.setBounds(rest.removeFromTop(32).reduced(0, 2).removeFromLeft(8 * 30));
+            removeVoiceButton_.setBounds(next(rest));
+        }
+        {   // pattern
+            auto rest = page;
+            referenceSetBox_.setBounds(next(rest));
+            ratingBox_.setBounds(next(rest).removeFromLeft(130));
+            auto seedRow = next(rest);
+            randomButton_.setBounds(seedRow.removeFromRight(120));
+            seedRow.removeFromRight(8);
+            seedEditor_.setBounds(seedRow);
+            pair(next(rest), chromaticLabel_, chromaticSlider_, 80);
+            pair(next(rest), personalLabel_, personalSlider_, 80);
+            pair(next(rest), hatModeLabel_, hatModeBox_, 110);
+            startBox_.setBounds(next(rest));
+            quantBox_.setBounds(next(rest));
+        }
+        {   // edit
+            auto rest = page;
+            previewButton_.setBounds(next(rest));
+            followButton_.setBounds(next(rest));
+            drumsButton_.setBounds(next(rest));
+            auto history = next(rest);
+            historyBackButton_.setBounds(history.removeFromLeft(40));
+            historyForwardButton_.setBounds(history.removeFromRight(40));
+            historyLabel_.setBounds(history);
+            auto grid = next(rest);
+            gridBox_.setBounds(grid.removeFromLeft(80));
+            grid.removeFromLeft(8);
+            tripletButton_.setBounds(grid);
+            snapBox_.setBounds(next(rest));
+            pair(next(rest), strengthLabel_, strengthSlider_, 70);
+            varyAllButton_.setBounds(next(rest));
+        }
+        {   // evolve
+            auto rest = page;
+            auto top = next(rest);
+            evolveButton_.setBounds(top.removeFromLeft(100));
+            top.removeFromLeft(6);
+            evolveBackButton_.setBounds(top.removeFromLeft(40));
+            evolveStageLabel_.setBounds(next(rest));
+            evolveKeepButton_.setBounds(next(rest));
+            evolveEveryBox_.setBounds(next(rest));
+            evolveOriginalButton_.setBounds(next(rest));
+            pair(next(rest), evolveStrengthLabel_, evolveStrengthSlider_, 110);
+        }
+    }
+
+    // The status line: the message, the info of the slot and, after an error, the buttons that belong to it.
+    auto statusRow = area.removeFromBottom(26).reduced(kPad, 0);
+    statusRow.removeFromRight(16); // the grip of the size corner
     const auto take = [&](juce::Component& component, int width, int inset) {
         if (component.isVisible()) {
             component.setBounds(statusRow.removeFromRight(width).reduced(0, inset));
@@ -1778,120 +1936,37 @@ void PlaceholderEditor::resized() {
         }
     };
     take(autoOfflineButton_, 210, 0);
-    take(offlineButton_, 140, 6);
-    take(retryButton_, 140, 6);
-    take(errorSettingsButton_, 120, 6);
+    take(offlineButton_, 140, 3);
+    take(retryButton_, 140, 3);
+    take(errorSettingsButton_, 120, 3);
+    infoLabel_.setBounds(statusRow.removeFromRight(std::min(statusRow.getWidth() / 2, 440)));
     statusLabel_.setBounds(statusRow);
 
-    sections_.clear();
-    auto side = area.removeFromRight(kSidebarWidth).reduced(8, 0);
-    const auto row = [&side](int height) { return side.removeFromTop(height).reduced(0, 2); };
-    const auto section = [&](const char* key) {
-        const auto head = side.removeFromTop(20);
-        sections_.push_back({head, key});
-    };
-    constexpr int kRow = 28;
-    section(keys::kSectionGenerator.data());
-    auto keyRow = row(kRow);
-    keyBox_.setBounds(keyRow.removeFromLeft(100));
-    keyRow.removeFromLeft(8);
-    scaleBox_.setBounds(keyRow);
-    barsBox_.setBounds(row(kRow).removeFromLeft(100));
-    auto energyRow = row(kRow);
-    energyLabel_.setBounds(energyRow.removeFromLeft(80));
-    energySlider_.setBounds(energyRow);
-    auto creativityRow = row(kRow);
-    creativityLabel_.setBounds(creativityRow.removeFromLeft(80));
-    creativitySlider_.setBounds(creativityRow);
-    if (expert_) {
-        auto seedRow = row(kRow);
-        randomButton_.setBounds(seedRow.removeFromRight(120));
-        seedRow.removeFromRight(8);
-        seedEditor_.setBounds(seedRow);
-        auto chromaticRow = row(kRow);
-        chromaticLabel_.setBounds(chromaticRow.removeFromLeft(80));
-        chromaticSlider_.setBounds(chromaticRow);
-        auto personalRow = row(kRow);
-        personalLabel_.setBounds(personalRow.removeFromLeft(80));
-        personalSlider_.setBounds(personalRow);
-        auto hatRow = row(kRow);
-        hatModeLabel_.setBounds(hatRow.removeFromLeft(110));
-        hatModeBox_.setBounds(hatRow);
+    // The dock: what to write (or change) and the one action that follows.
+    auto dock = area.removeFromBottom(60).reduced(kPad, 6);
+    modeButton_.setBounds(dock.removeFromLeft(70));
+    dock.removeFromLeft(8);
+    generateButton_.setBounds(dock.removeFromRight(110));
+    refineButton_.setBounds(generateButton_.getBounds());
+    dock.removeFromRight(8);
+    auto feel = dock.removeFromRight(refining() ? 150 : 400);
+    if (refining()) {
+        refineScopeBox_.setBounds(feel.reduced(0, 10));
+    } else {
+        auto energy = feel.removeFromLeft(feel.getWidth() / 2);
+        energyLabel_.setBounds(energy.removeFromLeft(64));
+        energySlider_.setBounds(energy.reduced(0, 10));
+        creativityLabel_.setBounds(feel.removeFromLeft(80));
+        creativitySlider_.setBounds(feel.reduced(0, 10));
     }
-    section(keys::kSectionWishes.data());
-    promptEditor_.setBounds(side.removeFromTop(48).reduced(0, 2));
-    refineEditor_.setBounds(side.removeFromTop(48).reduced(0, 2));
-    auto refineRow = row(kRow + 2);
-    refineButton_.setBounds(refineRow.removeFromRight(100));
-    refineRow.removeFromRight(8);
-    refineScopeBox_.setBounds(refineRow);
-    if (expert_) {
-        section(keys::kSectionSwitch.data());
-        startBox_.setBounds(row(kRow));
-        quantBox_.setBounds(row(kRow));
-    }
-    section(keys::kSectionEvolve.data());
-    auto evolveRow = row(kRow + 2);
-    evolveButton_.setBounds(evolveRow.removeFromLeft(76));
-    evolveRow.removeFromLeft(6);
-    evolveBackButton_.setBounds(evolveRow.removeFromLeft(34));
-    evolveStageLabel_.setBounds(evolveRow.removeFromLeft(70));
-    evolveKeepButton_.setBounds(evolveRow.removeFromLeft(86));
-    if (expert_) {
-        evolveEveryBox_.setBounds(row(kRow));
-        evolveOriginalButton_.setBounds(row(kRow));
-        auto strengthRow = row(kRow);
-        evolveStrengthLabel_.setBounds(strengthRow.removeFromLeft(110));
-        evolveStrengthSlider_.setBounds(strengthRow);
-    }
+    dock.removeFromRight(8);
+    promptEditor_.setBounds(dock);
+    refineEditor_.setBounds(dock.reduced(0, 10));
 
-    auto top = area.removeFromTop(48).reduced(16, 10);
-    generateButton_.setBounds(top.removeFromRight(120));
-    top.removeFromRight(8);
-    referenceSetBox_.setBounds(top.removeFromRight(150));
-    top.removeFromRight(8);
-    styleBox_.setBounds(top);
-
-    auto strip = area.removeFromTop(40).reduced(16, 4);
-    const int buttonWidth = strip.getWidth() / static_cast<int>(slotButtons_.size());
-    for (auto& button : slotButtons_) {
-        button->setBounds(strip.removeFromLeft(buttonWidth).reduced(2, 0));
-    }
-
-    auto infoRow = area.removeFromBottom(28).reduced(16, 0);
-    ratingBox_.setBounds(infoRow.removeFromRight(130).reduced(0, 2));
-    infoLabel_.setBounds(infoRow);
-    auto historyBar = area.removeFromBottom(32).reduced(16, 2);
-    undoButton_.setBounds(historyBar.removeFromLeft(90));
-    historyBar.removeFromLeft(8);
-    redoButton_.setBounds(historyBar.removeFromLeft(90));
-    historyBar.removeFromLeft(8);
-    drumsButton_.setBounds(historyBar.removeFromLeft(90));
-    historyBar.removeFromLeft(24);
-    historyBackButton_.setBounds(historyBar.removeFromLeft(40));
-    historyLabel_.setBounds(historyBar.removeFromLeft(120));
-    historyForwardButton_.setBounds(historyBar.removeFromLeft(40));
-    followButton_.setBounds(historyBar.removeFromRight(100));
-    auto editBar = area.removeFromTop(32).reduced(16, 2);
-    previewButton_.setBounds(editBar.removeFromRight(110));
-    expertButton_.setBounds(editBar.removeFromLeft(120));
-    editBar.removeFromLeft(8);
-    gridBox_.setBounds(editBar.removeFromLeft(80));
-    editBar.removeFromLeft(8);
-    tripletButton_.setBounds(editBar.removeFromLeft(90));
-    editBar.removeFromLeft(8);
-    snapBox_.setBounds(editBar.removeFromLeft(190));
-    auto voiceBarRow = area.removeFromTop(32).reduced(16, 2);
-    voiceBar_.setBounds(voiceBarRow.removeFromLeft(8 * 30));
-    voiceBarRow.removeFromLeft(8);
-    addVoiceButton_.setBounds(voiceBarRow.removeFromLeft(110));
-    voiceBarRow.removeFromLeft(8);
-    removeVoiceButton_.setBounds(voiceBarRow.removeFromLeft(110));
-    auto variationBar = area.removeFromTop(32).reduced(16, 2);
-    strengthLabel_.setBounds(variationBar.removeFromLeft(60));
-    varyAllButton_.setBounds(variationBar.removeFromRight(140));
-    variationBar.removeFromRight(8);
-    strengthSlider_.setBounds(variationBar.removeFromLeft(260));
+    // A ghost lane to add a voice, under the lanes.
+    auto ghost = area.removeFromBottom(34).reduced(kPad, 2);
+    addVoiceButton_.setBounds(ghost);
+    area.reduce(0, 2);
     if (!rows_.empty()) {
         constexpr int kStripHeight = 36; // a collapsed row (D-159)
         const int collapsedCount = static_cast<int>(

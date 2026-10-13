@@ -1342,6 +1342,11 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
   Bearbeiten und die Stimmen mit der ganzen restlichen Höhe; rechts eine Seitenleiste (300 Punkte) in Abschnitten
   Generator, Wünsche und Verfeinern, Wechsel (Experte), Evolve; die Statuszeile über die ganze Breite. Ab der
   dritten Stimme ist nur eine Roll offen, die übrigen sind Leisten (Vorbereitung für bis zu 8 Stimmen).
+- [v1.1, umgesetzt, D-252] **Neue Aufteilung (ersetzt D-249):** Kopfzeile (Stil, Tonart, Skala, Takte, Rückgängig,
+  Wiederholen, Details, Einstellungen), Slot-Leiste, Spuren mit Streifen (Name, Stumm, Sperre, Neu, Menü „…“ mit
+  Variation, Duplizieren, Fokus) und Geisterspur „+ Stimme“, unten das Dock (Neu/Ändern: Prompt, Energie, Kreativität,
+  Erzeugen oder Verfeinern). Alles andere steht im Inspektor (standardmäßig zu) mit den Seiten Instanz, Muster,
+  Bearbeiten und Evolve; der Experten-Schalter sitzt auf Instanz.
 - [v1.1, umgesetzt, D-250] **Stimmen-Leiste und Rollen:** über den Stimmen acht Punkte (gefüllt = Stimme im Pattern, Farbe
   nach Rolle, Klick springt zur Stimme), „+ Stimme“ (Menü: Stabs, Arpeggio, Gegenmelodie) erzeugt nur die neue Stimme,
   „– Stimme“ nimmt die letzte heraus (nie Bass und Melodie). Bis zu 8 Stimmen je Pattern (§3.1a).

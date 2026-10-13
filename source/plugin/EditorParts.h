@@ -165,6 +165,7 @@ public:
     std::function<void(int, const juce::File&)> onMidiDropped;
 
     void resized() override;
+    void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     bool isInterestedInFileDrag(const juce::StringArray& files) override;
     void fileDragEnter(const juce::StringArray& files, int x, int y) override;
@@ -179,6 +180,7 @@ private:
     juce::ToggleButton muteButton_;
     juce::ToggleButton lockButton_;
     mm::core::LockFlags lockFlags_; ///< what the view showed last: the menu ticks follow it
+    juce::TextButton moreButton_; ///< the menu of Variation, Duplicate and Focus
     juce::ToggleButton focusButton_;
     juce::TextButton renewButton_;
     juce::TextButton varyButton_;
