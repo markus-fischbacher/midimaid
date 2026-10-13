@@ -56,6 +56,15 @@ public:
     void reportHub(double endPpq, int slot, bool playing);
     HubState hubState() const;
 
+    /// The preview of the hub (SPEC 3.11, v1.1, D-236): the hub plays its slot with its own clock while the transport of
+    /// the host stands still; the voices play along with their own clocks, started at the hub's position, at this tempo.
+    struct HubPreview {
+        bool active = false;
+        double bpm = 0.0;
+    };
+    void reportHubPreview(bool active, double bpm);
+    HubPreview hubPreview() const;
+
     /// The hub's mute switches, bit n-1 for voice n (SPEC 6.5: mute works twice). A voice mutes itself when its bit
     /// is set; without a hub (or after a change of hub) no bit is set.
     void reportHubMute(uint32_t mask) { hubMute_.store(mask, std::memory_order_release); }
@@ -101,6 +110,8 @@ private:
     std::atomic<int> hubTranspose_{kNoTranspose}; // offset + 16, or `kNoTranspose`
     std::atomic<double> minLeadMs_{150.0};
     std::atomic<uint32_t> hubMute_{0};
+    std::atomic<double> previewBpm_{0.0};
+    std::atomic<bool> hubPreview_{false};
 };
 
 static_assert(std::atomic<int64_t>::is_always_lock_free, "the channel must stay lock-free");

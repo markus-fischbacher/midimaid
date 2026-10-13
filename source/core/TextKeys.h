@@ -45,6 +45,8 @@ namespace mm::core::text {
     X(kLabelEnergy, "label.energy")                                                                                    \
     X(kLabelCreativity, "label.creativity")                                                                            \
     X(kLabelChromatic, "label.chromatic")                                                                              \
+    X(kStartRestart, "start.restart")                                                                                  \
+    X(kStartLegato, "start.legato")                                                                                    \
     X(kLabelHatMode, "label.hatMode")                                                                                  \
     X(kHatModeFree, "hatMode.free")                                                                                    \
     X(kHatModeWith, "hatMode.with")                                                                                    \
@@ -55,6 +57,8 @@ namespace mm::core::text {
     X(kButtonVary, "button.vary")                                                                                      \
     X(kButtonVaryAll, "button.varyAll")                                                                                \
     X(kButtonDuplicate, "button.duplicate")                                                                            \
+    X(kButtonPreview, "button.preview")                                                                                \
+    X(kButtonPreviewStop, "button.previewStop")                                                                        \
     X(kButtonUndo, "button.undo")                                                                                      \
     X(kButtonRedo, "button.redo")                                                                                      \
     X(kButtonDrumsRemove, "button.drumsRemove")                                                                        \
@@ -188,6 +192,7 @@ namespace mm::core::text {
     X(kTransposeChannelAll, "settings.transpose.channel.all")                                                          \
     X(kTransposeChannelN, "settings.transpose.channel.n")                                                              \
     X(kToggleTransposeExport, "settings.transpose.export")                                                             \
+    X(kToggleExportAllNotes, "settings.exportAllNotes")                                                                \
     X(kLabelRollView, "settings.rollView")                                                                             \
     X(kToggleRollFold, "settings.rollFold")                                                                            \
     X(kToggleRollGuides, "settings.rollGuides")                                                                        \

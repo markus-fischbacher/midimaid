@@ -6627,6 +6627,233 @@ TEST_CASE("the hat mode box is an expert control that follows the instance", "[g
     child<juce::ToggleButton>(*editor, "expert")->onClick();
 }
 
+// --- the preview with the internal clock (SPEC 3.11, D-236) ----------------------------------------------------------
+
+TEST_CASE("the preview plays the slot while the host stands still and ends when the host starts", "[group-wiring][preview]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    fillSlots(hub);
+    hub.setPlaying(false);
+    for (int i = 0; i < 400; ++i) {
+        hub.step();
+    }
+    CHECK(hub.notes().empty()); // the host stands still: nothing
+    CHECK_FALSE(hub.processor.previewing());
+    hub.processor.setPreview(true);
+    CHECK(hub.processor.previewing());
+    for (int i = 0; i < 400; ++i) { // two bars at 120 BPM and 512 samples
+        hub.step();
+    }
+    CHECK(hub.notes().size() >= 2);
+    for (const auto& note : hub.notes()) {
+        CHECK(note.pitch == 41);
+    }
+    CHECK(hub.processor.previewing());
+    // the host starts: the preview ends, the position of the host takes over
+    const size_t before = hub.notes().size();
+    hub.setPpq(8.0);
+    hub.setPlaying(true);
+    hub.step();
+    CHECK_FALSE(hub.processor.previewing());
+    for (int i = 0; i < 100; ++i) {
+        hub.step();
+    }
+    CHECK(hub.notes().size() >= before); // and it plays on with the transport
+    // a stop of the preview ends the notes: no new ones
+    hub.setPlaying(false);
+    hub.processor.setPreview(true);
+    hub.step();
+    const size_t running = hub.notes().size();
+    hub.processor.setPreview(false);
+    for (int i = 0; i < 400; ++i) {
+        hub.step();
+    }
+    CHECK(hub.notes().size() == running);
+}
+
+TEST_CASE("a voice joins a running preview at the position of the hub", "[group-wiring][preview]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    fillSlots(hub);
+    hub.setPlaying(false);
+    voice.setPlaying(false);
+    hub.processor.setPreview(true);
+    for (int i = 0; i < 300; ++i) { // 6 PPQ: the hub is in the middle of its second bar
+        hub.step();
+    }
+    voice.step(); // the voice sees the preview of the hub for the first time
+    CHECK(voice.notes().empty()); // it did not start at 0 (that note would sound at once): it starts where the hub is
+    for (int i = 0; i < 100; ++i) {
+        hub.step();
+        voice.step();
+    }
+    CHECK_FALSE(voice.notes().empty()); // and plays the next bar line
+}
+
+TEST_CASE("the preview keeps the notes balanced: every note-on gets its note-off", "[group-wiring][preview]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) {
+        mm::core::Pattern pattern = mm::core::makeEmptyPattern(1, "peak_time");
+        mm::core::Note note;
+        note.id = mm::core::allocateNoteId(pattern);
+        note.pitch = 45;
+        note.startTick = 960;
+        note.lengthTicks = 1920; // sounds a long while
+        pattern.voices[0].notes.push_back(note);
+        REQUIRE(bank.setResult(0, pattern));
+    });
+    hub.setPlaying(false);
+    hub.processor.setPreview(true);
+    for (int i = 0; i < 70; ++i) { // into the note
+        hub.step();
+    }
+    REQUIRE(hub.notes().size() == 1);
+    CHECK(hub.noteOffs().empty());
+    hub.processor.setPreview(false); // stopped while sounding
+    hub.step();
+    CHECK(hub.noteOffs().size() == 1);
+}
+
+TEST_CASE("the preview of the hub takes its voices along", "[group-wiring][preview]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    fillSlots(hub);
+    hub.setPlaying(false);
+    voice.setPlaying(false);
+    for (int i = 0; i < 100; ++i) {
+        hub.step();
+        voice.step();
+    }
+    CHECK(hub.notes().empty());
+    CHECK(voice.notes().empty());
+    hub.processor.setPreview(true);
+    for (int i = 0; i < 400; ++i) {
+        hub.step();
+        voice.step();
+    }
+    CHECK(hub.notes().size() >= 2);
+    CHECK(voice.notes().size() >= 2); // the voice follows with its own clock
+    for (const auto& note : voice.notes()) {
+        CHECK(note.pitch == 41);
+    }
+    CHECK_FALSE(voice.processor.previewing()); // the voice has no button of its own
+    // the hub ends the preview: the voice ends too
+    hub.processor.setPreview(false);
+    hub.step();
+    voice.step();
+    const size_t heard = voice.notes().size();
+    for (int i = 0; i < 400; ++i) {
+        hub.step();
+        voice.step();
+    }
+    CHECK(voice.notes().size() == heard);
+    CHECK(hub.notes().size() >= 2);
+}
+
+TEST_CASE("the preview button of the hub switches the preview and shows its state", "[group-wiring][preview][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    auto* button = child<juce::TextButton>(*editor, "preview");
+    REQUIRE(button != nullptr);
+    CHECK(button->isVisible());
+    CHECK(button->getButtonText() == "Vorhören");
+    CHECK(editor->getLocalBounds().contains(button->getBounds()));
+    for (auto* other : editor->getChildren()) {
+        if (other != button && other->isVisible() && other->getWidth() > 0 &&
+            dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+            INFO(other->getComponentID().toStdString());
+            CHECK_FALSE(button->getBounds().intersects(other->getBounds()));
+        }
+    }
+    button->onClick();
+    CHECK(hub.processor.previewing());
+    CHECK(button->getButtonText() == "Stopp");
+    button->onClick();
+    CHECK_FALSE(hub.processor.previewing());
+    CHECK(button->getButtonText() == "Vorhören");
+    // the end of the preview by the host shows in the button
+    hub.processor.setPreview(true);
+    CHECK(waitFor([&] { return button->getButtonText() == "Stopp"; }));
+    hub.setPpq(8.0);
+    hub.setPlaying(true);
+    hub.step();
+    CHECK(waitFor([&] { return button->getButtonText() == "Vorhören"; }));
+}
+
+// --- how a new pattern starts: restart or legato (SPEC 3.4, D-236) -------------------------------------------------
+
+TEST_CASE("the start mode is saved with the instance, only when it is legato", "[group-wiring][legato]") {
+    Quiet quiet;
+    Instance source("Source");
+    CHECK_FALSE(source.processor.instanceSettings().legato);
+    juce::MemoryBlock standard;
+    source.processor.getStateInformation(standard);
+    auto root = juce::AudioProcessor::getXmlFromBinary(standard.getData(), static_cast<int>(standard.getSize()));
+    REQUIRE(root != nullptr);
+    CHECK_FALSE(root->hasAttribute("switchLegato")); // states from before stay as they were
+    auto settings = source.processor.instanceSettings();
+    settings.legato = true;
+    source.processor.setInstanceSettings(settings);
+    juce::MemoryBlock saved;
+    source.processor.getStateInformation(saved);
+    Instance target("Target");
+    target.processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.processor.instanceSettings().legato);
+    target.processor.setStateInformation(standard.getData(), static_cast<int>(standard.getSize()));
+    CHECK_FALSE(target.processor.instanceSettings().legato);
+}
+
+TEST_CASE("the start box is an expert control that follows the instance", "[group-wiring][legato][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    pumpMessages(60);
+    auto* box = child<juce::ComboBox>(*editor, "startMode");
+    REQUIRE(box != nullptr);
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK_FALSE(box->isVisible()); // basic level
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(true, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+    pumpMessages(40);
+    CHECK(box->isVisible());
+    CHECK(box->getNumItems() == 2);
+    CHECK(box->getItemText(0) == "Einsatz: Neustart");
+    CHECK(box->getItemText(1) == "Einsatz: Legato");
+    CHECK(editor->getLocalBounds().contains(box->getBounds()));
+    for (auto* other : editor->getChildren()) {
+        if (other != box && other->isVisible() && other->getWidth() > 0 &&
+            dynamic_cast<mm::plugin::ScaleCorner*>(other) == nullptr) {
+            INFO(other->getComponentID().toStdString());
+            CHECK_FALSE(box->getBounds().intersects(other->getBounds()));
+        }
+    }
+    box->setSelectedId(2, juce::sendNotificationSync);
+    CHECK(hub.processor.instanceSettings().legato);
+    box->setSelectedId(1, juce::sendNotificationSync);
+    CHECK_FALSE(hub.processor.instanceSettings().legato);
+    auto settings = hub.processor.instanceSettings();
+    settings.legato = true;
+    hub.processor.setInstanceSettings(settings);
+    CHECK(waitFor([&] { return box->getSelectedId() == 2; }));
+    child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
+    child<juce::ToggleButton>(*editor, "expert")->onClick();
+}
+
 // --- groove templates (SPEC 3.9, D-220) -----------------------------------------------------------------------
 
 namespace {

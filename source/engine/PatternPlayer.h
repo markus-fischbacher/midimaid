@@ -97,6 +97,15 @@ public:
     void setMuted(bool muted) { muted_ = muted; }
     bool muted() const { return muted_; }
 
+    /// How a new pattern starts (SPEC 3.4, 6.1): "restart" (default) puts its position 0 on the switch point, so a
+    /// pattern of several bars always begins at its first bar; "legato" (v1.1, D-236) lets the position run on: the
+    /// pattern is entered where the song position (counted from the last start or jump) puts it, like Live's Legato
+    /// mode. After a start or a jump the position is the song position modulo the pattern length in both modes.
+    void setLegato(bool legato) { legato_ = legato; }
+    bool legato() const { return legato_; }
+    /// The song position (PPQ) at which position 0 of the playing pattern lies (0 after a start or jump).
+    double phasePpq() const { return phasePpq_; }
+
     /// Live transposition (SPEC 3.16, v1.1), read by the audio thread before `process`: the notes that start from now
     /// on are transposed by `offset` (semitones, or scale degrees in the diatonic mode, limited to +-12) with the
     /// octave rule of the voice; notes that are sounding keep their pitch and end with it. `setTransposeAt` does it from
@@ -161,7 +170,9 @@ private:
     /// True when the pattern that stops playing at a commit can be handed back (or there is none to hand back).
     bool canRetire() const;
     /// Plays the selected slot's pattern now. Requires `canRetire()`.
-    void commitSelected();
+    /// `restart`: after a start or jump (position from the song grid, phase 0); else a switch at `point` (a restart of
+    /// the position there, or the old phase kept in legato mode).
+    void commitSelected(double point, bool restart);
     /// Hands `pattern` back for freeing (the handover) or, without one, frees it (message-thread use in tests).
     void retire(OwnedPattern* pattern);
     static void dispose(OwnedPattern* pattern);
@@ -192,6 +203,8 @@ private:
     int playingSlot_ = 0;                   // slot that `pattern_` came from; -1 when its entry was replaced meanwhile
     OwnedPattern* detachedOwner_ = nullptr; // owner of the playing pattern after its entry was replaced
     double slotGridPpq_ = 4.0;
+    double phasePpq_ = 0.0; ///< where position 0 of the playing pattern lies on the song position
+    bool legato_ = false;
     PatternHandover* handover_ = nullptr;
     SwitchTiming timing_;
     int mapPitch(int pitch) const;

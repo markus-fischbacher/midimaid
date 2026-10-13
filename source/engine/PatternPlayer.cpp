@@ -188,7 +188,8 @@ void PatternPlayer::reportActive() const {
     }
 }
 
-void PatternPlayer::commitSelected() {
+void PatternPlayer::commitSelected(double point, bool restart) {
+    phasePpq_ = restart ? 0.0 : (legato_ ? phasePpq_ : point);
     retire(detachedOwner_);
     detachedOwner_ = nullptr;
     pattern_ = slots_[static_cast<size_t>(selected_)].view;
@@ -367,12 +368,14 @@ void PatternPlayer::processSegment(double scanFrom, double origin, double to, in
     if (pattern_.count > 0 && pattern_.lengthTicks > 0 && to > scanFrom) {
         const double ticksToPpq = 1.0 / kTicksPerQuarter;
         const double lengthPpq = pattern_.lengthTicks * ticksToPpq;
-        const auto firstCycle = static_cast<long long>(std::floor(scanFrom / lengthPpq));
-        const auto lastCycle = static_cast<long long>(std::floor(to / lengthPpq));
-        for (long long cycle = firstCycle; cycle <= lastCycle; ++cycle) {
+        // position 0 of the pattern lies on `phasePpq_`: the passes are counted from there (a restart at a switch
+        // starts at pass 0 again); before it (legato running over a negative phase) the passes count downwards
+        const auto firstCycle = static_cast<long long>(std::floor((scanFrom - phasePpq_) / lengthPpq));
+        const auto lastCycle = static_cast<long long>(std::floor((to - phasePpq_) / lengthPpq));
+        for (long long cycle = std::max<long long>(firstCycle, 0); cycle <= lastCycle; ++cycle) {
             for (size_t i = 0; i < pattern_.count; ++i) {
                 const PatternNote& note = pattern_.notes[i];
-                const double start = static_cast<double>(cycle) * lengthPpq + note.startTick * ticksToPpq;
+                const double start = phasePpq_ + static_cast<double>(cycle) * lengthPpq + note.startTick * ticksToPpq;
                 if (start >= scanFrom && start < to) {
                     // probability and conditions (SPEC 3.19): the same decision for the same pass wherever it is played
                     if (!core::soundsInPass(note, pattern_.seed, static_cast<uint64_t>(cycle))) {
@@ -422,7 +425,7 @@ void PatternPlayer::playRangeSwitch(double scanFrom, double origin, double to, i
         const double point = std::max(timing_.pointPpq, scanFrom);
         processSegment(scanFrom, origin, point, sampleBase, numSamples, ppqPerSample, out);
         releaseAt(out, clampOffset(sampleBase, (point - origin) / ppqPerSample, numSamples), true);
-        commitSelected();
+        commitSelected(point, false);
         processSegment(point, origin, to, sampleBase, numSamples, ppqPerSample, out);
     } else {
         processSegment(scanFrom, origin, to, sampleBase, numSamples, ppqPerSample, out);
@@ -476,6 +479,9 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
         scanFrom = expectedPpq_;
     }
     pendingWrapRelease_ = false;
+    if (restart) {
+        phasePpq_ = 0.0; // after a start or a jump the song grid decides (SPEC 6.1)
+    }
     lastPpqPerSample_ = ppqPerSample;
     lastNumSamples_ = numSamples;
 
@@ -485,7 +491,7 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
 
     if (switchPending()) {
         if (restart && canRetire()) {
-            commitSelected();
+            commitSelected(0.0, true);
         } else if (!timing_.resolved) {
             // Fixed once, in the block that first sees the change (rule 2): never in the past.
             timing_.pointPpq = timing_.hasStamp && timing_.stampPpq >= transport.ppq - 1e-9
@@ -509,11 +515,12 @@ void PatternPlayer::process(const TransportInfo& transport, int numSamples, doub
         if (switchPending()) {
             // The loop wrap is a jump: a change whose point was not reached before it applies here (T4).
             if (canRetire()) {
-                commitSelected();
+                commitSelected(0.0, true);
             } else {
                 timing_.resolved = false; // queue full: choose a new point in the next block
             }
         }
+        phasePpq_ = 0.0; // the wrap is a jump: the song grid decides
         const double secondEnd = transport.loopStartPpq + (blockEnd - transport.loopEndPpq);
         processSegment(transport.loopStartPpq, transport.loopStartPpq, secondEnd, wrapOffset, numSamples, ppqPerSample,
                        out);

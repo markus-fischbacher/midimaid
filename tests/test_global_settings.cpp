@@ -15,6 +15,7 @@ TEST_CASE("the defaults are A minor, basic level, strength 30 and a 1/16 grid", 
     CHECK_FALSE(defaults.snapChromatic);
     CHECK(defaults.middleC == 3);
     CHECK_FALSE(defaults.rollFold);
+    CHECK_FALSE(defaults.exportAllNotes);
     CHECK(defaults.rollGuides); // the guides are on, the fold and the marker row are off (D-232)
     CHECK_FALSE(defaults.rollMarkers);
     CHECK(defaults.shortcuts.empty()); // MidiMaid binds no key in advance (D-126)
@@ -32,6 +33,7 @@ TEST_CASE("settings survive writing and reading", "[global-settings]") {
     settings.snapChromatic = true;
     settings.middleC = 4;
     settings.rollFold = true;
+    settings.exportAllNotes = true;
     settings.rollGuides = false;
     settings.rollMarkers = true;
     settings.shortcuts = {{"generate", "cmd+g"}, {"undo", "cmd+z"}, {"focus_all", "f3"}};

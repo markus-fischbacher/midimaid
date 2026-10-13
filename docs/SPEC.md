@@ -189,7 +189,7 @@ Kick-Rastern, Harmonie und Akkordfarben stehen in `docs/STYLES.md` (verbindlich)
   Variationen wechseln quantisiert. Der Zeitpunkt ist einstellbar: nächster Schlag, nächster Takt,
   nächste 4/8/16 Takte, Ende der Phrase, Ende des Patterns. Standard ist „nächster Takt“.
   - **Einsatzposition:** „Neustart“, das neue Pattern beginnt am Wechselzeitpunkt bei Takt 1.
-    [v1.1] Alternativ „Legato“: Die Position läuft weiter wie bei Lives Legato-Modus.
+    [v1.1, umgesetzt, D-236] Alternativ „Legato“: Die Position läuft weiter wie bei Lives Legato-Modus.
   - „Neustart“ ist nur an Taktgrenzen erlaubt. Bei Quantisierung „nächster Schlag“ gilt automatisch
     „Legato“, sonst läge Schritt 0 des Patterns nicht mehr auf der Eins und Kick-Raster, Phrasen und
     Akzente wären verschoben.
@@ -317,7 +317,7 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
   Clips mit einer Clip-Hüllkurve für den Slot-Parameter anlegt. Startet eine Szene, wechselt der Slot
   (Erklärung in der Setup-Hilfe, Vorlage in §8.6).
 
-### 3.11 [v1.1] Vorhören bei gestopptem Transport
+### 3.11 [v1.1] Vorhören bei gestopptem Transport (umgesetzt, D-236)
 - Play-Knopf im Plugin spielt den aktiven Slot mit **interner Clock**: im Tempo der DAW, sonst mit dem
   zuletzt bekannten Tempo, ersatzweise 125 BPM
 - Sobald der DAW-Transport startet, stoppt die Vorschau (mit Note-Offs) und der Transport-Sync übernimmt
@@ -880,7 +880,7 @@ Echtzeit-Übergabe lock-free bleibt.
   und zeigt einen Hinweis.
 - Der vollständige Zustandsautomat (Stop, Start, Sprung, Loop, quantisierter Wechsel, geplanter
   Gruppenwechsel) mit testbaren Beispielen steht in §6.1a.
-- [v1.1] Im Modus „Legato“ bleibt die Position beim Wechsel erhalten
+- [v1.1, umgesetzt, D-236] Im Modus „Legato“ bleibt die Position beim Wechsel erhalten
 
 ### 6.1a Zustandsautomat (normativ, D-131)
 Jede Instanz hat pro Block einen **Transportzustand** und höchstens einen **ausstehenden Wechsel** je Art (§6.3).

@@ -70,6 +70,7 @@ void GroupChannel::setHub(int member) {
     hubState_.store(kNoHubState, std::memory_order_release);
     hubTranspose_.store(kNoTranspose, std::memory_order_release);
     hubMute_.store(0, std::memory_order_release);
+    hubPreview_.store(false, std::memory_order_release);
     hub_.store(member, std::memory_order_release);
 }
 
@@ -108,6 +109,18 @@ void GroupChannel::reportHub(double endPpq, int slot, bool playing) {
     const int64_t ticks = toTicks(endPpq, kMaxPositionTicks);
     hubState_.store((ticks << 6) | (static_cast<int64_t>(slotBits(slot)) << 1) | (playing ? 1 : 0),
                     std::memory_order_release);
+}
+
+void GroupChannel::reportHubPreview(bool active, double bpm) {
+    previewBpm_.store(bpm, std::memory_order_relaxed);
+    hubPreview_.store(active, std::memory_order_release);
+}
+
+GroupChannel::HubPreview GroupChannel::hubPreview() const {
+    HubPreview preview;
+    preview.active = hubPreview_.load(std::memory_order_acquire);
+    preview.bpm = previewBpm_.load(std::memory_order_relaxed);
+    return preview;
 }
 
 GroupChannel::HubState GroupChannel::hubState() const {

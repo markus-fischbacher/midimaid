@@ -512,6 +512,23 @@ TEST_CASE("restoring the default takes every assignment away", "[settings-dialog
     CHECK_FALSE(dialog->capturing());
 }
 
+TEST_CASE("the export of all notes is switched here and saved", "[settings-dialog][probability]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    auto& toggle = part<juce::ToggleButton>(*dialog, "exportAllNotes");
+    CHECK(toggle.isVisible());
+    CHECK_FALSE(toggle.getToggleState()); // by default the passes are resolved (D-233)
+    toggle.setToggleState(true, juce::dontSendNotification);
+    toggle.onClick();
+    CHECK(env.store.get().exportAllNotes);
+    const auto later = env.dialog();
+    CHECK(part<juce::ToggleButton>(*later, "exportAllNotes").getToggleState());
+    toggle.setToggleState(false, juce::dontSendNotification);
+    toggle.onClick();
+    CHECK_FALSE(env.store.get().exportAllNotes);
+}
+
 TEST_CASE("the dialog shows what was saved before", "[settings-dialog]") {
     juce::ScopedJuceInitialiser_GUI gui;
     Env env;

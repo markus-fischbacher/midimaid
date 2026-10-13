@@ -46,7 +46,7 @@ GlobalSettingsStore::~GlobalSettingsStore() {
 }
 
 bool GlobalSettingsStore::Pending::any() const {
-    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || rollFold || rollGuides || rollMarkers || middleC || shortcuts || language || transpose || ai;
+    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || rollFold || exportAllNotes || rollGuides || rollMarkers || middleC || shortcuts || language || transpose || ai;
 }
 
 void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) const {
@@ -70,6 +70,9 @@ void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) con
     }
     if (rollFold) {
         settings.rollFold = *rollFold;
+    }
+    if (exportAllNotes) {
+        settings.exportAllNotes = *exportAllNotes;
     }
     if (rollGuides) {
         settings.rollGuides = *rollGuides;
@@ -174,6 +177,7 @@ void GlobalSettingsStore::update(const std::function<void(mm::core::GlobalSettin
             note(pending_.grid, before.grid, next.grid);
             note(pending_.snapChromatic, before.snapChromatic, next.snapChromatic);
             note(pending_.rollFold, before.rollFold, next.rollFold);
+            note(pending_.exportAllNotes, before.exportAllNotes, next.exportAllNotes);
             note(pending_.rollGuides, before.rollGuides, next.rollGuides);
             note(pending_.rollMarkers, before.rollMarkers, next.rollMarkers);
             note(pending_.middleC, before.middleC, next.middleC);

@@ -853,6 +853,7 @@ void ProcessorBase::setInstanceSettingsLocked(const mm::core::InstanceSettings& 
     publisher_.setOctave(settings_.octave);
     settings_.generation = mm::core::sanitize(settings.generation);
     outputVoice_.store(settings_.outputVoice);
+    legato_.store(settings_.legato, std::memory_order_release);
     publisher_.setOutputVoice(settings_.outputVoice);
     publisher_.sync(slots_);
     // A new voice or octave published the slots again: the stage that sounds goes to the engine once more.
@@ -1792,11 +1793,46 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
                 transport.ppq = *ppq;
                 transport.bpm = *bpm;
                 lastBpm_.store(*bpm);
+                hostBpmSeen_.store(true, std::memory_order_relaxed);
             }
             if (const auto loop = position->getLoopPoints()) {
                 transport.loopStartPpq = loop->ppqStart;
                 transport.loopEndPpq = loop->ppqEnd;
             }
+        }
+    }
+
+    // The preview (SPEC 3.11, D-236): while the host stands still the slot plays with an internal clock; a voice plays
+    // along when its hub previews. The start of the host ends it (its position takes over like after any jump).
+    {
+        const auto mode = static_cast<mm::engine::SlotMode>(slotMode_.load(std::memory_order_acquire));
+        const bool isVoice = voiceRole_.load(std::memory_order_acquire);
+        auto& channel = mm::engine::processGroupChannel();
+        const bool hostRunning = transport.hasPosition && transport.isPlaying;
+        const auto hubPreview = isVoice ? channel.hubPreview() : mm::engine::GroupChannel::HubPreview{};
+        const bool voicePreview = isVoice && !hostRunning && hubPreview.active;
+        if (hostRunning) {
+            previewRequested_.store(false, std::memory_order_release);
+            previewRunning_ = false;
+        } else if ((!isVoice && previewRequested_.load(std::memory_order_acquire)) || voicePreview) {
+            const double known = hostBpmSeen_.load(std::memory_order_relaxed) ? lastBpm_.load() : 0.0;
+            const double bpm = voicePreview && hubPreview.bpm > 0.0 ? hubPreview.bpm : (known > 0.0 ? known : 125.0);
+            if (!previewRunning_) {
+                previewRunning_ = true;
+                const auto hub = channel.hubState();
+                previewPpq_ = voicePreview && hub.valid ? hub.ppq : 0.0; // a voice starts where the hub is
+            }
+            transport.hasPosition = true;
+            transport.isPlaying = true;
+            transport.isLooping = false;
+            transport.ppq = previewPpq_;
+            transport.bpm = bpm;
+            previewPpq_ += audio.getNumSamples() * bpm / 60.0 / std::max(getSampleRate(), 1.0);
+        } else {
+            previewRunning_ = false;
+        }
+        if (mode == mm::engine::SlotMode::Hub && !isVoice) {
+            channel.reportHubPreview(previewRunning_, previewRunning_ ? transport.bpm : 0.0);
         }
     }
 
@@ -1835,6 +1871,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& audio, juce::MidiBuff
                        silent_.load(std::memory_order_acquire) ||
                        (voiceRole_.load(std::memory_order_acquire) && groupSync_.mutedByHub(voice));
     player_.setMuted(muted);
+    player_.setLegato(legato_.load(std::memory_order_acquire));
     player_.process(transport, audio.getNumSamples(), getSampleRate(), events_);
     writeEvents(midi);
 }
@@ -2287,6 +2324,8 @@ void ProcessorBase::updateExport() {
     key.voice = own.voice;
     key.octave = own.octave;
     key.all = all;
+    const bool allNotes = globalSettings().ready() && globalSettings().get().exportAllNotes;
+    key.allNotes = allNotes;
     key.empty = views.empty();
     if (exportKey_ && *exportKey_ == key) {
         return;
@@ -2311,7 +2350,7 @@ void ProcessorBase::updateExport() {
         }
         // Chances and conditions are resolved: the file holds the passes that the group plays one after another (D-233)
         uint32_t lengthTicks = view.lengthTicks;
-        request.notes = mm::core::notesForExport(view.notes, lengthTicks, view.seed);
+        request.notes = allNotes ? view.notes : mm::core::notesForExport(view.notes, lengthTicks, view.seed);
         request.lengthTicks = lengthTicks;
         request.voice = view.voice;
         request.fileName = "MidiMaid_Slot" + juce::String(view.slot) + "_" + view.voiceName.replace(" ", "") + ".mid";
@@ -2405,6 +2444,9 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         if (uiScalePct() != mm::core::kDefaultUiScale) { // only when it differs: states of the standard size stay as they were
             root.setAttribute("uiScale", uiScalePct());
         }
+        if (settings_.legato) { // only when on: states of the restart stay as they were
+            root.setAttribute("switchLegato", 1);
+        }
         if (settings_.evolve != mm::core::EvolveSettings{}) { // only when not the default (SPEC 6.7)
             root.setAttribute("evolveEvery", settings_.evolve.everyPasses);
             root.setAttribute("evolveFromOriginal", settings_.evolve.fromOriginal ? 1 : 0);
@@ -2451,6 +2493,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     settings.generation.lengthBars =
         static_cast<uint32_t>(std::max(0, root->getIntAttribute("genBars", static_cast<int>(defaults.lengthBars))));
     settings.octave = mm::core::clampOctave(root->getIntAttribute("octave", 0));
+    settings.legato = root->getIntAttribute("switchLegato", 0) != 0;
     settings.evolve = mm::core::clampEvolveSettings(
         {root->getIntAttribute("evolveEvery", mm::core::kDefaultEvolvePasses),
          root->getIntAttribute("evolveFromOriginal", 0) != 0,

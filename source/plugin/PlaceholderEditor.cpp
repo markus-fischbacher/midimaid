@@ -197,6 +197,13 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
 
     undoButton_.setComponentID("undo");
     undoButton_.setButtonText(tr(keys::kButtonUndo));
+    previewButton_.setComponentID("preview");
+    previewButton_.setButtonText(tr(keys::kButtonPreview));
+    previewButton_.onClick = [this] {
+        processor_.setPreview(!processor_.previewing());
+        updateActionButtons();
+    };
+    addChildComponent(previewButton_);
     undoButton_.onClick = [this] {
         processor_.undo();
         updateStatus();
@@ -397,6 +404,16 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
         processor_.setInstanceSettings(next);
     };
     addChildComponent(chromaticSlider_);
+    startBox_.setComponentID("startMode");
+    startBox_.addItem(tr(keys::kStartRestart), 1);
+    startBox_.addItem(tr(keys::kStartLegato), 2);
+    startBox_.setSelectedId(1, juce::dontSendNotification);
+    startBox_.onChange = [this] {
+        auto next = processor_.instanceSettings();
+        next.legato = startBox_.getSelectedId() == 2;
+        processor_.setInstanceSettings(next);
+    };
+    addChildComponent(startBox_);
     hatModeBox_.setComponentID("hatMode");
     hatModeBox_.addItem(tr(keys::kHatModeFree), 1);
     hatModeBox_.addItem(tr(keys::kHatModeWith), 2);
@@ -931,7 +948,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     for (auto* component : std::initializer_list<juce::Component*>{
              &keyBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
              &infoLabel_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
-             &expertButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_, &evolveButton_, &evolveBackButton_,
+             &expertButton_, &previewButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_, &evolveButton_, &evolveBackButton_,
              &evolveStageLabel_, &evolveKeepButton_}) {
         component->setVisible(!voiceLayout);
     }
@@ -1001,6 +1018,9 @@ void PlaceholderEditor::syncFields(const mm::core::InstanceSettings& settings) {
                                                                          : 1;
     if (hatModeBox_.getSelectedId() != hatId) {
         hatModeBox_.setSelectedId(hatId, juce::dontSendNotification);
+    }
+    if (startBox_.getSelectedId() != (settings.legato ? 2 : 1)) {
+        startBox_.setSelectedId(settings.legato ? 2 : 1, juce::dontSendNotification);
     }
     const bool outputNone = settings.outputMode == mm::core::OutputMode::None;
     if (outputBox_.getSelectedId() != (outputNone ? 2 : 1)) {
@@ -1209,7 +1229,7 @@ void PlaceholderEditor::applyLevel() {
     const bool show = expert_ && !voiceLayout_;
     for (auto* component :
          std::initializer_list<juce::Component*>{&seedEditor_, &randomButton_, &gridBox_, &tripletButton_, &snapBox_,
-                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &hatModeLabel_, &hatModeBox_,
+                                                 &varyAllButton_, &strengthLabel_, &strengthSlider_, &chromaticLabel_, &chromaticSlider_, &hatModeLabel_, &hatModeBox_, &startBox_,
                                                  &evolveEveryBox_,
                                                  &evolveOriginalButton_, &evolveStrengthLabel_,
                                                  &evolveStrengthSlider_}) {
@@ -1252,7 +1272,16 @@ void PlaceholderEditor::applyEvolveSettings() {
                                   static_cast<int>(evolveStrengthSlider_.getValue())});
 }
 
+void PlaceholderEditor::updatePreviewButton() {
+    const bool previewing = processor_.previewing();
+    if (previewButton_.getToggleState() != previewing) { // the host may end the preview by starting
+        previewButton_.setButtonText(tr(previewing ? keys::kButtonPreviewStop : keys::kButtonPreview));
+        previewButton_.setToggleState(previewing, juce::dontSendNotification);
+    }
+}
+
 void PlaceholderEditor::updateActionButtons() {
+    updatePreviewButton();
     undoButton_.setEnabled(processor_.canUndo());
     redoButton_.setEnabled(processor_.canRedo());
     drumsButton_.setEnabled(shownInfo_.drumReference || processor_.drumReference().has_value());
@@ -1472,6 +1501,7 @@ void PlaceholderEditor::timerCallback() {
         applyRollHelpers();
     }
     updateStatus();
+    updatePreviewButton();
     processor_.updateExport();
 }
 
@@ -1636,6 +1666,7 @@ void PlaceholderEditor::resized() {
     evolveStageLabel_.setBounds(historyBar.removeFromLeft(70));
     evolveKeepButton_.setBounds(historyBar.removeFromLeft(86));
     auto editBar = area.removeFromTop(32).reduced(16, 2);
+    previewButton_.setBounds(editBar.removeFromRight(110));
     expertButton_.setBounds(editBar.removeFromLeft(120));
     editBar.removeFromLeft(8);
     varyAllButton_.setBounds(editBar.removeFromRight(140));
@@ -1647,6 +1678,10 @@ void PlaceholderEditor::resized() {
     tripletButton_.setBounds(editBar.removeFromLeft(90));
     editBar.removeFromLeft(8);
     snapBox_.setBounds(editBar.removeFromLeft(190));
+    if (expert_) {
+        editBar.removeFromLeft(8);
+        startBox_.setBounds(editBar.removeFromLeft(170));
+    }
     if (expert_) { // the settings of Evolve (SPEC 6.7) in a row of their own
         auto evolveRow = area.removeFromTop(32).reduced(16, 2);
         evolveEveryBox_.setBounds(evolveRow.removeFromLeft(190));

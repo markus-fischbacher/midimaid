@@ -238,8 +238,8 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
         Ziel, Kanal, Referenznote), Anzeige im Hub, Offline-Render ohne Tastatur; Einstellungen vorerst nur im Code
   - [x] Etappe 2 (D-216): Gruppe (Voices folgen der geteilten Transposition mit geplantem Wechsel über den Gruppenkanal, „eigen“ nutzt den Parameter der Voice), Export mit Transposition (abschaltbar im Code), Anzeige in der Voice
   - [x] Etappe 3 (D-217): Einstellungsdialog und Speicherung in den globalen Einstellungen (Referenznote, Modus, Verhalten, Zeitpunkt, Ziel, Kanal, Export), MIDI Thru
-- [ ] Vorhören bei gestopptem Transport, auch für Voices (SPEC §3.11)
-- [ ] Legato-Einsatz (SPEC §3.4)
+- [x] Vorhören bei gestopptem Transport, auch für Voices (SPEC §3.11, D-236; Prüfung in Logic H85)
+- [x] Legato-Einsatz (SPEC §3.4, D-236; dabei „Neustart“ für Patterns über einen Takt korrigiert; einstellbare Quantisierung offen)
 - [x] Trigger-Parameter Generieren/Variation (SPEC §3.13, D-218)
 - [ ] Session-Ansicht: Slot per Clip-Hüllkurve, Beispiele in der Live-Vorlage
 
