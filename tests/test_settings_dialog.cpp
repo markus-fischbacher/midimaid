@@ -529,6 +529,23 @@ TEST_CASE("the export of all notes is switched here and saved", "[settings-dialo
     CHECK_FALSE(env.store.get().exportAllNotes);
 }
 
+TEST_CASE("the groove of the export is switched here and saved", "[settings-dialog][groove]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    auto& toggle = part<juce::ToggleButton>(*dialog, "exportGroove");
+    CHECK(toggle.isVisible());
+    CHECK(toggle.getToggleState()); // by default the groove is exported (SPEC 3.9)
+    toggle.setToggleState(false, juce::dontSendNotification);
+    toggle.onClick();
+    CHECK_FALSE(env.store.get().exportGroove);
+    const auto later = env.dialog();
+    CHECK_FALSE(part<juce::ToggleButton>(*later, "exportGroove").getToggleState());
+    toggle.setToggleState(true, juce::dontSendNotification);
+    toggle.onClick();
+    CHECK(env.store.get().exportGroove);
+}
+
 TEST_CASE("the dialog shows what was saved before", "[settings-dialog]") {
     juce::ScopedJuceInitialiser_GUI gui;
     Env env;

@@ -7005,6 +7005,23 @@ TEST_CASE("the voice row has the groove box and the swing slider", "[group-wirin
     CHECK(rig.track().groove.templateId == "straight");
 }
 
+TEST_CASE("a bass with swing over 56 percent shows the flam hint", "[group-wiring][groove][editor]") {
+    GrooveRig rig;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(rig.hub.processor.createEditor());
+    pumpMessages(80);
+    auto* hint = child<juce::Label>(*editor, "flamHint_1");
+    REQUIRE(hint != nullptr);
+    CHECK(hint->getText() == "Flams mit der geraden Kick möglich");
+    CHECK_FALSE(hint->isVisible());
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.56f));
+    pumpMessages(80);
+    CHECK_FALSE(hint->isVisible()); // 56 % is the border
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.57f));
+    CHECK(waitFor([&] { return hint->isVisible(); }));
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.5f));
+    CHECK(waitFor([&] { return !hint->isVisible(); }));
+}
+
 TEST_CASE("the drum reference is offered only when the pattern has one", "[group-wiring][groove][editor]") {
     GrooveRig rig;
     rig.hub.processor.editSlots([&](mm::core::SlotBank& bank) {

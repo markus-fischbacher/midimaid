@@ -46,7 +46,7 @@ GlobalSettingsStore::~GlobalSettingsStore() {
 }
 
 bool GlobalSettingsStore::Pending::any() const {
-    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || rollFold || exportAllNotes || favoritesToActiveSet || rollGuides || rollMarkers || middleC || shortcuts || language || transpose || ai;
+    return expert || startRoot || startScaleId || variationStrength || grid || snapChromatic || rollFold || exportAllNotes || exportGroove || favoritesToActiveSet || rollGuides || rollMarkers || middleC || shortcuts || language || transpose || ai;
 }
 
 void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) const {
@@ -73,6 +73,9 @@ void GlobalSettingsStore::Pending::apply(mm::core::GlobalSettings& settings) con
     }
     if (exportAllNotes) {
         settings.exportAllNotes = *exportAllNotes;
+    }
+    if (exportGroove) {
+        settings.exportGroove = *exportGroove;
     }
     if (favoritesToActiveSet) {
         settings.favoritesToActiveSet = *favoritesToActiveSet;
@@ -181,6 +184,7 @@ void GlobalSettingsStore::update(const std::function<void(mm::core::GlobalSettin
             note(pending_.snapChromatic, before.snapChromatic, next.snapChromatic);
             note(pending_.rollFold, before.rollFold, next.rollFold);
             note(pending_.exportAllNotes, before.exportAllNotes, next.exportAllNotes);
+            note(pending_.exportGroove, before.exportGroove, next.exportGroove);
             note(pending_.favoritesToActiveSet, before.favoritesToActiveSet, next.favoritesToActiveSet);
             note(pending_.rollGuides, before.rollGuides, next.rollGuides);
             note(pending_.rollMarkers, before.rollMarkers, next.rollMarkers);

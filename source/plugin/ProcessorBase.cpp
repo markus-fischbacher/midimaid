@@ -2267,6 +2267,10 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     }
     auto rendered = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave, &embeddedGrooves());
     view.hasPattern = true;
+    view.gridNotes.clear();
+    if (globalSettings().ready() && !globalSettings().get().exportGroove) {
+        view.gridNotes = mm::core::renderVoiceForPlayback(pattern, *style, voiceIndex, view.octave, &embeddedGrooves(), false).notes;
+    }
     view.notes = std::move(rendered.notes);
     view.lengthTicks = rendered.lengthTicks;
     view.seed = rendered.seed;
@@ -2289,6 +2293,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
         view.grooveId = track.groove.templateId.empty() ? mm::core::kGrooveStraight : track.groove.templateId;
         view.swing = groove.swing;
         view.swingActive = groove.controlActive;
+        view.swingFlam = mm::core::bassSwingMayFlam(track.role, groove.swing);
     }
     view.source.clear();
     if (voiceIndex < pattern.voices.size()) {
@@ -2392,6 +2397,8 @@ void ProcessorBase::updateExport() {
     key.all = all;
     const bool allNotes = globalSettings().ready() && globalSettings().get().exportAllNotes;
     key.allNotes = allNotes;
+    const bool groove = !globalSettings().ready() || globalSettings().get().exportGroove;
+    key.groove = groove;
     key.empty = views.empty();
     if (exportKey_ && *exportKey_ == key) {
         return;
@@ -2406,6 +2413,9 @@ void ProcessorBase::updateExport() {
     batch.primaryVoice = own.voice;
     for (auto& view : views) {
         MidiExporter::Request request;
+        if (!groove) {
+            view.notes = view.gridNotes; // the grid: output stage without stage 2 (SPEC 3.9)
+        }
         // A file holds the notes as they sound now, with the live transposition of the group (abschaltbar, SPEC 3.16)
         if (total != 0 && mm::core::targetsVoice(transposeConfig.target, view.transposeInfo)) {
             const int shift = mm::core::voiceOctaveShift(total, transposeConfig.mode, view.transposeInfo);

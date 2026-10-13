@@ -204,6 +204,14 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     };
     swingSlider_.onDragStart = [this] { swingDragStart_ = true; };
     addAndMakeVisible(swingSlider_);
+    flamHint_.setComponentID("flamHint_" + juce::String(voice));
+    flamHint_.setText(tr(mm::core::text::kSwingFlamHint), juce::dontSendNotification);
+    flamHint_.setFont(juce::FontOptions(12.0f));
+    flamHint_.setColour(juce::Label::textColourId, juce::Colour(0xffe0a040));
+    flamHint_.setJustificationType(juce::Justification::centredRight);
+    flamHint_.setInterceptsMouseClicks(false, false);
+    flamHint_.setVisible(false);
+    addChildComponent(flamHint_);
 
     duplicateButton_.setComponentID("duplicate_" + juce::String(voice));
     duplicateButton_.setButtonText(tr(mm::core::text::kButtonDuplicate));
@@ -316,6 +324,8 @@ void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {
     grooveBox_.setEnabled(filled);
     swingSlider_.setValue(filled ? std::round(view->swing * 100.0f) : 50.0, juce::dontSendNotification);
     swingSlider_.setEnabled(filled && view->swingActive);
+    flam_ = filled && view->swingFlam;
+    flamHint_.setVisible(flam_ && !collapsed_);
     updatingGroove_ = false;
 }
 
@@ -338,6 +348,7 @@ void VoiceRow::setCollapsed(bool collapsed) {
     collapsed_ = collapsed;
     roll_.setVisible(!collapsed);
     grooveBox_.setVisible(!collapsed);
+    flamHint_.setVisible(flam_ && !collapsed);
     swingSlider_.setVisible(!collapsed);
     resized();
 }
@@ -393,6 +404,7 @@ void VoiceRow::resized() {
         roll_.setBounds({});
         grooveBox_.setBounds({});
         swingSlider_.setBounds({});
+        flamHint_.setBounds({});
         return;
     }
     auto left = area.removeFromLeft(160);
@@ -415,6 +427,8 @@ void VoiceRow::resized() {
     swingSlider_.setBounds(strip.removeFromRight(130));
     strip.removeFromRight(6);
     grooveBox_.setBounds(strip.removeFromRight(150));
+    strip.removeFromRight(8);
+    flamHint_.setBounds(strip.removeFromRight(210));
 }
 
 SlotButton::SlotButton(int slot) : slot_(slot) {}

@@ -121,6 +121,7 @@ public:
     struct VoiceView {
         bool hasPattern = false;
         std::vector<mm::core::PatternNote> notes;
+        std::vector<mm::core::PatternNote> gridNotes; ///< the same without groove, filled only when the export is without groove
         uint32_t lengthTicks = 0;
         int slot = 1; ///< 1 to 16
         int voice = 1;
@@ -142,6 +143,7 @@ public:
         std::string grooveId;       ///< the groove template of the voice: "straight", "drum_reference" or a library id (SPEC 3.9)
         float swing = 0.5f;         ///< what the swing control shows (0.50 to 0.75)
         bool swingActive = true;    ///< false: the template has swing of its own and the control is off
+        bool swingFlam = false;     ///< a bass with swing over 56 %: flams with the straight kick are possible (STYLES 1.15)
         bool drumReference = false; ///< the pattern has a drum reference to choose
         mm::core::TransposeInfo transposeInfo; ///< key, range and extremes of the voice (live transposition, SPEC 3.16)
         /// True when `other` shows the same thing (no need to redraw or export again).
@@ -589,6 +591,7 @@ private:
         int octave = 0;
         long long bpmCentis = 0;
         bool all = false; ///< every voice is exported (Solo and Hub), not only the own one
+        bool groove = true;    ///< the files hold the groove (SPEC 3.9)
         bool allNotes = false; ///< chances and conditions are not evaluated (SPEC 3.4)
         int transpose = 0;       ///< the transposition the notes carry (0: none or not exported)
         int mode = 0;

@@ -286,7 +286,7 @@ DAW über Slots und Slot-Automation. Patterns ab 8 Takten werden aus **Phrasen**
 - [v1.1] Mitgelieferte Vorlagen, z. B. 16tel-Swing in mehreren Stärken, Shuffle, „Laid back“, „Pushed“,
   Humanize (leichte Zufallsabweichung, deterministisch über Seed); Groove als eigene Vorlage speichern.
   **Umgesetzt (D-220):** acht mitgelieferte Vorlagen (Swing 54/58/62/66 %, Shuffle, Laid back, Pushed, Humanize) als JSON in
-  `resources/grooves/`, je Stimme wählbar im Hub; „als eigene Vorlage speichern“ bleibt offen
+  `resources/grooves/`, je Stimme wählbar im Hub; „als eigene Vorlage speichern“ bleibt offen. **Umgesetzt (D-243):** der Schalter „Groove beim Export einrechnen“ (Einstellungen) und der Flam-Hinweis
 - **Kein doppelter Swing:** Enthält die gewählte Vorlage selbst Swing (z. B. aus einer Drum-Referenz,
   §3.14), ist der Swing-Regler deaktiviert und zeigt den Wert der Vorlage an. Der Regler wirkt nur auf
   gerade Vorlagen.

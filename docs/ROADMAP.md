@@ -251,6 +251,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Turnaround (STYLES.md §1.12, D-226; Ratchet-Variante mit den Ratchets, Schalter je Phrase offen)
 - [x] Chord-Memory (STYLES.md §1.10, D-229; der Stil entscheidet, kein Schalter im Pattern)
 - [x] Groove-Vorlagen-Sammlung (SPEC §3.9, D-220; eigene Vorlagen speichern bleibt offen)
+- [x] „Groove beim Export einrechnen“ und Flam-Hinweis bei Bass-Swing über 56 % (SPEC §3.9, STYLES §1.15, D-243)
 - [x] Chromatik-Regler (SPEC §3.8, D-219)
 - [x] Wiederholungsschutz mit Gewinner-Seed (SPEC §4.3, D-225)
 

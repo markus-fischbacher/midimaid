@@ -75,6 +75,7 @@ private:
     void changeShortcuts(const std::function<void(std::map<std::string, std::string>&)>& change);
     std::string chosenAction() const;
     juce::ToggleButton favoritesToggle_;      ///< a favorite also goes into the active reference set
+    juce::ToggleButton exportGrooveToggle_; ///< the MIDI export with the groove of the voices (SPEC 3.9)
     juce::ToggleButton exportAllNotesToggle_; ///< the MIDI export without evaluating chances and conditions
     juce::Label rollViewLabel_;
     juce::ToggleButton rollFoldToggle_, rollGuidesToggle_, rollMarkersToggle_; ///< the aids of the piano roll (D-232)

@@ -79,6 +79,7 @@ namespace mm::core::text {
     X(kGroovePickStraight, "groove.straight")                                                                              \
     X(kGroovePickDrumReference, "groove.drumReference")                                                                    \
     X(kSwingSuffix, "groove.swingSuffix")                                                                              \
+    X(kSwingFlamHint, "groove.flamHint")                                                                               \
     X(kSlotTransposed, "slot.transposed")                                                                              \
     X(kButtonEvolve, "button.evolve")                                                                                  \
     X(kButtonEvolveKeep, "button.evolveKeep")                                                                          \
@@ -194,6 +195,7 @@ namespace mm::core::text {
     X(kTransposeChannelN, "settings.transpose.channel.n")                                                              \
     X(kToggleTransposeExport, "settings.transpose.export")                                                             \
     X(kToggleExportAllNotes, "settings.exportAllNotes")                                                                \
+    X(kToggleExportGroove, "settings.exportGroove")                                                                    \
     X(kToggleFavoritesToActiveSet, "settings.favoritesToActiveSet")                                                    \
     X(kLabelRollView, "settings.rollView")                                                                             \
     X(kToggleRollFold, "settings.rollFold")                                                                            \

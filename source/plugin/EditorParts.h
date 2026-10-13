@@ -152,7 +152,9 @@ private:
     juce::TextButton varyButton_;
     juce::TextButton duplicateButton_;
     juce::ComboBox grooveBox_;   // the groove template of the voice (SPEC 3.9, v1.1)
+    juce::Label flamHint_; // the bass swings over 56 %: it may flam with the straight kick
     juce::Slider swingSlider_{juce::Slider::LinearBar, juce::Slider::NoTextBox}; // 50 to 75 %, off for a template with swing
+    bool flam_ = false;           // the hint is due (shown when the row is not collapsed)
     bool updatingGroove_ = false; // the controls are being filled: no change to send
     bool swingDragStart_ = false; // the next change of the slider begins a drag: a new undo step
     void fillGroove(const ProcessorBase::VoiceView* view);
