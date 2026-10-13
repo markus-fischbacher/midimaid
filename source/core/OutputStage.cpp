@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string_view>
 
 namespace mm::core {
@@ -353,6 +354,39 @@ OutputPattern renderOutput(const Pattern& pattern, const OutputSettings& setting
         output.voices.push_back(std::move(voice));
     }
     return output;
+}
+
+std::optional<GrooveTemplate> captureGroove(const Pattern& pattern, const Track& track, const GrooveLibrary* library,
+                                            const std::string& id, const std::string& nameDe) {
+    const GrooveTable table = buildGroove(pattern, track.groove, true, library);
+    GrooveTemplate result;
+    result.id = id;
+    result.nameDe = nameDe;
+    result.swing = true;
+    size_t steps = 16;
+    if (table.table) {
+        steps = table.offsets.size();
+        if (steps != 16 && steps != 32) {
+            return std::nullopt;
+        }
+    }
+    result.bars = static_cast<uint32_t>(steps / 16);
+    bool effect = table.humanizeTicks > 0 || table.humanizeVelocity > 0;
+    for (size_t i = 0; i < steps; ++i) {
+        int64_t offset = table.table ? table.offsets[i] : 0;
+        offset += i % 2 == 1 ? table.swingTicks : 0;
+        offset = clampTo(offset, -240, 240);
+        const int64_t factor = table.table ? clampTo(table.velocityFactor[i], 500, 1500) : 1000;
+        effect = effect || offset != 0 || factor != 1000;
+        result.offsetTicks.push_back(static_cast<int32_t>(offset));
+        result.velocityPermille.push_back(static_cast<int32_t>(factor));
+    }
+    if (!effect) {
+        return std::nullopt;
+    }
+    result.humanizeTicks = std::clamp(table.humanizeTicks, 0, 60);
+    result.humanizeVelocityPermille = std::clamp(table.humanizeVelocity, 0, 200);
+    return result;
 }
 
 } // namespace mm::core

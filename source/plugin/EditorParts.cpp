@@ -3,8 +3,8 @@
 #include "core/OutputStage.h"
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
-#include "plugin/EmbeddedGrooves.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "plugin/UserGrooveStore.h"
 
 namespace mm::plugin {
 
@@ -174,10 +174,18 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
         }
         const int id = grooveBox_.getSelectedId();
         std::string choice = mm::core::kGrooveStraight;
+        if (id == 3) {
+            askGrooveName();
+            updatingGroove_ = true; // back to what the voice has until the name is given
+            grooveBox_.setSelectedId(grooveSelection_, juce::dontSendNotification);
+            updatingGroove_ = false;
+            return;
+        }
         if (id == 2) {
             choice = mm::core::kGrooveDrumReference;
         } else if (id >= 10) {
-            const auto& templates = embeddedGrooves().templates();
+            const auto grooves = userGrooves().library();
+            const auto& templates = grooves->templates();
             if (static_cast<size_t>(id - 10) < templates.size()) {
                 choice = templates[static_cast<size_t>(id - 10)].id;
             }
@@ -294,6 +302,40 @@ void VoiceRow::mouseDown(const juce::MouseEvent& event) {
     }
 }
 
+bool VoiceRow::saveGrooveAs(const juce::String& name) {
+    if (slotIndex_ < 0) {
+        return false;
+    }
+    const bool saved = !processor_
+                            .saveVoiceGrooveAsTemplate(static_cast<size_t>(slotIndex_), static_cast<size_t>(voice_ - 1),
+                                                       name.trim().toStdString())
+                            .empty();
+    if (saved && onAction) {
+        onAction();
+    }
+    return saved;
+}
+
+void VoiceRow::askGrooveName() {
+    auto* window = new juce::AlertWindow(tr(mm::core::text::kGrooveSaveTitle), tr(mm::core::text::kGrooveSaveHint),
+                                         juce::MessageBoxIconType::NoIcon, this);
+    window->setComponentID("grooveName");
+    window->addTextEditor("name", {});
+    window->addButton(tr(mm::core::text::kGrooveSaveButton), 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton(tr(mm::core::text::kReferencesCancel), 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    const auto alive = alive_;
+    window->enterModalState(true, juce::ModalCallbackFunction::create([this, alive, window](int result) {
+                                if (result == 1 && *alive) {
+                                    saveGrooveAs(window->getTextEditorContents("name"));
+                                }
+                            }),
+                            true);
+}
+
+VoiceRow::~VoiceRow() {
+    *alive_ = false;
+}
+
 void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {
     updatingGroove_ = true;
     const bool filled = view != nullptr && view->hasPattern;
@@ -302,8 +344,12 @@ void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {
     if (filled && view->drumReference) {
         grooveBox_.addItem(tr(mm::core::text::kGroovePickDrumReference), 2);
     }
+    if (filled && view->canSaveGroove) {
+        grooveBox_.addItem(tr(mm::core::text::kGroovePickSave), 3);
+    }
+    const auto grooves = userGrooves().library();
     int index = 0;
-    for (const auto& groove : embeddedGrooves().templates()) {
+    for (const auto& groove : grooves->templates()) {
         grooveBox_.addItem(juce::String::fromUTF8(localized(groove.nameDe, groove.nameEn).c_str()), 10 + index++);
     }
     int selected = 1;
@@ -312,7 +358,7 @@ void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {
             selected = 2;
         } else {
             index = 0;
-            for (const auto& groove : embeddedGrooves().templates()) {
+            for (const auto& groove : grooves->templates()) {
                 if (groove.id == view->grooveId) {
                     selected = 10 + index;
                 }
@@ -320,6 +366,7 @@ void VoiceRow::fillGroove(const ProcessorBase::VoiceView* view) {
             }
         }
     }
+    grooveSelection_ = selected;
     grooveBox_.setSelectedId(selected, juce::dontSendNotification);
     grooveBox_.setEnabled(filled);
     swingSlider_.setValue(filled ? std::round(view->swing * 100.0f) : 50.0, juce::dontSendNotification);

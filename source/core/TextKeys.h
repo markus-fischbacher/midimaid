@@ -78,6 +78,10 @@ namespace mm::core::text {
     X(kButtonFollow, "button.follow")                                                                                  \
     X(kGroovePickStraight, "groove.straight")                                                                              \
     X(kGroovePickDrumReference, "groove.drumReference")                                                                    \
+    X(kGroovePickSave, "groove.saveAs")                                                                                  \
+    X(kGrooveSaveTitle, "groove.saveTitle")                                                                              \
+    X(kGrooveSaveHint, "groove.saveHint")                                                                                \
+    X(kGrooveSaveButton, "groove.saveButton")                                                                            \
     X(kSwingSuffix, "groove.swingSuffix")                                                                              \
     X(kSwingFlamHint, "groove.flamHint")                                                                               \
     X(kSlotTransposed, "slot.transposed")                                                                              \

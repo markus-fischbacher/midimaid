@@ -41,7 +41,9 @@ std::unique_ptr<OwnedPattern> SlotPublisher::render(const core::Slot& slot) {
         owned->version = pattern.version;
         return owned;
     }
-    auto rendered = core::renderVoiceForPlayback(pattern, *style, static_cast<size_t>(outputVoice_ - 1), octave_, grooves_);
+    const auto snapshot = grooveSource_ ? grooveSource_() : nullptr;
+    auto rendered = core::renderVoiceForPlayback(pattern, *style, static_cast<size_t>(outputVoice_ - 1), octave_,
+                                                 snapshot ? snapshot.get() : grooves_);
     owned->notes = std::move(rendered.notes);
     owned->lengthTicks = rendered.lengthTicks;
     owned->transpose = rendered.transpose;

@@ -11,6 +11,8 @@
 #include "plugin/PlaceholderEditor.h"
 #include "plugin/ProcessorBase.h"
 #include "plugin/ReferenceStore.h"
+#include "plugin/UserGrooveStore.h"
+#include "plugin/EmbeddedGrooves.h"
 
 #include <algorithm>
 #include <catch2/catch_approx.hpp>
@@ -7230,4 +7232,204 @@ TEST_CASE("the personal slider is an expert control that follows the instance", 
     hub.processor.setInstanceSettings(settings);
     CHECK(waitFor([&] { return slider->getValue() == 20.0; }));
     child<juce::ToggleButton>(*editor, "expert")->onClick();
+}
+
+// --- own groove templates (SPEC 3.9, D-245) ---------------------------------------------------------------------
+
+namespace {
+
+/// A fresh in-memory store of own templates, installed as the store of the process while it lives.
+struct OwnGrooves {
+    mm::plugin::UserGrooveStore store{juce::File(), mm::plugin::embeddedGrooves()};
+    OwnGrooves() { mm::plugin::overrideUserGrooves(&store); }
+    ~OwnGrooves() { mm::plugin::overrideUserGrooves(&mmtest::disabledUserGrooves()); }
+};
+
+/// What the voice plays: start, length, pitch and velocity of every note.
+std::vector<std::array<uint32_t, 4>> playedNotes(GrooveRig& rig) {
+    std::vector<std::array<uint32_t, 4>> played;
+    for (const auto& note : rig.hub.processor.playingVoice().notes) {
+        played.push_back({note.startTick, note.lengthTicks, note.pitch, note.velocity});
+    }
+    return played;
+}
+
+} // namespace
+
+TEST_CASE("the store of own templates adds, names and keeps them in a folder", "[group-wiring][groove][own]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("mm_grooves_" + juce::String::toHexString(juce::Random::getSystemRandom().nextInt64()));
+    struct Cleanup {
+        juce::File folder;
+        ~Cleanup() { folder.deleteRecursively(); }
+    } cleanup{folder};
+
+    mm::core::GrooveTemplate groove;
+    groove.nameDe = "  Mein Groove ";
+    groove.bars = 1;
+    groove.offsetTicks.assign(16, 0);
+    groove.offsetTicks[1] = 30;
+    groove.velocityPermille.assign(16, 1000);
+    std::string first;
+    std::string second;
+    {
+        mm::plugin::UserGrooveStore store{folder, mm::plugin::embeddedGrooves()};
+        store.waitForIdle();
+        CHECK(waitFor([&] { return store.ready(); }));
+        const auto before = store.library()->size();
+        first = store.add(groove);
+        CHECK(first == "user_mein_groove");
+        second = store.add(groove); // the same name: another id
+        CHECK(second == "user_mein_groove_2");
+        CHECK(store.library()->size() == before + 2);
+        REQUIRE(store.library()->find(first) != nullptr);
+        CHECK(store.library()->find(first)->nameDe == "Mein Groove"); // trimmed
+        CHECK_FALSE(store.library()->find(first)->swing);             // the template as it was given
+        CHECK(store.library()->find(first)->offsetTicks[1] == 30);
+        // what is not a template: nothing added
+        auto bad = groove;
+        bad.nameDe = "   ";
+        CHECK(store.add(bad).empty());
+        bad.nameDe = std::string(mm::plugin::UserGrooveStore::kMaxNameLength + 1, 'x');
+        CHECK(store.add(bad).empty());
+        bad = groove;
+        bad.offsetTicks.assign(5, 0); // not one value per 16th
+        CHECK(store.add(bad).empty());
+        CHECK(store.library()->size() == before + 2);
+        store.waitForIdle();
+    }
+    // a store that reads the folder again has them, after the embedded ones
+    mm::plugin::UserGrooveStore again{folder, mm::plugin::embeddedGrooves()};
+    CHECK(waitFor([&] { return again.ready(); }));
+    CHECK(again.library()->find(first) != nullptr);
+    CHECK(again.library()->find(second) != nullptr);
+    CHECK(again.library()->size() == mm::plugin::embeddedGrooves().size() + 2);
+    CHECK(again.library()->templates().front().id == mm::plugin::embeddedGrooves().templates().front().id);
+}
+
+TEST_CASE("a snapshot of the library stays as it was when a template is added", "[group-wiring][groove][own]") {
+    OwnGrooves own;
+    const auto snapshot = own.store.library();
+    const auto size = snapshot->size();
+    mm::core::GrooveTemplate groove;
+    groove.nameDe = "Neu";
+    groove.offsetTicks.assign(16, 0);
+    groove.offsetTicks[3] = -20;
+    groove.velocityPermille.assign(16, 1000);
+    REQUIRE_FALSE(own.store.add(groove).empty());
+    CHECK(snapshot->size() == size);
+    CHECK(own.store.library()->size() == size + 1);
+    CHECK(own.store.revision() > 0);
+}
+
+TEST_CASE("a voice's groove is saved as a template and plays the same", "[group-wiring][groove][own]") {
+    OwnGrooves own;
+    GrooveRig rig;
+    // straight: nothing to save
+    CHECK_FALSE(rig.hub.processor.playingVoice().canSaveGroove);
+    CHECK(rig.hub.processor.saveVoiceGrooveAsTemplate(0, 0, "Nichts").empty());
+    // a template with a swing, and the swing control on top of another one
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("laid_back"), 0.6f));
+    const auto before = playedNotes(rig);
+    CHECK(rig.hub.processor.playingVoice().canSaveGroove);
+    const auto id = rig.hub.processor.saveVoiceGrooveAsTemplate(0, 0, "Mein Feel");
+    REQUIRE(id == "user_mein_feel");
+    CHECK(rig.track().groove.templateId == id);
+    CHECK(own.store.library()->find(id) != nullptr);
+    CHECK(playedNotes(rig) == before); // the same sound
+    CHECK(rig.hub.processor.playingVoice().grooveId == id);
+    CHECK_FALSE(rig.hub.processor.playingVoice().canSaveGroove); // it has swing of its own now: saved already
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("swing_62"), std::nullopt));
+    CHECK_FALSE(rig.hub.processor.playingVoice().canSaveGroove); // a template of the library
+    REQUIRE(rig.hub.processor.undo());
+    // the choice is an undo step
+    REQUIRE(rig.hub.processor.undo());
+    CHECK(rig.track().groove.templateId == "laid_back");
+    CHECK(playedNotes(rig) == before);
+    // what cannot be saved
+    CHECK(rig.hub.processor.saveVoiceGrooveAsTemplate(0, 0, "").empty());
+    CHECK(rig.hub.processor.saveVoiceGrooveAsTemplate(0, 9, "x").empty());
+    CHECK(rig.hub.processor.saveVoiceGrooveAsTemplate(5, 0, "x").empty());
+}
+
+TEST_CASE("a voice instance saves no template", "[group-wiring][groove][own]") {
+    OwnGrooves own;
+    GrooveRig rig;
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::string("shuffle"), std::nullopt));
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    REQUIRE(voice.processor.slotsSnapshot().slot(0)->pattern.has_value()); // it shows the pattern of the hub
+    const auto size = own.store.library()->size();
+    CHECK(voice.processor.saveVoiceGrooveAsTemplate(0, 0, "Nein").empty());
+    CHECK(own.store.library()->size() == size);
+}
+
+TEST_CASE("the groove box offers saving and lists the own templates", "[group-wiring][groove][own][editor]") {
+    OwnGrooves own;
+    GrooveRig rig;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(rig.hub.processor.createEditor());
+    pumpMessages(80);
+    auto* box = child<juce::ComboBox>(*editor, "groove_1");
+    REQUIRE(box != nullptr);
+    REQUIRE(waitFor([&] { return box->getNumItems() > 1 && box->isEnabled(); }));
+    CHECK(box->indexOfItemId(3) < 0); // straight: nothing to save
+    REQUIRE(rig.hub.processor.setVoiceGroove(0, 0, std::nullopt, 0.6f));
+    REQUIRE(waitFor([&] { return box->indexOfItemId(3) >= 0; }));
+    CHECK(box->getItemText(box->indexOfItemId(3)) == "Als Vorlage speichern …");
+    // choosing it asks for a name and leaves the box where it was
+    box->setSelectedId(3, juce::sendNotificationSync);
+    CHECK(box->getSelectedId() == 1);
+    CHECK(rig.track().groove.templateId.empty());
+    // the row saves under the name that was given
+    auto* row = [&]() -> mm::plugin::VoiceRow* {
+        for (auto* component : editor->getChildren()) {
+            if (auto* found = dynamic_cast<mm::plugin::VoiceRow*>(component)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }();
+    if (row == nullptr) {
+        for (auto* component : editor->getChildren()) {
+            for (auto* inner : component->getChildren()) {
+                if (auto* found = dynamic_cast<mm::plugin::VoiceRow*>(inner)) {
+                    row = found;
+                }
+            }
+        }
+    }
+    REQUIRE(row != nullptr);
+    CHECK_FALSE(row->saveGrooveAs("   "));
+    REQUIRE(row->saveGrooveAs("Meins"));
+    CHECK(rig.track().groove.templateId == "user_meins");
+    CHECK(waitFor([&] {
+        const auto index = box->indexOfItemId(box->getSelectedId());
+        return index >= 0 && box->getItemText(index) == "Meins";
+    }));
+    CHECK(box->getNumItems() == 1 + 9); // straight and nine templates; the swing of the new one is its own: no save item
+    // the dialog of the choice is closed again so that no window outlives the test
+    for (int i = 0; i < juce::Desktop::getInstance().getNumComponents(); ++i) {
+        if (auto* window = dynamic_cast<juce::AlertWindow*>(juce::Desktop::getInstance().getComponent(i))) {
+            window->exitModalState(0);
+        }
+    }
+    pumpMessages(20);
+}
+
+TEST_CASE("the store of own templates takes names up to the limit and a bounded number", "[group-wiring][groove][own]") {
+    OwnGrooves own;
+    mm::core::GrooveTemplate groove;
+    groove.offsetTicks.assign(16, 0);
+    groove.offsetTicks[1] = 10;
+    groove.velocityPermille.assign(16, 1000);
+    groove.nameDe = std::string(mm::plugin::UserGrooveStore::kMaxNameLength, 'a'); // exactly the limit
+    CHECK_FALSE(own.store.add(groove).empty());
+    for (size_t i = 1; i < mm::plugin::UserGrooveStore::kMaxTemplates; ++i) {
+        groove.nameDe = "Groove " + std::to_string(i);
+        REQUIRE_FALSE(own.store.add(groove).empty());
+    }
+    CHECK(own.store.library()->size() == mm::plugin::embeddedGrooves().size() + mm::plugin::UserGrooveStore::kMaxTemplates);
+    groove.nameDe = "Zu viel";
+    CHECK(own.store.add(groove).empty());
 }

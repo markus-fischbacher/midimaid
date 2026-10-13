@@ -4,6 +4,8 @@
 #include "core/Pattern.h"
 
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace mm::core {
@@ -64,6 +66,14 @@ struct OutputPattern {
 /// Delay of an off-beat 16th for a swing value (50-75 %, relative to a pair of 16ths = 480 ticks) scaled by
 /// `amount` (0-1). Integer arithmetic on the rounded per-mille values, identical on every platform.
 int32_t swingOffsetTicks(float swing, float amount);
+
+/// The groove a track has now (template or drum reference, swing control, amount) as a template of its own (D-245):
+/// per 16th the offset and the velocity factor that stage 2 applies, the swing control baked into the offsets
+/// (`swing` is true: the control is off for it). The result sounds the same as the track did, except for the
+/// deviation of Humanize, which depends on the id. nullopt when the groove changes nothing (straight, no swing) or a
+/// drum reference does not cover whole bars.
+std::optional<GrooveTemplate> captureGroove(const Pattern& pattern, const Track& track, const GrooveLibrary* library,
+                                            const std::string& id, const std::string& nameDe);
 
 /// SPEC 4.2a, the v1.0 stages in their fixed order:
 ///   1. octave shift of the instance (pitches that leave 0 to 127 are folded back by octaves)
