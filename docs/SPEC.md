@@ -1338,6 +1338,10 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
   - Stand der Umsetzung (v1.0): Ebenen und Starttonart über die globale Einstellungsdatei (D-162); der Spurfokus wird nicht gespeichert.
 - Look: dunkel, minimalistisch, an Ableton angelehnt: flache Flächen, wenig Farbe, eine Akzentfarbe
   pro Stimme (Bass, Melodie), gut lesbare Sans-Serif-Schrift, keine Skeuomorphie
+- [v1.1, umgesetzt, D-249] **Aufteilung des Hubs:** links Stil, Referenz-Set, Erzeugen, Slot-Leiste, die Leisten zum
+  Bearbeiten und die Stimmen mit der ganzen restlichen Höhe; rechts eine Seitenleiste (300 Punkte) in Abschnitten
+  Generator, Wünsche und Verfeinern, Wechsel (Experte), Evolve; die Statuszeile über die ganze Breite. Ab der
+  dritten Stimme ist nur eine Roll offen, die übrigen sind Leisten (Vorbereitung für bis zu 8 Stimmen).
 - Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Knopf „Fokus“
   je Zeile (die anderen Zeilen klappen zu Leisten zusammen, D-159); ein Kürzel gibt es nur als belegbare Aktion ab v1.1 (§8.3, D-126)
 - **Voice-Oberfläche** (kompakt, ca. 600 × 320 px): Gruppe und Stimme wählen, Spur der eigenen Stimme

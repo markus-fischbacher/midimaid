@@ -1401,6 +1401,10 @@ void PlaceholderEditor::rebuildRows(size_t count) {
         rows_.push_back(std::move(row));
     }
     applyEditSettings();
+    // From three voices on only one roll is open and the others are strips: eight full rolls would not fit (D-249).
+    if (count > kOpenRollsMax && focusedVoice_ == 0) {
+        focusedVoice_ = 1;
+    }
     applyFocus();
     shownVoices_.clear();
     resized();
@@ -1611,6 +1615,15 @@ void PlaceholderEditor::timerCallback() {
 
 void PlaceholderEditor::paint(juce::Graphics& g) {
     g.fillAll(juce::Colour(MidiMaidLookAndFeel::kBackground));
+    if (voiceLayout_) {
+        return;
+    }
+    g.setColour(juce::Colours::white.withAlpha(0.5f));
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+    for (const auto& section : sections_) {
+        g.drawText(tr(section.key), section.bounds, juce::Justification::centredLeft);
+        g.fillRect(section.bounds.getX(), section.bounds.getBottom() - 1, section.bounds.getWidth(), 1);
+    }
 }
 
 void PlaceholderEditor::layoutVoiceWindow() {
@@ -1685,65 +1698,8 @@ void PlaceholderEditor::resized() {
     roles.removeFromRight(8);
     roleBox_.setBounds(roles.removeFromLeft(150));
 
-    auto top = area.removeFromTop(48).reduced(16, 10);
-    generateButton_.setBounds(top.removeFromRight(120));
-    top.removeFromRight(8);
-
-    // Hub UI: the settings of "Generate" in one row, then energy and creativity, the slot strip, the voices.
-    if (expert_) {
-        randomButton_.setBounds(top.removeFromRight(110));
-        top.removeFromRight(8);
-        seedEditor_.setBounds(top.removeFromRight(150));
-        top.removeFromRight(8);
-    }
-    barsBox_.setBounds(top.removeFromRight(90));
-    top.removeFromRight(8);
-    scaleBox_.setBounds(top.removeFromRight(190));
-    top.removeFromRight(8);
-    keyBox_.setBounds(top.removeFromRight(110));
-    top.removeFromRight(8);
-    referenceSetBox_.setBounds(top.removeFromRight(150));
-    top.removeFromRight(8);
-    styleBox_.setBounds(top);
-
-    promptEditor_.setBounds(area.removeFromTop(40).reduced(16, 6));
-    auto refineRow = area.removeFromTop(40).reduced(16, 6);
-    refineButton_.setBounds(refineRow.removeFromRight(120));
-    refineRow.removeFromRight(8);
-    refineScopeBox_.setBounds(refineRow.removeFromRight(180));
-    refineRow.removeFromRight(8);
-    refineEditor_.setBounds(refineRow);
-
-    auto sliders = area.removeFromTop(40).reduced(16, 6);
-    const int columns = expert_ ? 5 : 2; // the expert level adds the chromatic share (SPEC 3.8) and the hat mode (3.14)
-    const int column = (sliders.getWidth() - (columns - 1) * 16) / columns;
-    auto left = sliders.removeFromLeft(column);
-    energyLabel_.setBounds(left.removeFromLeft(80));
-    energySlider_.setBounds(left);
-    sliders.removeFromLeft(16);
-    auto middle = sliders.removeFromLeft(column);
-    creativityLabel_.setBounds(middle.removeFromLeft(80));
-    creativitySlider_.setBounds(middle);
-    if (expert_) {
-        sliders.removeFromLeft(16);
-        auto third = sliders.removeFromLeft(column);
-        chromaticLabel_.setBounds(third.removeFromLeft(80));
-        chromaticSlider_.setBounds(third);
-        sliders.removeFromLeft(16);
-        auto fourth = sliders.removeFromLeft(column);
-        personalLabel_.setBounds(fourth.removeFromLeft(80));
-        personalSlider_.setBounds(fourth);
-        sliders.removeFromLeft(16);
-        hatModeLabel_.setBounds(sliders.removeFromLeft(110));
-        hatModeBox_.setBounds(sliders);
-    }
-
-    auto strip = area.removeFromTop(40).reduced(16, 4);
-    const int buttonWidth = strip.getWidth() / static_cast<int>(slotButtons_.size());
-    for (auto& button : slotButtons_) {
-        button->setBounds(strip.removeFromLeft(buttonWidth).reduced(2, 0));
-    }
-
+    // The status row spans the window; the right column holds the settings in sections (D-249), the left one the
+    // slot strip, the edit bars and the voices, which get all the height that is left.
     auto statusRow = area.removeFromBottom(40).reduced(16, 0);
     // Only the buttons that are shown take room: without an error the message has the whole width.
     const auto take = [&](juce::Component& component, int width, int inset) {
@@ -1757,54 +1713,110 @@ void PlaceholderEditor::resized() {
     take(retryButton_, 140, 6);
     take(errorSettingsButton_, 120, 6);
     statusLabel_.setBounds(statusRow);
+
+    sections_.clear();
+    auto side = area.removeFromRight(kSidebarWidth).reduced(8, 0);
+    const auto row = [&side](int height) { return side.removeFromTop(height).reduced(0, 2); };
+    const auto section = [&](const char* key) {
+        const auto head = side.removeFromTop(20);
+        sections_.push_back({head, key});
+    };
+    constexpr int kRow = 28;
+    section(keys::kSectionGenerator.data());
+    auto keyRow = row(kRow);
+    keyBox_.setBounds(keyRow.removeFromLeft(100));
+    keyRow.removeFromLeft(8);
+    scaleBox_.setBounds(keyRow);
+    barsBox_.setBounds(row(kRow).removeFromLeft(100));
+    auto energyRow = row(kRow);
+    energyLabel_.setBounds(energyRow.removeFromLeft(80));
+    energySlider_.setBounds(energyRow);
+    auto creativityRow = row(kRow);
+    creativityLabel_.setBounds(creativityRow.removeFromLeft(80));
+    creativitySlider_.setBounds(creativityRow);
+    if (expert_) {
+        auto seedRow = row(kRow);
+        randomButton_.setBounds(seedRow.removeFromRight(120));
+        seedRow.removeFromRight(8);
+        seedEditor_.setBounds(seedRow);
+        auto chromaticRow = row(kRow);
+        chromaticLabel_.setBounds(chromaticRow.removeFromLeft(80));
+        chromaticSlider_.setBounds(chromaticRow);
+        auto personalRow = row(kRow);
+        personalLabel_.setBounds(personalRow.removeFromLeft(80));
+        personalSlider_.setBounds(personalRow);
+        auto hatRow = row(kRow);
+        hatModeLabel_.setBounds(hatRow.removeFromLeft(110));
+        hatModeBox_.setBounds(hatRow);
+    }
+    section(keys::kSectionWishes.data());
+    promptEditor_.setBounds(side.removeFromTop(48).reduced(0, 2));
+    refineEditor_.setBounds(side.removeFromTop(48).reduced(0, 2));
+    auto refineRow = row(kRow + 2);
+    refineButton_.setBounds(refineRow.removeFromRight(100));
+    refineRow.removeFromRight(8);
+    refineScopeBox_.setBounds(refineRow);
+    if (expert_) {
+        section(keys::kSectionSwitch.data());
+        startBox_.setBounds(row(kRow));
+        quantBox_.setBounds(row(kRow));
+    }
+    section(keys::kSectionEvolve.data());
+    auto evolveRow = row(kRow + 2);
+    evolveButton_.setBounds(evolveRow.removeFromLeft(76));
+    evolveRow.removeFromLeft(6);
+    evolveBackButton_.setBounds(evolveRow.removeFromLeft(34));
+    evolveStageLabel_.setBounds(evolveRow.removeFromLeft(70));
+    evolveKeepButton_.setBounds(evolveRow.removeFromLeft(86));
+    if (expert_) {
+        evolveEveryBox_.setBounds(row(kRow));
+        evolveOriginalButton_.setBounds(row(kRow));
+        auto strengthRow = row(kRow);
+        evolveStrengthLabel_.setBounds(strengthRow.removeFromLeft(110));
+        evolveStrengthSlider_.setBounds(strengthRow);
+    }
+
+    auto top = area.removeFromTop(48).reduced(16, 10);
+    generateButton_.setBounds(top.removeFromRight(120));
+    top.removeFromRight(8);
+    referenceSetBox_.setBounds(top.removeFromRight(150));
+    top.removeFromRight(8);
+    styleBox_.setBounds(top);
+
+    auto strip = area.removeFromTop(40).reduced(16, 4);
+    const int buttonWidth = strip.getWidth() / static_cast<int>(slotButtons_.size());
+    for (auto& button : slotButtons_) {
+        button->setBounds(strip.removeFromLeft(buttonWidth).reduced(2, 0));
+    }
+
     auto infoRow = area.removeFromBottom(28).reduced(16, 0);
     ratingBox_.setBounds(infoRow.removeFromRight(130).reduced(0, 2));
     infoLabel_.setBounds(infoRow);
     auto historyBar = area.removeFromBottom(32).reduced(16, 2);
-    undoButton_.setBounds(historyBar.removeFromLeft(110));
+    undoButton_.setBounds(historyBar.removeFromLeft(90));
     historyBar.removeFromLeft(8);
-    redoButton_.setBounds(historyBar.removeFromLeft(110));
+    redoButton_.setBounds(historyBar.removeFromLeft(90));
     historyBar.removeFromLeft(8);
-    drumsButton_.setBounds(historyBar.removeFromLeft(110));
+    drumsButton_.setBounds(historyBar.removeFromLeft(90));
     historyBar.removeFromLeft(24);
     historyBackButton_.setBounds(historyBar.removeFromLeft(40));
     historyLabel_.setBounds(historyBar.removeFromLeft(120));
     historyForwardButton_.setBounds(historyBar.removeFromLeft(40));
     followButton_.setBounds(historyBar.removeFromRight(100));
-    historyBar.removeFromLeft(24);
-    evolveButton_.setBounds(historyBar.removeFromLeft(76));
-    historyBar.removeFromLeft(6);
-    evolveBackButton_.setBounds(historyBar.removeFromLeft(34));
-    evolveStageLabel_.setBounds(historyBar.removeFromLeft(70));
-    evolveKeepButton_.setBounds(historyBar.removeFromLeft(86));
     auto editBar = area.removeFromTop(32).reduced(16, 2);
     previewButton_.setBounds(editBar.removeFromRight(110));
     expertButton_.setBounds(editBar.removeFromLeft(120));
     editBar.removeFromLeft(8);
-    varyAllButton_.setBounds(editBar.removeFromRight(140));
-    editBar.removeFromRight(8);
-    strengthSlider_.setBounds(editBar.removeFromRight(220));
-    strengthLabel_.setBounds(editBar.removeFromRight(60));
     gridBox_.setBounds(editBar.removeFromLeft(80));
     editBar.removeFromLeft(8);
     tripletButton_.setBounds(editBar.removeFromLeft(90));
     editBar.removeFromLeft(8);
     snapBox_.setBounds(editBar.removeFromLeft(190));
-    if (expert_) {
-        editBar.removeFromLeft(8);
-        startBox_.setBounds(editBar.removeFromLeft(170));
-        editBar.removeFromLeft(8);
-        quantBox_.setBounds(editBar.removeFromLeft(170));
-    }
-    if (expert_) { // the settings of Evolve (SPEC 6.7) in a row of their own
-        auto evolveRow = area.removeFromTop(32).reduced(16, 2);
-        evolveEveryBox_.setBounds(evolveRow.removeFromLeft(190));
-        evolveRow.removeFromLeft(8);
-        evolveOriginalButton_.setBounds(evolveRow.removeFromLeft(150));
-        evolveRow.removeFromLeft(16);
-        evolveStrengthLabel_.setBounds(evolveRow.removeFromLeft(110));
-        evolveStrengthSlider_.setBounds(evolveRow.removeFromLeft(240));
-    }
+    auto variationBar = area.removeFromTop(32).reduced(16, 2);
+    strengthLabel_.setBounds(variationBar.removeFromLeft(60));
+    varyAllButton_.setBounds(variationBar.removeFromRight(140));
+    variationBar.removeFromRight(8);
+    strengthSlider_.setBounds(variationBar.removeFromLeft(260));
     if (!rows_.empty()) {
         constexpr int kStripHeight = 36; // a collapsed row (D-159)
         const int collapsedCount = static_cast<int>(

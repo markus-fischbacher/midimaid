@@ -31,10 +31,10 @@ Eine neue Instanz ist **still**, bis du etwas erzeugt hast.
 | Bereich | Was du dort tust |
 |---|---|
 | **Rolle** | *Solo* (eine Instanz allein), *Hub* (steuert alle Stimmen), *Stimme* (spielt genau eine Stimme des Hubs) |
-| **Stil, Tonart, Skala, Takte** | Tonart und Skala auf *auto* lassen oder festlegen; 1 bis 16 Takte |
-| **Energie, Kreativität** | Dichte und Abwechslung (Seed und Zufälliger Seed im Experten-Modus) |
+| **Stil, Referenz-Set, Erzeugen** | Oben links im Hauptbereich; darunter die Slot-Leiste |
+| **Seitenleiste rechts** | In Abschnitten: *Generator* (Tonart, Skala auf *auto* lassen oder festlegen, 1 bis 16 Takte, Energie, Kreativität; im Experten-Modus Seed, Chromatik, Persönlich, Melodie zu Hats), *Wünsche und Verfeinern*, *Wechsel* (Experte) und *Evolve* |
 | **Slots 1–16** | 16 Pattern-Plätze je Instanz bzw. Hub; ein Klick wählt den Slot (Wechsel zum nächsten Takt); Rechtsklick: kopieren, einfügen, leeren, tauschen; ein Feld auf ein anderes ziehen tauscht die Slots, mit Alt kopiert es |
-| **Piano-Roll** je Stimme | Noten ansehen und bearbeiten (Abschnitt 6) |
+| **Piano-Roll** je Stimme | Noten ansehen und bearbeiten (Abschnitt 6). Hat das Pattern mehr als zwei Stimmen, ist nur eine Roll offen und die anderen sind schmale Leisten: ein Klick auf *Fokus* öffnet eine andere |
 | **Größe** | Fenstergröße von 75 bis 200 %: Auswahl „Größe“ (Hub oben rechts, Stimme unten rechts) oder **stufenlos** am Griff in der unteren rechten Ecke ziehen; wird je Instanz im Projekt gespeichert |
 | **Hilfe** | Öffnet die Anleitung für Hub und Voices, Schritt für Schritt, auf der Seite für deine DAW (Live, Logic oder andere Hosts) |
 | **Statuszeile** | Was gerade passiert, auch Fehler und Hinweise |
