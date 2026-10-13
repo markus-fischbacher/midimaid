@@ -4,6 +4,7 @@
 #include "core/CopyProtection.h"
 #include "core/Progression.h"
 #include "core/ReferenceSet.h"
+#include "core/SetProfile.h"
 
 #include <cstdint>
 #include <string>
@@ -63,6 +64,7 @@ struct PersonalExample {
 struct ReferenceEffect {
     std::vector<ReferenceEntry> entries;
     std::vector<WeightedProgression> progressions;
+    SetProfile profile; ///< valid from `kMinActiveForProgressions` active items on (v1.1)
     std::string setId;
 };
 ReferenceEffect referenceEffectOf(const ReferenceSet& set);

@@ -40,6 +40,7 @@ struct ArchetypeSettings {
     int energyPct = 50;     ///< 0-100: density, accent share, octave jumps, velocity level (STYLES.md 1.5)
     int creativityPct = 40; ///< 0-100: variation bars, unusual (chromatic) tones, scatter of the archetype choice
     int chromaticPct = -1;  ///< 0-100: share of notes that may leave the scale (SPEC 3.8); -1: the style's default
+    int personalPct = 50;   ///< 0-100: how strongly the reference set acts (SPEC 3.20, D-241)
 };
 
 /// The style with the chromatic share of `chromaticPct` (0-100, else unchanged): what a generation with the control of

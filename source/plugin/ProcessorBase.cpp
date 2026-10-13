@@ -1526,6 +1526,7 @@ bool ProcessorBase::renewVoice(size_t voice, std::optional<uint64_t> seed, std::
         request.settings.energyPct = settings_.generation.energyPct;
         request.settings.creativityPct = settings_.generation.creativityPct;
         request.settings.chromaticPct = settings_.generation.chromaticPct.value_or(-1);
+        request.settings.personalPct = settings_.generation.personalPct;
     }
     if (isVoice) {
         generationStatus_ = GenerationStatus::UseHub; // voices only show (SPEC 8.1)
@@ -2494,6 +2495,9 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         if (settings_.generation.chromaticPct) { // only when chosen: states of the style's share stay as they were
             root.setAttribute("genChromatic", *settings_.generation.chromaticPct);
         }
+        if (settings_.generation.personalPct != 50) { // only when changed: older states stay as they were
+            root.setAttribute("genPersonal", settings_.generation.personalPct);
+        }
         if (settings_.generation.hatMode != mm::core::HatMode::Free) { // only when chosen: older states stay as they were
             root.setAttribute("genHatMode", juce::String(std::string(mm::core::toString(settings_.generation.hatMode))));
         }
@@ -2568,6 +2572,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     if (root->hasAttribute("genChromatic")) {
         settings.generation.chromaticPct = root->getIntAttribute("genChromatic", 0);
     }
+    settings.generation.personalPct = root->getIntAttribute("genPersonal", defaults.personalPct);
     settings.generation.hatMode = mm::core::parseHatMode(root->getStringAttribute("genHatMode").toStdString());
     // A state without key and scale comes from before they were settings: it keeps drawing them (D-149).
     settings.generation.root.reset();

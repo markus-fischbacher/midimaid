@@ -1,5 +1,7 @@
 #include "core/PatternValidation.h"
 
+#include "core/SetProfile.h"
+
 #include <algorithm>
 #include <set>
 
@@ -207,6 +209,12 @@ std::vector<std::string> validatePattern(const Pattern& pattern) {
     }
     if (pattern.info.energyPct > 100) {
         issues.add("info.energyPct", "must be 0-100");
+    }
+    if (pattern.info.personalPct > 100) {
+        issues.add("info.personalPct", "must be 0-100");
+    }
+    if (!pattern.info.profile.empty() && !setProfileFromJson(pattern.info.profile)) {
+        issues.add("info.profile", "must be a valid reference profile");
     }
     if (pattern.voicing.lowNote < 0 || pattern.voicing.highNote > 127 ||
         pattern.voicing.lowNote > pattern.voicing.highNote) {

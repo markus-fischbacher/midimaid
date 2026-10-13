@@ -116,6 +116,10 @@ struct GenerationInfo {
     std::string modelId;
     std::string rawResponse;    ///< AI only, unchanged
     std::string referenceSetId; ///< empty = no set
+    /// The snapshot of the reference profile the pattern was made with (SPEC 3.20, v1.1, D-241): `setProfileToJson`, empty
+    /// = none. With it a variation or a replay works as the generation did, whatever the set has become since.
+    std::string profile;
+    uint8_t personalPct = 50; ///< the "Persönlich" setting of that generation (only meaningful with a `profile`)
     int64_t createdUnixMs = 0;
 
     bool operator==(const GenerationInfo&) const = default;

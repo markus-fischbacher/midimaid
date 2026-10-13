@@ -50,6 +50,7 @@ GenerationSettings sanitize(GenerationSettings settings) {
     }
     settings.energyPct = std::clamp(settings.energyPct, 0, 100);
     settings.creativityPct = std::clamp(settings.creativityPct, 0, 100);
+    settings.personalPct = std::clamp(settings.personalPct, 0, 100);
     if (settings.chromaticPct) {
         settings.chromaticPct = std::clamp(*settings.chromaticPct, 0, 100);
     }

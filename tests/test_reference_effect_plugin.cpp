@@ -3,6 +3,8 @@
 #include "ai/PatternCompact.h"
 #include "core/CopyProtection.h"
 #include "core/MidiFile.h"
+#include "core/ReferenceProfile.h"
+#include "core/SetProfile.h"
 #include "core/PatternGenerator.h"
 #include "plugin/AiBackend.h"
 #include "plugin/EmbeddedStyles.h"
@@ -363,4 +365,38 @@ TEST_CASE("a refinement that copies the set is reported as flagged", "[reference
     REQUIRE(processor.refine("keep it"));
     REQUIRE(pumpUntil([&] { return finished(processor); }));
     CHECK(processor.lastReport().copyFlagged);
+}
+
+TEST_CASE("a pattern made with a set of enough entries keeps the profile and the setting", "[reference-effect-plugin][personal]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedStore scoped;
+    InstrumentProcessor processor("Test");
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->info.profile.empty()); // no set: no profile
+
+    fillSet(scoped.store);
+    CHECK(mm::core::referenceEffectOf(scoped.store.get("peak_time")).profile.valid);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    const auto first = *processor.slotsSnapshot().slot(0)->pattern;
+    CHECK_FALSE(first.info.profile.empty());
+    CHECK(first.info.personalPct == 50);
+    CHECK(mm::core::setProfileFromJson(first.info.profile).has_value());
+    CHECK(mm::core::setProfileFromJson(first.info.profile)->activeItems == 5);
+
+    // the setting of the instance is the one that is kept
+    auto settings = processor.instanceSettings();
+    settings.generation.personalPct = 85;
+    processor.setInstanceSettings(settings);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->info.personalPct == 85);
+
+    // fewer than five active items: no profile, the pattern has none
+    const auto items = scoped.store.get("peak_time").items;
+    scoped.store.setActive("peak_time", items[0].id, false);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->info.profile.empty());
 }

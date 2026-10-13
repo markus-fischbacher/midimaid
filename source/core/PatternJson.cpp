@@ -125,6 +125,13 @@ json infoToJson(const GenerationInfo& i) {
     if (i.chromaticPct >= 0) { // only when chosen: patterns of the style's share stay as they were
         info["chromaticPct"] = i.chromaticPct;
     }
+    if (!i.profile.empty()) { // only with a set of enough entries: older patterns stay as they were
+        const json profile = json::parse(i.profile, nullptr, false);
+        if (!profile.is_discarded()) {
+            info["profile"] = profile;
+            info["personalPct"] = i.personalPct;
+        }
+    }
     return info;
 }
 
@@ -240,6 +247,10 @@ void readInfo(Reader& r, const json& object, const std::string& path, Generation
     r.stringValue(object, "modelId", path, false, info.modelId);
     r.stringValue(object, "rawResponse", path, false, info.rawResponse);
     r.stringValue(object, "referenceSetId", path, false, info.referenceSetId);
+    if (const json* profile = r.objectMember(object, "profile", path, false)) {
+        info.profile = profile->dump();
+        r.uintValue(object, "personalPct", path, false, info.personalPct);
+    }
     r.intValue(object, "createdUnixMs", path, false, info.createdUnixMs);
 }
 

@@ -206,6 +206,10 @@ Pattern generateAroundLocks(const StyleProfile& style, const GenerationRequest& 
                                     ? int16_t{-1}
                                     : static_cast<int16_t>(std::min(request.settings.chromaticPct, 100));
     pattern.info.referenceSetId = request.referenceSetId;
+    if (request.profile && request.profile->valid) { // the snapshot of what the style was moved towards (SPEC 3.20)
+        pattern.info.profile = setProfileToJson(*request.profile);
+        pattern.info.personalPct = static_cast<uint8_t>(std::clamp(request.settings.personalPct, 0, 100));
+    }
     return pattern;
 }
 
@@ -228,7 +232,11 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
             pattern.voices.push_back(std::move(track));
         }
     }
-    applyHarmony(pattern, style, rng, request.root, request.scaleId, request.personalProgressions);
+    applyHarmony(pattern, style, rng, request.root, request.scaleId,
+                 scaledProgressions(!request.personalProgressions.empty() || !request.profile
+                                        ? request.personalProgressions
+                                        : request.profile->progressions,
+                                    request.settings.personalPct));
     applyStyleGroove(pattern, style);
     for (Track& track : pattern.voices) {
         setManualArchetype(track, track.role == VoiceRole::Bass ? request.bassArchetype : request.melodyArchetype);
@@ -283,6 +291,10 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
                                     ? int16_t{-1}
                                     : static_cast<int16_t>(std::min(request.settings.chromaticPct, 100));
     pattern.info.referenceSetId = request.referenceSetId;
+    if (request.profile && request.profile->valid) { // the snapshot of what the style was moved towards (SPEC 3.20)
+        pattern.info.profile = setProfileToJson(*request.profile);
+        pattern.info.personalPct = static_cast<uint8_t>(std::clamp(request.settings.personalPct, 0, 100));
+    }
     return pattern;
 }
 
@@ -317,9 +329,33 @@ static SelectionResult selectProtected(const GenerationRequest& request, const S
     return result;
 }
 
+namespace {
+
+/// The style a generation works with (SPEC 3.20, 3.8): the base style moved towards the reference profile (the one of the
+/// request, else the snapshot of `pattern` when a variation works on it), then with the chromatic share of the request,
+/// else that of the pattern, else the style's.
+StyleProfile styleFor(const StyleProfile& base, const GenerationRequest& request, const Pattern* pattern) {
+    std::optional<SetProfile> snapshot;
+    const SetProfile* profile = request.profile && request.profile->valid ? &*request.profile : nullptr;
+    int personalPct = request.settings.personalPct;
+    if (profile == nullptr && pattern != nullptr && !pattern->info.profile.empty()) {
+        snapshot = setProfileFromJson(pattern->info.profile);
+        if (snapshot) {
+            profile = &*snapshot;
+            personalPct = pattern->info.personalPct;
+        }
+    }
+    const StyleProfile moved = profile != nullptr ? personalizeStyle(base, *profile, personalPct) : base;
+    const int chromatic =
+        request.settings.chromaticPct >= 0 ? request.settings.chromaticPct : (pattern != nullptr ? pattern->info.chromaticPct : -1);
+    return withChromatic(moved, chromatic);
+}
+
+} // namespace
+
 SelectionResult generatePatternAroundLocks(const StyleProfile& baseStyle, const GenerationRequest& request,
                                            const Pattern& current) {
-    const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
+    const StyleProfile style = styleFor(baseStyle, request, nullptr);
     const bool anythingToGenerate = std::any_of(current.voices.begin(), current.voices.end(),
                                                 [](const Track& track) { return !isVoiceLocked(track); });
     if (!anythingToGenerate) {
@@ -334,7 +370,7 @@ SelectionResult generatePatternAroundLocks(const StyleProfile& baseStyle, const 
 }
 
 SelectionResult generatePattern(const StyleProfile& baseStyle, const GenerationRequest& request) {
-    const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
+    const StyleProfile style = styleFor(baseStyle, request, nullptr);
     const auto generate = [&](uint64_t seed) { return generateCandidate(style, request, seed); };
     const auto contextFor = [&](const Pattern& pattern) { return qualityContextFor(pattern, style, request.settings); };
     // a candidate with a voice that could not be generated (it has no archetype) is never valid
@@ -343,7 +379,7 @@ SelectionResult generatePattern(const StyleProfile& baseStyle, const GenerationR
 }
 
 Pattern replayWinner(const StyleProfile& baseStyle, const GenerationRequest& request, uint64_t winnerSeed) {
-    const StyleProfile style = withChromatic(baseStyle, request.settings.chromaticPct);
+    const StyleProfile style = styleFor(baseStyle, request, nullptr);
     Pattern pattern = generateCandidate(style, request, winnerSeed);
     pattern.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(pattern, style, request.settings), 0, 100));
     return pattern;
@@ -352,8 +388,7 @@ Pattern replayWinner(const StyleProfile& baseStyle, const GenerationRequest& req
 bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& baseStyle, const GenerationRequest& request,
                      uint64_t seed) {
     // the share chosen in the request, else the one the pattern was made with, else the style's (SPEC 3.8)
-    const StyleProfile style =
-        withChromatic(baseStyle, request.settings.chromaticPct >= 0 ? request.settings.chromaticPct : pattern.info.chromaticPct);
+    const StyleProfile style = styleFor(baseStyle, request, &pattern);
     if (voiceIndex >= pattern.voices.size()) {
         return false;
     }
@@ -380,8 +415,7 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& ba
 
 bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& baseStyle, const GenerationRequest& request,
                       uint64_t seed) {
-    const StyleProfile style =
-        withChromatic(baseStyle, request.settings.chromaticPct >= 0 ? request.settings.chromaticPct : pattern.info.chromaticPct);
+    const StyleProfile style = styleFor(baseStyle, request, &pattern);
     if (phraseIndex >= pattern.phrases.size() || pattern.phrases[phraseIndex].locked) {
         return false;
     }
