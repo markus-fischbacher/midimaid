@@ -17,6 +17,7 @@ namespace mm::core {
 struct PlaybackNotes {
     std::vector<PatternNote> notes;
     uint32_t lengthTicks = 0;
+    uint64_t seed = 0; ///< of the pattern (SPEC 3.19): with the note id and the pass it decides which notes sound
     TransposeInfo transpose; ///< key, range and extremes of the voice for the live transposition (SPEC 3.16)
 };
 

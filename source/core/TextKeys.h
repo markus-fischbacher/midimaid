@@ -281,6 +281,9 @@ namespace mm::core::text {
     X(kLockVelocity, "lock.velocity")                                                                                  \
     X(kLockAll, "lock.all")                                                                                            \
     X(kVoicePartialLockedSuffix, "voice.partialLockedSuffix")                                                          \
+    X(kRollChance, "roll.chance")                                                                                      \
+    X(kRollCondition, "roll.condition")                                                                                \
+    X(kRollConditionAlways, "roll.conditionAlways")                                                                    \
     X(kRollRatchetOff, "roll.ratchetOff")                                                                              \
     X(kRollRatchet2, "roll.ratchet2")                                                                                  \
     X(kRollRatchet3, "roll.ratchet3")                                                                                  \

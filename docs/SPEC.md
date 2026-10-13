@@ -500,7 +500,7 @@ Zweck: Der häufigste Fall im Studio: „Ich habe schon eine Bassline, gib mir e
   die KI nur den abgeleiteten Kontext.
 - Optional „Sperre lösen“: Danach behandelt MidiMaid die Stimme wie eine generierte (Variationen möglich)
 
-### 3.19 [v1.1] Wahrscheinlichkeit und Bedingungen pro Note
+### 3.19 [v1.1] Wahrscheinlichkeit und Bedingungen pro Note (umgesetzt, D-233)
 Zweck: Variation in jedem Durchlauf, ohne das Pattern zu verändern (wie Trig-Bedingungen bei Elektron
 oder die Note-Chance in Live 12).
 

@@ -218,6 +218,21 @@ TEST_CASE("density score: melody band, chords count once, chance counts less", "
         add(over, 0, i * kStep, kStep, 33).chance = 200;
     }
     CHECK(score(over).density == 100);
+    // a condition counts as its share of the passes: eight notes 2:4 are two expected notes
+    Pattern conditional = makeEmptyPattern(1, "x");
+    for (uint32_t i = 0; i < 8; ++i) {
+        Note& note = add(conditional, 0, i * kStep, kStep, 33);
+        note.condA = 2;
+        note.condB = 4;
+    }
+    CHECK(score(conditional).density == 0); // 600 away from the band: clamped
+    Pattern half = makeEmptyPattern(1, "x");
+    for (uint32_t i = 0; i < 16; ++i) {
+        Note& note = add(half, 0, i * kStep, kStep, 33);
+        note.condA = 1;
+        note.condB = 2; // 16 notes in every other pass: 8 expected, 100 below 800-1200
+    }
+    CHECK(score(half).density == 100);
 }
 
 TEST_CASE("density score: per bar over the whole pattern", "[quality]") {

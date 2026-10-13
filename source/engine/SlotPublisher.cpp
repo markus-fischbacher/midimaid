@@ -45,6 +45,7 @@ std::unique_ptr<OwnedPattern> SlotPublisher::render(const core::Slot& slot) {
     owned->notes = std::move(rendered.notes);
     owned->lengthTicks = rendered.lengthTicks;
     owned->transpose = rendered.transpose;
+    owned->seed = rendered.seed;
     owned->version = pattern.version;
     return owned;
 }

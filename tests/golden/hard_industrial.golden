@@ -25,46 +25,46 @@ pattern hard_industrial bars=2 seed=2 winner=14119491246550939236 score=95
   phrases 0+2:main
   voice bass archetype=roll16_aggressive notes=18 velocitySum=1980
   voice melody archetype=atonal_motif notes=6 velocitySum=600
-  hash ee776d6cbc7930c3
+  hash 16d718eabf7973ac
 pattern hard_industrial bars=4 seed=1 winner=13757245211066428519 score=92
   key root=7 scale=phrygian kick=4otf
   chords i@0+8
   phrases 0+4:main
   voice bass archetype=roll16_aggressive notes=36 velocitySum=3960
   voice melody archetype=sparse_hits notes=4 velocitySum=400
-  hash c2f63fdf375ba859
+  hash 8310d19ed42b577e
 pattern hard_industrial bars=4 seed=2 winner=13633754720362554755 score=95
   key root=7 scale=phrygian kick=4otf
   chords i@0+8
   phrases 0+4:main
   voice bass archetype=roll16_aggressive notes=36 velocitySum=3960
   voice melody archetype=atonal_motif notes=12 velocitySum=1200
-  hash bb4cebc863313cd6
+  hash 21a01503382e55af
 pattern hard_industrial bars=8 seed=1 winner=9648886400068060533 score=92
   key root=0 scale=phrygian kick=4otf
   chords i@0+16
   phrases 0+4:main 4+4:variation
   voice bass archetype=roll16_aggressive notes=72 velocitySum=7920
   voice melody archetype=sparse_hits notes=8 velocitySum=800
-  hash f82e840096fead41
+  hash 0cc2e3ca09353aed
 pattern hard_industrial bars=8 seed=2 winner=10987583248141275951 score=95
   key root=5 scale=natural_minor kick=4otf
   chords i@0+16
   phrases 0+4:main 4+4:variation
   voice bass archetype=roll16_aggressive notes=72 velocitySum=7920
   voice melody archetype=atonal_motif notes=24 velocitySum=2400
-  hash 159f76fe9f62b173
+  hash 9b423088f36bc5af
 pattern hard_industrial bars=16 seed=1 winner=9648886400068060533 score=93
   key root=0 scale=phrygian kick=4otf
   chords i@0+32
   phrases 0+4:main 4+4:variation 8+4:main 12+4:build
   voice bass archetype=roll16_aggressive notes=148 velocitySum=16480
   voice melody archetype=sparse_hits notes=18 velocitySum=1830
-  hash bb3044c26ead6e33
+  hash f6ac31376813b8a3
 pattern hard_industrial bars=16 seed=2 winner=10987583248141275951 score=95
   key root=5 scale=natural_minor kick=4otf
   chords i@0+32
   phrases 0+4:main 4+4:variation 8+4:main 12+4:build
   voice bass archetype=roll16_aggressive notes=148 velocitySum=16480
   voice melody archetype=atonal_motif notes=48 velocitySum=4860
-  hash 3bcda853e51d0e1d
+  hash a81a491d357cc3e3

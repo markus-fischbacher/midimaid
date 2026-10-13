@@ -1,5 +1,6 @@
 #include "core/PatternGenerator.h"
 
+#include "core/Chance.h"
 #include "core/FormPlan.h"
 #include "core/Groove.h"
 #include "core/LockRestore.h"
@@ -113,7 +114,8 @@ void appendNotes(Pattern& pattern, size_t voice, std::vector<Note> notes) {
     }
 }
 
-/// Draws the ratchets of the voices (not `keep`) for the bars [fromBar, toBar), after the archetypes are known.
+/// Draws the ratchets and the chances of the voices (not `keep`) for the bars [fromBar, toBar), after the archetypes
+/// are known.
 void addRatchets(Pattern& pattern, const StyleProfile& style, int energyPct, uint64_t seed, uint32_t fromBar,
                  uint32_t toBar, const std::vector<bool>& keep = {}) {
     for (size_t i = 0; i < pattern.voices.size(); ++i) {
@@ -121,6 +123,7 @@ void addRatchets(Pattern& pattern, const StyleProfile& style, int energyPct, uin
             continue;
         }
         applyRatchets(pattern, i, style.id, energyPct, seed, fromBar, toBar);
+        applyChances(pattern, i, style, energyPct, seed, fromBar, toBar);
     }
 }
 
@@ -368,6 +371,7 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& ba
                                                      next.voices[voiceIndex].lock);
     }
     applyRatchets(next, voiceIndex, style.id, request.settings.energyPct, seed, 0, next.lengthBars);
+    applyChances(next, voiceIndex, style, request.settings.energyPct, seed, 0, next.lengthBars);
     applyConstraints(next, constraintSettingsFor(next, style));
     next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, request.settings), 0, 100));
     pattern = std::move(next);
@@ -424,6 +428,8 @@ bool regeneratePhrase(Pattern& pattern, size_t phraseIndex, const StyleProfile& 
         if (!(lock.pitch && lock.rhythm && lock.velocity)) {
             applyRatchets(next, i, style.id, request.settings.energyPct, seed, phrase.startBar,
                           phrase.startBar + phrase.lengthBars);
+            applyChances(next, i, style, request.settings.energyPct, seed, phrase.startBar,
+                         phrase.startBar + phrase.lengthBars);
         }
     }
     applyConstraints(next, constraintSettingsFor(next, style));

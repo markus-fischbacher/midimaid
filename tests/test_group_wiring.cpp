@@ -2799,6 +2799,165 @@ TEST_CASE("with the marker row the mouse still reaches the velocity lane and the
     CHECK(rig.melody()[2].velocity == 100); // the lane was not touched
 }
 
+TEST_CASE("the lane shows and edits the chance of the notes", "[roll][lane][editor][probability]") {
+    using Roll = mm::plugin::EditableRoll;
+    RollRig rig;
+    CHECK(rig.roll.laneMode() == Roll::LaneMode::Velocity);
+    const auto before = rig.melody();
+    rig.roll.setLaneMode(Roll::LaneMode::Chance);
+    CHECK(rig.roll.laneMode() == Roll::LaneMode::Chance);
+    const auto laneHeight = static_cast<double>(Roll::kLaneHeight);
+    // a drag in the lane sets the chance: a quarter of the height up from the bottom is 25 %
+    const juce::Point<double> from{rig.xOf(960, 2.0), 1.0};
+    rig.roll.pressLane(from, {});
+    for (const double y : {laneHeight * 0.3, laneHeight * 0.55, laneHeight * 0.75}) {
+        rig.roll.drag({from.x, y});
+        rig.refresh();
+    }
+    CHECK(rig.roll.velocityHint() == 25);
+    rig.roll.release({from.x, laneHeight * 0.75});
+    rig.refresh();
+    CHECK(rig.melody()[1].chance == 25);
+    CHECK(rig.melody()[1].velocity == before[1].velocity); // the velocity lane was not touched
+    CHECK(rig.melody()[0].chance == 100);
+    CHECK(rig.note(1).chance == 25); // the roll knows it
+    REQUIRE(rig.solo.processor.undo()); // one step
+    CHECK(rig.melody()[1].chance == 100);
+    CHECK_FALSE(rig.solo.processor.canUndo());
+    // the bottom of the lane is 0 %, the top 100 %
+    rig.roll.pressLane(from, {});
+    rig.roll.drag({from.x, laneHeight + 30.0});
+    rig.roll.release({from.x, laneHeight + 30.0});
+    rig.refresh();
+    CHECK(rig.melody()[1].chance == 0);
+    rig.roll.pressLane({from.x, laneHeight - 1.0}, {});
+    rig.roll.drag({from.x, -20.0});
+    rig.roll.release({from.x, -20.0});
+    rig.refresh();
+    CHECK(rig.melody()[1].chance == 100);
+    // back to the velocity: the same drag sets velocities
+    rig.roll.setLaneMode(Roll::LaneMode::Velocity);
+    rig.roll.pressLane({rig.xOf(960, 2.0), laneY(100)}, {});
+    rig.roll.drag({rig.xOf(960, 2.0), laneY(40)});
+    rig.roll.release({rig.xOf(960, 2.0), laneY(40)});
+    rig.refresh();
+    CHECK(rig.melody()[1].velocity == 40);
+}
+
+TEST_CASE("a selection moves by the same chance delta, a stroke with Alt sets the chance of the bars it crosses",
+          "[roll][lane][editor][probability]") {
+    using Roll = mm::plugin::EditableRoll;
+    RollRig rig;
+    rig.roll.setLaneMode(Roll::LaneMode::Chance);
+    const auto laneHeight = static_cast<double>(Roll::kLaneHeight);
+    // two notes with 100 and 60
+    std::vector<mm::core::ChanceChange> start{{rig.idAt(0), 100}, {rig.idAt(1), 60}};
+    REQUIRE(rig.solo.processor.editNotes(0, [&](mm::core::Pattern& p) { return mm::core::setChances(p, 1, start); }));
+    rig.refresh();
+    rig.roll.press(rig.at(0, 60), {});
+    rig.roll.release(rig.at(0, 60));
+    rig.roll.press(rig.at(960, 64), juce::ModifierKeys::shiftModifier);
+    rig.roll.release(rig.at(960, 64));
+    REQUIRE(rig.roll.selection().size() == 2);
+    const juce::Point<double> from{rig.xOf(0, 2.0), 1.0};
+    rig.roll.pressLane(from, {});
+    rig.roll.drag({from.x, laneHeight * 0.2}); // 100 -> 80
+    rig.refresh();
+    CHECK(rig.melody()[0].chance == 80);
+    CHECK(rig.melody()[1].chance == 40);
+    CHECK(rig.melody()[2].chance == 100); // not selected
+    rig.roll.release({from.x, laneHeight * 0.2});
+    // a stroke with Alt over empty lane sets what it crosses
+    rig.refresh();
+    const juce::Point<double> strokeFrom{rig.xOf(1400, 0.0), laneHeight * 0.5}; // no bar here
+    rig.roll.pressLane(strokeFrom, juce::ModifierKeys::altModifier);
+    CHECK(rig.roll.gestureActive());
+    for (const double share : {0.4, 0.7, 1.0}) {
+        rig.roll.drag({strokeFrom.x + (rig.xOf(2400, 0.0) - strokeFrom.x) * share, laneHeight * 0.5});
+        rig.refresh();
+    }
+    rig.roll.release({rig.xOf(2400, 0.0), laneHeight * 0.5});
+    rig.refresh();
+    CHECK(rig.melody()[2].chance == 50);
+}
+
+TEST_CASE("the label at the lane switches between velocity and chance", "[roll][lane][editor][probability]") {
+    using Roll = mm::plugin::EditableRoll;
+    RollRig rig;
+    const float laneTop = static_cast<float>(rig.roll.getHeight() - Roll::kLaneHeight);
+    const juce::Point<float> label(5.0f, laneTop + 4.0f);
+    rig.roll.mouseDown(mouseEventAt(rig.roll, label));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, label));
+    CHECK(rig.roll.laneMode() == Roll::LaneMode::Chance);
+    CHECK_FALSE(rig.roll.gestureActive());
+    rig.roll.mouseDown(mouseEventAt(rig.roll, label));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, label));
+    CHECK(rig.roll.laneMode() == Roll::LaneMode::Velocity);
+    // the gutter beside the notes does nothing
+    const juce::Point<float> gutter(5.0f, 50.0f);
+    rig.roll.mouseDown(mouseEventAt(rig.roll, gutter));
+    rig.roll.mouseUp(mouseEventAt(rig.roll, gutter));
+    CHECK(rig.roll.laneMode() == Roll::LaneMode::Velocity);
+}
+
+TEST_CASE("the menu sets the chance and the condition of the selected notes", "[roll][editor][probability]") {
+    using Roll = mm::plugin::EditableRoll;
+    RollRig rig;
+    const auto items = [&](int low, int high) {
+        std::vector<std::tuple<int, juce::String, bool, bool>> found;
+        juce::PopupMenu menu = rig.roll.contextMenu();
+        for (juce::PopupMenu::MenuItemIterator it(menu, true); it.next();) {
+            const int id = it.getItem().itemID;
+            if (id >= low && id < high) {
+                found.emplace_back(id, it.getItem().text, it.getItem().isEnabled, it.getItem().isTicked);
+            }
+        }
+        return found;
+    };
+    auto chances = items(Roll::kMenuChanceBase, Roll::kMenuChanceBase + 6);
+    auto conditions = items(Roll::kMenuConditionBase, Roll::kMenuConditionBase + 9);
+    REQUIRE(chances.size() == 6);
+    REQUIRE(conditions.size() == 9);
+    CHECK(std::get<1>(chances[0]) == "100 %");
+    CHECK(std::get<1>(chances[2]) == "50 %");
+    CHECK(std::get<1>(conditions[0]) == "immer");
+    CHECK(std::get<1>(conditions[4]) == "2:4");
+    for (const auto& item : chances) {
+        CHECK_FALSE(std::get<2>(item)); // nothing selected
+    }
+    rig.roll.setChanceOfSelection(50);
+    CHECK(rig.melody()[1].chance == 100); // without a selection nothing changes
+    rig.roll.press(rig.at(960, 64), {});
+    rig.roll.release(rig.at(960, 64));
+    chances = items(Roll::kMenuChanceBase, Roll::kMenuChanceBase + 6);
+    CHECK(std::get<3>(chances[0])); // 100 % is ticked
+    rig.roll.runMenuAction(Roll::kMenuChanceBase + 2); // 50 %
+    CHECK(rig.melody()[1].chance == 50);
+    CHECK(rig.melody()[0].chance == 100);
+    rig.refresh();
+    chances = items(Roll::kMenuChanceBase, Roll::kMenuChanceBase + 6);
+    CHECK(std::get<3>(chances[2]));
+    CHECK_FALSE(std::get<3>(chances[0]));
+    rig.roll.runMenuAction(Roll::kMenuConditionBase + 4); // 2:4
+    CHECK(rig.melody()[1].condA == 2);
+    CHECK(rig.melody()[1].condB == 4);
+    rig.refresh();
+    conditions = items(Roll::kMenuConditionBase, Roll::kMenuConditionBase + 9);
+    CHECK(std::get<3>(conditions[4]));
+    CHECK_FALSE(std::get<3>(conditions[0]));
+    rig.roll.runMenuAction(Roll::kMenuConditionBase + 6); // 4:4
+    CHECK(rig.melody()[1].condA == 4);
+    rig.roll.runMenuAction(Roll::kMenuConditionBase + 0); // always
+    CHECK(rig.melody()[1].condB == 1);
+    rig.roll.runMenuAction(Roll::kMenuChanceBase + 5); // 0 %
+    CHECK(rig.melody()[1].chance == 0);
+    REQUIRE(rig.solo.processor.undo());
+    CHECK(rig.melody()[1].chance == 50);
+    rig.roll.runMenuAction(Roll::kMenuChanceBase + 6); // not an item
+    rig.roll.runMenuAction(Roll::kMenuConditionBase + 9);
+    CHECK(rig.melody()[1].chance == 50);
+}
+
 TEST_CASE("a new roll opened in a fold shows its notes", "[roll][editor][fold]") {
     Quiet quiet;
     Instance solo("Solo");

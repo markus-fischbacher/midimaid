@@ -73,6 +73,55 @@ size_t setVoiceLocked(Pattern& pattern, size_t voice, bool locked) {
     return 1;
 }
 
+size_t setChances(Pattern& pattern, size_t voice, std::span<const ChanceChange> changes) {
+    if (voice >= pattern.voices.size() || pattern.voices[voice].lock.rhythm) {
+        return 0;
+    }
+    size_t changed = 0;
+    for (auto& note : pattern.voices[voice].notes) {
+        for (const auto& change : changes) {
+            if (change.id == note.id && !note.lock.rhythm) {
+                const auto chance = static_cast<uint8_t>(std::min<int>(change.chance, 100));
+                if (note.chance != chance) {
+                    note.chance = chance;
+                    ++changed;
+                }
+                break;
+            }
+        }
+    }
+    if (changed > 0) {
+        pattern.info.source = "edit";
+    }
+    return changed;
+}
+
+size_t setChance(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int chance) {
+    const auto value = static_cast<uint8_t>(std::clamp(chance, 0, 100));
+    return forNotes(pattern, voice, ids, [&](Note& note) {
+        if (note.lock.rhythm || pattern.voices[voice].lock.rhythm) {
+            return false;
+        }
+        const bool differs = note.chance != value;
+        note.chance = value;
+        return differs;
+    });
+}
+
+size_t setCondition(Pattern& pattern, size_t voice, std::span<const uint32_t> ids, int a, int b) {
+    const int denominator = std::clamp(b, 1, 8);
+    const int numerator = std::clamp(a, 1, denominator);
+    return forNotes(pattern, voice, ids, [&](Note& note) {
+        if (note.lock.rhythm || pattern.voices[voice].lock.rhythm) {
+            return false;
+        }
+        const bool differs = note.condA != numerator || note.condB != denominator;
+        note.condA = static_cast<uint8_t>(numerator);
+        note.condB = static_cast<uint8_t>(denominator);
+        return differs;
+    });
+}
+
 namespace {
 
 bool& flagOf(LockFlags& lock, LockDimension dimension) {

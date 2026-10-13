@@ -3,6 +3,7 @@
 #include "core/MidiFile.h"
 #include "core/PatternJson.h"
 #include "core/PlaybackRender.h"
+#include "core/Probability.h"
 #include "core/SlotBankJson.h"
 
 #include <algorithm>
@@ -238,7 +239,9 @@ std::vector<uint8_t> exportPatternMidi(const Pattern& pattern, const StyleProfil
     MidiFileOptions options;
     options.bpm = bpm;
     options.trackName = "MidiMaid";
-    return writeMidiFile(PatternView{notes.data(), notes.size(), pattern.lengthBars * kTicksPerBar}, options);
+    uint32_t lengthTicks = pattern.lengthBars * kTicksPerBar;
+    notes = notesForExport(notes, lengthTicks, pattern.info.winnerSeed ^ pattern.info.seed); // passes resolved (D-233)
+    return writeMidiFile(PatternView{notes.data(), notes.size(), lengthTicks}, options);
 }
 
 } // namespace mm::core

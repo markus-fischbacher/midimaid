@@ -308,6 +308,22 @@ uint8_t velocityAtY(double laneHeight, double y) {
     return static_cast<uint8_t>(std::clamp<long>(std::lround(share * 127.0), 1, 127));
 }
 
+RollBox chanceBarBox(const RollGeometry& geometry, const RollNote& note, double laneHeight) {
+    const RollBox noteRect = noteBox(geometry, note);
+    RollBox box;
+    box.x = noteRect.x;
+    box.width = std::clamp(noteRect.width - 1.0, 3.0, 10.0);
+    const double share = std::clamp(static_cast<double>(note.chance), 0.0, 100.0) / 100.0;
+    box.height = std::max(laneHeight * share, 1.0);
+    box.y = laneHeight - box.height;
+    return box;
+}
+
+uint8_t chanceAtY(double laneHeight, double y) {
+    const double share = 1.0 - std::clamp(y / std::max(laneHeight, 1.0), 0.0, 1.0);
+    return static_cast<uint8_t>(std::clamp<long>(std::lround(share * 100.0), 0, 100));
+}
+
 uint32_t hitVelocityBar(const RollGeometry& geometry, std::span<const RollNote> notes, double x) {
     for (auto it = notes.rbegin(); it != notes.rend(); ++it) {
         const RollBox box = velocityBarBox(geometry, *it, 1.0);

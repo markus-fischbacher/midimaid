@@ -4,6 +4,7 @@
 #include "core/DrumReference.h"
 #include "core/KickGrid.h"
 #include "core/LockRestore.h"
+#include "core/Probability.h"
 #include "core/PatternEdit.h"
 #include "core/PatternGenerator.h"
 #include "core/PlaybackRender.h"
@@ -2165,6 +2166,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.hasPattern = true;
     view.notes = std::move(rendered.notes);
     view.lengthTicks = rendered.lengthTicks;
+    view.seed = rendered.seed;
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
     view.melody = view.voiceName == "Melody";
     view.locked = voiceIndex < pattern.voices.size() && mm::core::isVoiceLocked(pattern.voices[voiceIndex]);
@@ -2190,7 +2192,7 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
         for (const auto& note : pattern.voices[voiceIndex].notes) {
             view.source.push_back(
                 {note.id, note.pitch, note.startTick, note.lengthTicks, note.velocity, note.accent, note.slide, note.ratchet,
-                 note.lock});
+                 note.lock, note.chance, note.condA, note.condB});
         }
     }
     view.displayName = view.melody ? tr(mm::core::text::kVoiceMelody)
@@ -2307,8 +2309,10 @@ void ProcessorBase::updateExport() {
                     mm::core::transposedPitch(note.pitch, total, transposeConfig.mode, view.transposeInfo, shift));
             }
         }
-        request.notes = std::move(view.notes);
-        request.lengthTicks = view.lengthTicks;
+        // Chances and conditions are resolved: the file holds the passes that the group plays one after another (D-233)
+        uint32_t lengthTicks = view.lengthTicks;
+        request.notes = mm::core::notesForExport(view.notes, lengthTicks, view.seed);
+        request.lengthTicks = lengthTicks;
         request.voice = view.voice;
         request.fileName = "MidiMaid_Slot" + juce::String(view.slot) + "_" + view.voiceName.replace(" ", "") + ".mid";
         request.trackName = "MidiMaid " + view.voiceName;

@@ -25,6 +25,9 @@ struct RollNote {
     bool slide = false;
     uint8_t ratchet = 1;
     LockFlags lock{};
+    uint8_t chance = 100; ///< percent (SPEC 3.19)
+    uint8_t condA = 1;    ///< the condition A:B, 1:1 = always
+    uint8_t condB = 1;
 
     bool operator==(const RollNote&) const = default;
 };
@@ -187,6 +190,12 @@ RollBox velocityBarBox(const RollGeometry& geometry, const RollNote& note, doubl
 /// The velocity that a mouse height stands for: 127 at the top of the lane or above, 1 at the bottom or below, linear
 /// in between and rounded.
 uint8_t velocityAtY(double laneHeight, double y);
+
+/// The chance lane (SPEC 3.19, v1.1, D-233): the same bars as the velocity lane, as high as the chance of the note
+/// (a hairline at 0 %). The chance a mouse height stands for: 100 at the top of the lane or above, 0 at the bottom or
+/// below, linear in between and rounded.
+RollBox chanceBarBox(const RollGeometry& geometry, const RollNote& note, double laneHeight);
+uint8_t chanceAtY(double laneHeight, double y);
 
 /// The topmost bar under field position `x` (a later note covers an earlier one); a bar narrower than 8 pixels is still
 /// 8 pixels wide for the hit. 0 when there is none.
