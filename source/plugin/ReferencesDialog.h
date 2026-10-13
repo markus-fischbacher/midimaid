@@ -42,6 +42,7 @@ private:
     void showPoolMenu();
     void importPaths(std::vector<juce::File> paths);
     juce::String summaryText(const mm::core::ReferenceSet& set) const;
+    juce::String profileText(const mm::core::ReferenceSet& set) const;
     juce::String statusText(const ReferenceStore::Progress& progress) const;
 
     MidiMaidLookAndFeel look_; // first: the children use it until the end
@@ -53,7 +54,7 @@ private:
     bool filling_ = false;
     bool pendingDelete_ = false;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
-    juce::Label summaryLabel_, statusLabel_, emptyLabel_;
+    juce::Label summaryLabel_, profileLabel_, statusLabel_, emptyLabel_;
     juce::ListBox list_{"list", this};
     juce::TextButton addFilesButton_, addFolderButton_, cancelButton_, closeButton_;
     juce::ComboBox setBox_;

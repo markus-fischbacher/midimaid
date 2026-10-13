@@ -1,6 +1,8 @@
 #include "plugin/ReferencesDialog.h"
 
 #include "core/Library.h"
+#include "core/ReferenceProfile.h"
+#include "core/SetProfile.h"
 #include "core/TextKeys.h"
 #include "plugin/EmbeddedTranslation.h"
 
@@ -221,6 +223,9 @@ ReferencesDialog::ReferencesDialog(std::function<ReferenceStore&()> store, std::
     statusLabel_.setComponentID("status");
     statusLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.65f));
     addAndMakeVisible(statusLabel_);
+    profileLabel_.setComponentID("profile");
+    profileLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.65f));
+    addAndMakeVisible(profileLabel_);
     emptyLabel_.setComponentID("empty");
     emptyLabel_.setText(tr(keys::kReferencesEmpty), juce::dontSendNotification);
     emptyLabel_.setJustificationType(juce::Justification::centred);
@@ -342,6 +347,27 @@ juce::String ReferencesDialog::summaryText(const mm::core::ReferenceSet& set) co
     return text;
 }
 
+juce::String ReferencesDialog::profileText(const mm::core::ReferenceSet& set) const {
+    const auto profile = mm::core::profileOf(set);
+    if (!profile.valid) {
+        return set.items.empty() ? juce::String()
+                                 : tr(keys::kReferencesProfileTooSmall,
+                                      {{"n", std::to_string(mm::core::kMinActiveForProgressions)}});
+    }
+    const auto facts = mm::core::factsOf(profile);
+    const auto tenth = [](int hundredths) {
+        return std::to_string(hundredths / 100) + "." + std::to_string(hundredths % 100 / 10);
+    };
+    const auto density = tr(keys::kReferencesProfileDensity,
+                            {{"n", tenth(facts.bassNotesPerBar100)}, {"m", tenth(facts.melodyNotesPerBar100)}});
+    const auto scale = facts.scaleId.empty() ? juce::String("-")
+                                             : tr(keys::scaleKey(facts.scaleId)) + " " + juce::String(facts.scalePercent) + " %";
+    return tr(keys::kReferencesProfile, {{"list", facts.progression.empty() ? "-" : facts.progression},
+                                         {"value", density.toStdString()},
+                                         {"scale", scale.toStdString()},
+                                         {"n", std::to_string(facts.cells)}});
+}
+
 juce::String ReferencesDialog::statusText(const ReferenceStore::Progress& progress) const {
     if (progress.running) {
         return tr(keys::kReferencesProgress,
@@ -432,6 +458,7 @@ void ReferencesDialog::refresh() {
     list_.repaint();
     const auto progress = store_().progress();
     summaryLabel_.setText(summaryText(set_), juce::dontSendNotification);
+    profileLabel_.setText(profileText(set_), juce::dontSendNotification);
     statusLabel_.setText(statusText(progress), juce::dontSendNotification);
     emptyLabel_.setVisible(set_.items.empty());
     cancelButton_.setVisible(progress.running);
@@ -476,6 +503,7 @@ void ReferencesDialog::resized() {
     setNameEditor_.setBounds(setRow);
     area.removeFromTop(8);
     summaryLabel_.setBounds(area.removeFromTop(26));
+    profileLabel_.setBounds(area.removeFromTop(24));
     area.removeFromTop(6);
     auto bottom = area.removeFromBottom(32);
     closeButton_.setBounds(bottom.removeFromRight(110));
