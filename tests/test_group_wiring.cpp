@@ -877,6 +877,15 @@ juce::Component* findById(juce::Component& parent, const juce::String& id) {
     return nullptr;
 }
 
+/// The inspector holds the controls that are not on the main window (D-252): opens it at `page`. A voice window has
+/// none; the call does nothing there.
+void showInspector(juce::Component& editor, mm::plugin::PlaceholderEditor::InspectorPage page) {
+    if (auto* hub = dynamic_cast<mm::plugin::PlaceholderEditor*>(&editor)) {
+        hub->setInspectorOpen(true);
+        hub->setInspectorPage(page);
+    }
+}
+
 template <typename T> T* child(juce::Component& parent, const juce::String& id) {
     return dynamic_cast<T*>(findById(parent, id));
 }
@@ -979,6 +988,7 @@ TEST_CASE("the size box scales the window and keeps its aspect ratio, in the hub
             instance.setRole(InstanceRole::Voice);
         }
         std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Instance);
         auto* box = child<juce::ComboBox>(*editor, "zoom");
         REQUIRE(box != nullptr);
         CHECK(box->isVisible());
@@ -1144,6 +1154,7 @@ TEST_CASE("the Help button is in the hub and in the voice window and opens nothi
             instance.setRole(InstanceRole::Voice);
         }
         std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
+        showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Instance);
         auto* help = child<juce::TextButton>(*editor, "help");
         REQUIRE(help != nullptr);
         CHECK(help->isVisible());
@@ -2137,6 +2148,7 @@ TEST_CASE("the hub UI hands grid, triplets and snapping to the rolls and shows t
     Quiet quiet;
     Instance solo("Solo");
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Edit);
     auto* grid = dynamic_cast<juce::ComboBox*>(find(*editor, "grid_box"));
     auto* triplet = dynamic_cast<juce::Button*>(find(*editor, "triplet"));
     auto* snapBox = dynamic_cast<juce::ComboBox*>(find(*editor, "snap_box"));
@@ -2218,6 +2230,7 @@ TEST_CASE("the voice bar shows the voices as dots, jumps to one and adds or remo
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
     auto* hubEditor = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
     REQUIRE(hubEditor != nullptr);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Instance);
     auto* bar = child<mm::plugin::VoiceBar>(*editor, "voice_bar");
     auto* add = child<juce::TextButton>(*editor, "add_voice");
     auto* remove = child<juce::TextButton>(*editor, "remove_voice");
@@ -3232,8 +3245,8 @@ TEST_CASE("the focus switch gives one voice the whole height and folds the other
     CHECK(rig.row(1).getHeight() == 2 * half - 36);
     CHECK(rig.roll1->isVisible());
     CHECK_FALSE(rig.roll2->isVisible());
-    // the strip keeps name, mute, lock, focus and the grip, all inside it and none of them empty
-    for (const char* id : {"name_2", "mute_2", "lock_2", "focus_2", "drag_2"}) {
+    // the strip keeps name, mute, lock, new, the menu (with Focus, Variation and Duplicate) and the grip, all inside it
+    for (const char* id : {"name_2", "mute_2", "lock_2", "renew_2", "more_2", "drag_2"}) {
         auto* component = find(*rig.editor, id);
         REQUIRE(component != nullptr);
         INFO(id);
@@ -3601,7 +3614,8 @@ TEST_CASE("the strip of a folded row keeps its action buttons", "[buttons][edito
     REQUIRE(waitFor([&] { return rig.panel->focusedVoice() == 1; }));
     auto& row = *find(*rig.editor, "row_2");
     REQUIRE(row.getHeight() == 36);
-    for (const char* id : {"renew_2", "vary_2", "duplicate_2", "mute_2", "lock_2", "focus_2", "drag_2"}) {
+    // Variation, Duplicate and Focus sit in the menu of "..." (D-252); the strip keeps what is used all the time
+    for (const char* id : {"renew_2", "more_2", "mute_2", "lock_2", "drag_2"}) {
         auto* component = find(*rig.editor, id);
         REQUIRE(component != nullptr);
         INFO(id);
@@ -3958,6 +3972,7 @@ TEST_CASE("the basic level hides the expert controls, the switch shows them and 
         auto* toggle = dynamic_cast<juce::Button*>(find(*editor, "expert"));
         REQUIRE(toggle != nullptr);
         CHECK(toggle->getButtonText() == "Experte");
+        showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Instance); // the switch sits on the instance page (D-252)
         CHECK(toggle->isVisible());
         CHECK_FALSE(panel->expertLevel());
         CHECK_FALSE(toggle->getToggleState());
@@ -3966,6 +3981,7 @@ TEST_CASE("the basic level hides the expert controls, the switch shows them and 
             REQUIRE(find(*editor, id) != nullptr);
             CHECK_FALSE(find(*editor, id)->isVisible());
         }
+        showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Instance);
         // what belongs to the basic level stays
         for (const char* id : {"style", "key", "scale", "bars", "energy", "creativity", "undo", "redo", "slot1"}) {
             INFO(id);
@@ -3978,6 +3994,8 @@ TEST_CASE("the basic level hides the expert controls, the switch shows them and 
         REQUIRE(waitFor([&] { return panel->expertLevel(); }));
         for (const char* id : expertIds) {
             INFO(id);
+            const bool onPatternPage = std::string(id) == "seed" || std::string(id) == "random";
+            showInspector(*editor, onPatternPage ? mm::plugin::PlaceholderEditor::InspectorPage::Pattern : mm::plugin::PlaceholderEditor::InspectorPage::Edit);
             CHECK(find(*editor, id)->isVisible());
             CHECK(find(*editor, id)->getWidth() > 0);
         }
@@ -3989,10 +4007,13 @@ TEST_CASE("the basic level hides the expert controls, the switch shows them and 
     std::unique_ptr<juce::AudioProcessorEditor> again(instance.processor.createEditor());
     auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(again.get());
     CHECK(panel->expertLevel());
+    showInspector(*again, mm::plugin::PlaceholderEditor::InspectorPage::Pattern);
     CHECK(find(*again, "seed")->isVisible());
+    showInspector(*again, mm::plugin::PlaceholderEditor::InspectorPage::Instance);
     CHECK(dynamic_cast<juce::Button*>(find(*again, "expert"))->getToggleState());
     dynamic_cast<juce::Button*>(find(*again, "expert"))->triggerClick();
     REQUIRE(waitFor([&] { return !panel->expertLevel(); }));
+    showInspector(*again, mm::plugin::PlaceholderEditor::InspectorPage::Pattern);
     CHECK_FALSE(find(*again, "seed")->isVisible());
     CHECK_FALSE(store.get().expert);
 }
@@ -4421,6 +4442,7 @@ TEST_CASE("a voice that was switched to Hub next to a hub can be switched back t
     REQUIRE(role != nullptr);
     role->setSelectedId(2, juce::sendNotificationSync); // Hub, but there is one already
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Instance); // the hub window keeps the role box in the inspector
     INFO("status " << static_cast<int>(voice.processor.groupStatus()) << " role "
                    << static_cast<int>(voice.processor.instanceSettings().role));
     role = child<juce::ComboBox>(*editor, "role");
@@ -4440,6 +4462,7 @@ TEST_CASE("the role box of the hub window is wide enough and covered by nothing"
         instance.setRole(role);
         std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
         pumpMessages(40);
+        showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Instance);
         auto* box = child<juce::ComboBox>(*editor, "role");
         REQUIRE(box != nullptr);
         INFO("role " << static_cast<int>(role));
@@ -4710,6 +4733,7 @@ TEST_CASE("the follow button is in the hub and in the voice window and overlaps 
         instance.setRole(role);
         std::unique_ptr<juce::AudioProcessorEditor> editor(instance.processor.createEditor());
         pumpMessages(40);
+        showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Edit);
         auto* button = child<juce::TextButton>(*editor, "follow_playhead");
         REQUIRE(button != nullptr);
         INFO("role " << static_cast<int>(role));
@@ -5226,6 +5250,7 @@ TEST_CASE("evolve: the controls are in the hub window, the settings only at the 
     hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, evolvePattern(hub, 13))); });
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Evolve);
     auto* toggle = child<juce::TextButton>(*editor, "evolve");
     auto* back = child<juce::TextButton>(*editor, "evolve_back");
     auto* keep = child<juce::TextButton>(*editor, "evolve_keep");
@@ -6635,6 +6660,7 @@ TEST_CASE("the chromatic slider is an expert control that follows the instance",
     hub.setRole(InstanceRole::Hub);
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern); // the expert settings of the pattern (D-252)
     auto* slider = child<juce::Slider>(*editor, "chromatic");
     REQUIRE(slider != nullptr);
     child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
@@ -6703,6 +6729,7 @@ TEST_CASE("the hat mode box is an expert control that follows the instance", "[g
     hub.setRole(InstanceRole::Hub);
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern); // the expert settings of the pattern (D-252)
     auto* box = child<juce::ComboBox>(*editor, "hatMode");
     REQUIRE(box != nullptr);
     child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
@@ -6878,6 +6905,7 @@ TEST_CASE("the preview button of the hub switches the preview and shows its stat
     hub.setRole(InstanceRole::Hub);
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Edit);
     auto* button = child<juce::TextButton>(*editor, "preview");
     REQUIRE(button != nullptr);
     CHECK(button->isVisible());
@@ -6934,6 +6962,7 @@ TEST_CASE("the start box is an expert control that follows the instance", "[grou
     hub.setRole(InstanceRole::Hub);
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern); // the expert settings of the pattern (D-252)
     auto* box = child<juce::ComboBox>(*editor, "startMode");
     REQUIRE(box != nullptr);
     child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
@@ -7009,6 +7038,7 @@ TEST_CASE("the quantization box is an expert control that follows the instance",
     hub.setRole(InstanceRole::Hub);
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern); // the expert settings of the pattern (D-252)
     auto* box = child<juce::ComboBox>(*editor, "switchQuant");
     REQUIRE(box != nullptr);
     child<juce::ToggleButton>(*editor, "expert")->setToggleState(true, juce::dontSendNotification);
@@ -7304,6 +7334,7 @@ TEST_CASE("the hub shows the reference sets of its style and switches the active
     Instance hub("Hub");
     hub.setRole(InstanceRole::Hub);
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern);
     auto* box = child<juce::ComboBox>(*editor, "referenceSet");
     REQUIRE(box != nullptr);
     CHECK(box->isVisible());
@@ -7376,6 +7407,7 @@ TEST_CASE("the personal slider is an expert control that follows the instance", 
     hub.setRole(InstanceRole::Hub);
     std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
     pumpMessages(60);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern); // the expert settings of the pattern (D-252)
     auto* slider = child<juce::Slider>(*editor, "personal");
     REQUIRE(slider != nullptr);
     child<juce::ToggleButton>(*editor, "expert")->setToggleState(false, juce::dontSendNotification);
@@ -7633,6 +7665,7 @@ TEST_CASE("the hub rates the pattern of the slot with one click", "[group-wiring
     GrooveRig rig;
     std::unique_ptr<juce::AudioProcessorEditor> editor(rig.hub.processor.createEditor());
     pumpMessages(80);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern);
     auto* box = child<juce::ComboBox>(*editor, "rating");
     REQUIRE(box != nullptr);
     REQUIRE(waitFor([&] { return box->isVisible() && box->isEnabled(); }));
@@ -7661,4 +7694,106 @@ TEST_CASE("the hub rates the pattern of the slot with one click", "[group-wiring
     // an empty slot has nothing to rate
     rig.hub.setSlotParameter(2);
     CHECK(waitFor([&] { return !box->isEnabled(); }));
+}
+
+// --- The inspector and the dock of the redesigned hub window (D-252) -------------------------------------------------
+
+TEST_CASE("the inspector is closed by default, opens with its button and shows one page at a time", "[editor][inspector]") {
+    using Page = mm::plugin::PlaceholderEditor::InspectorPage;
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    REQUIRE(panel != nullptr);
+    pumpMessages(60);
+    CHECK_FALSE(panel->inspectorOpen());
+    for (const char* id : {"inspector_tab_0", "inspector_tab_1", "role", "zoom", "help", "preview", "evolve", "rating"}) {
+        INFO(id);
+        REQUIRE(find(*editor, id) != nullptr);
+        CHECK_FALSE(find(*editor, id)->isVisible());
+    }
+    for (const char* id : {"inspector", "dock_mode", "prompt", "generate", "add_voice"}) {
+        INFO(id);
+        REQUIRE(find(*editor, id) != nullptr);
+        CHECK(find(*editor, id)->isVisible());
+    }
+
+    dynamic_cast<juce::Button*>(find(*editor, "inspector"))->triggerClick();
+    REQUIRE(waitFor([&] { return panel->inspectorOpen(); }));
+    const std::vector<std::pair<Page, std::vector<const char*>>> pages = {
+        {Page::Instance, {"role", "zoom", "help", "references", "library", "expert"}},
+        {Page::Pattern, {"referenceSet", "rating"}},
+        {Page::Edit, {"preview", "drums_remove", "history_back"}},
+        {Page::Evolve, {"evolve", "evolve_back", "evolve_keep"}}};
+    for (const auto& [open, own] : pages) {
+        panel->setInspectorPage(open);
+        for (const auto& [other, ids] : pages) {
+            for (const char* id : ids) {
+                INFO(id << " on page " << static_cast<int>(open));
+                CHECK(find(*editor, id)->isVisible() == (other == open));
+            }
+        }
+    }
+    dynamic_cast<juce::Button*>(find(*editor, "inspector"))->triggerClick();
+    REQUIRE(waitFor([&] { return !panel->inspectorOpen(); }));
+    CHECK_FALSE(find(*editor, "help")->isVisible());
+}
+
+TEST_CASE("the dock writes a new pattern until it is switched to change the pattern of the slot", "[editor][inspector]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    REQUIRE(panel != nullptr);
+    pumpMessages(60);
+    auto* mode = dynamic_cast<juce::Button*>(find(*editor, "dock_mode"));
+    REQUIRE(mode != nullptr);
+    CHECK_FALSE(mode->isEnabled()); // nothing to change in an empty slot
+    CHECK(mode->getButtonText() == "Neu");
+    CHECK_FALSE(panel->refining());
+
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+    REQUIRE(waitFor([&] { return mode->isEnabled(); }));
+    CHECK(find(*editor, "prompt")->isVisible());
+    CHECK_FALSE(find(*editor, "refine_text")->isVisible());
+    mode->triggerClick();
+    REQUIRE(waitFor([&] { return panel->refining(); }));
+    CHECK(mode->getButtonText() == "Ändern");
+    CHECK(find(*editor, "refine_text")->isVisible());
+    CHECK(find(*editor, "refine_scope")->isVisible());
+    CHECK(find(*editor, "refine")->isVisible());
+    CHECK_FALSE(find(*editor, "prompt")->isVisible());
+    CHECK_FALSE(find(*editor, "generate")->isVisible());
+    CHECK_FALSE(find(*editor, "energy")->isVisible());
+    // an empty slot has nothing to change: the dock writes a new pattern there, and returns to Change with the slot
+    hub.processor.selectSlot(3);
+    REQUIRE(waitFor([&] { return !panel->refining(); }));
+    CHECK(find(*editor, "prompt")->isVisible());
+    CHECK_FALSE(find(*editor, "refine_text")->isVisible());
+    hub.processor.selectSlot(1);
+    REQUIRE(waitFor([&] { return panel->refining(); }));
+    mode->triggerClick();
+    REQUIRE(waitFor([&] { return !panel->refining(); }));
+    CHECK(find(*editor, "prompt")->isVisible());
+    CHECK(find(*editor, "generate")->isVisible());
+}
+
+TEST_CASE("a lane keeps its strip short, behind a menu for the rare actions", "[editor][inspector]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    pumpMessages(60);
+    for (const char* id : {"more_1", "more_2", "mute_1", "lock_1", "renew_1", "drag_1"}) {
+        INFO(id);
+        REQUIRE(find(*editor, id) != nullptr);
+        CHECK(find(*editor, id)->isVisible());
+    }
+    // what the menu holds is not a button of the lane any more
+    for (const char* id : {"vary_1", "duplicate_1", "focus_1"}) {
+        INFO(id);
+        REQUIRE(find(*editor, id) != nullptr);
+        CHECK_FALSE(find(*editor, id)->isVisible());
+    }
 }

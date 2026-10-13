@@ -4,6 +4,7 @@
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/UserGrooveStore.h"
 
 namespace mm::plugin {
@@ -143,7 +144,7 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
             onFocusClicked(voice_);
         }
     };
-    addAndMakeVisible(focusButton_);
+    addChildComponent(focusButton_); // reached through the menu of the lane (D-252)
 
     renewButton_.setComponentID("renew_" + juce::String(voice));
     renewButton_.setButtonText(tr(mm::core::text::kButtonRenew));
@@ -164,7 +165,7 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
             onVaryClicked(voice_);
         }
     };
-    addAndMakeVisible(varyButton_);
+    addChildComponent(varyButton_);
 
     // The groove of the voice: a template (SPEC 3.9, v1.1) and the swing control (off for a template with swing of its own)
     grooveBox_.setComponentID("groove_" + juce::String(voice));
@@ -229,7 +230,29 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
             onAction();
         }
     };
-    addAndMakeVisible(duplicateButton_);
+    addChildComponent(duplicateButton_);
+    moreButton_.setComponentID("more_" + juce::String(voice));
+    moreButton_.setButtonText("...");
+    moreButton_.onClick = [this] {
+        juce::PopupMenu menu;
+        menu.addItem(1, tr(mm::core::text::kButtonVary), varyButton_.isEnabled());
+        menu.addItem(2, tr(mm::core::text::kButtonDuplicate), duplicateButton_.isEnabled());
+        menu.addItem(3, tr(mm::core::text::kRollFocus), true, focusButton_.getToggleState());
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&moreButton_),
+                           [safe = juce::Component::SafePointer<VoiceRow>(this)](int result) {
+                               if (safe == nullptr) {
+                                   return;
+                               }
+                               if (result == 1) {
+                                   safe->varyButton_.triggerClick();
+                               } else if (result == 2) {
+                                   safe->duplicateButton_.triggerClick();
+                               } else if (result == 3) {
+                                   safe->focusButton_.triggerClick();
+                               }
+                           });
+    };
+    addAndMakeVisible(moreButton_);
     updateButtons();
 
     roll_.setComponentID("roll_" + juce::String(voice));
@@ -519,19 +542,17 @@ void VoiceRow::filesDropped(const juce::StringArray& files, int, int) {
 }
 
 void VoiceRow::resized() {
-    auto area = getLocalBounds().reduced(16, 4);
+    // A lane: the strip on the left (name, the three actions of every voice, the grip) and the roll; the rarer actions
+    // (Variation, Duplicate, Focus) are in the menu of the strip (D-252).
+    auto area = getLocalBounds().reduced(12, 2);
+    constexpr int kStripWidth = 180;
     if (collapsed_) {
-        // A strip: everything but the roll, side by side.
-        nameLabel_.setBounds(area.removeFromLeft(100));
-        muteButton_.setBounds(area.removeFromLeft(80));
-        lockButton_.setBounds(area.removeFromLeft(90));
-        focusButton_.setBounds(area.removeFromLeft(70));
-        renewButton_.setBounds(area.removeFromLeft(56).reduced(0, 2));
-        area.removeFromLeft(6);
-        varyButton_.setBounds(area.removeFromLeft(90).reduced(0, 2));
-        area.removeFromLeft(6);
-        duplicateButton_.setBounds(area.removeFromLeft(100).reduced(0, 2));
-        area.removeFromLeft(10);
+        auto strip = area.removeFromLeft(kStripWidth + 8 + 120);
+        nameLabel_.setBounds(strip.removeFromLeft(90));
+        muteButton_.setBounds(strip.removeFromLeft(64).reduced(0, 4));
+        lockButton_.setBounds(strip.removeFromLeft(74).reduced(0, 4));
+        renewButton_.setBounds(strip.removeFromLeft(44).reduced(2, 4));
+        moreButton_.setBounds(strip.removeFromLeft(32).reduced(2, 4));
         drag_.setBounds(area.removeFromLeft(60).withHeight(area.getHeight()));
         roll_.setBounds({});
         grooveBox_.setBounds({});
@@ -539,28 +560,32 @@ void VoiceRow::resized() {
         flamHint_.setBounds({});
         return;
     }
-    auto left = area.removeFromLeft(160);
-    nameLabel_.setBounds(left.removeFromTop(28));
-    // Two buttons side by side per line: Stumm | Sperren, Neu | Variation, Fokus | Duplizieren.
-    const auto pair = [&left](juce::Component& first, juce::Component& second) {
-        auto line = left.removeFromTop(28);
-        first.setBounds(line.removeFromLeft(line.getWidth() / 2).reduced(0, 1));
-        second.setBounds(line.reduced(2, 1));
-    };
-    pair(muteButton_, lockButton_);
-    pair(renewButton_, varyButton_);
-    pair(focusButton_, duplicateButton_);
+    auto left = area.removeFromLeft(kStripWidth).reduced(8, 6);
+    auto head = left.removeFromTop(26);
+    moreButton_.setBounds(head.removeFromRight(32));
+    nameLabel_.setBounds(head);
+    left.removeFromTop(4);
+    auto actions = left.removeFromTop(28);
+    const int third = actions.getWidth() / 3;
+    muteButton_.setBounds(actions.removeFromLeft(third));
+    lockButton_.setBounds(actions.removeFromLeft(third));
+    renewButton_.setBounds(actions);
     drag_.setBounds(left.removeFromBottom(40));
-    area.removeFromLeft(8);
     roll_.setBounds(area);
-    // The groove controls sit in the title strip of the roll, at its right end (the name stands at the left): the left
-    // column has no room for two more lines in a window with two voices.
+    // The groove controls sit in the title strip of the roll, at its right end (the name stands at the left).
     auto strip = area.removeFromTop(EditableRoll::kTitleHeight).reduced(4, 1);
     swingSlider_.setBounds(strip.removeFromRight(130));
     strip.removeFromRight(6);
     grooveBox_.setBounds(strip.removeFromRight(150));
     strip.removeFromRight(8);
     flamHint_.setBounds(strip.removeFromRight(210));
+}
+
+void VoiceRow::paint(juce::Graphics& g) {
+    // Flat: the strip is a tonal surface, the roll paints its own.
+    auto area = getLocalBounds().reduced(12, 2);
+    g.setColour(juce::Colour(MidiMaidLookAndFeel::kSurface));
+    g.fillRoundedRectangle(area.removeFromLeft(collapsed_ ? 180 + 8 + 120 : 180).toFloat(), 6.0f);
 }
 
 SlotButton::SlotButton(int slot) : slot_(slot) {}

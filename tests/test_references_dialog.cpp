@@ -1,5 +1,6 @@
 #include "core/MidiFile.h"
 #include "plugin/MidiMaidLookAndFeel.h"
+#include "plugin/PlaceholderEditor.h"
 #include "plugin/EmbeddedStyles.h"
 #include "plugin/ProcessorBase.h"
 #include "plugin/ReferencesDialog.h"
@@ -199,6 +200,8 @@ TEST_CASE("the editor of the hub has the button of the view", "[references-dialo
     juce::ScopedJuceInitialiser_GUI gui;
     InstrumentProcessor processor("Test");
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    dynamic_cast<PlaceholderEditor&>(*editor).setInspectorOpen(true); // the button is on the instance page (D-252)
+    dynamic_cast<PlaceholderEditor&>(*editor).setInspectorPage(PlaceholderEditor::InspectorPage::Instance);
     auto* button = dynamic_cast<juce::TextButton*>(findById(*editor, "references"));
     REQUIRE(button != nullptr);
     CHECK(button->getButtonText() == "Referenzen");

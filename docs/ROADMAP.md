@@ -244,6 +244,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Hub-UI umgebaut: Seitenleiste mit Abschnitten, Stimmen mit voller Höhe, ab drei Stimmen eine offene Roll (SPEC §8.1, D-249; Schritt 1 von 3 für bis zu 8 Stimmen)
 - [x] Stimmen-Rollen Stabs/Arp/Gegenmelodie, bis zu 8 Stimmen je Pattern, Stimmen-Leiste und „+ Stimme“ (SPEC §3.1a, §8.1, D-250; Schritt 2 von 3)
 - [x] Stilregeln für die neuen Rollen: eigene Archetypen-Listen je Stil für Stabs, Arp und Gegenmelodie (STYLES.md, D-251; Schritt 3 von 3)
+- [x] Hub-UI radikal neu: Kopfzeile, Spuren mit Streifen und „…“-Menü, Geisterspur, Dock Neu/Ändern, Inspektor mit vier Seiten, standardmäßig zu (SPEC §8.1, D-252; Befehlspalette Cmd-K und Voice-Fenster folgen)
 - [x] Geschmacks-Zusammenfassung im KI-Prompt, ohne Noten auch ohne Zustimmung (SPEC §3.20, §7.4, D-248)
 - [x] Trigger-Parameter Generieren/Variation (SPEC §3.13, D-218)
 - [ ] Session-Ansicht: Slot per Clip-Hüllkurve, Beispiele in der Live-Vorlage

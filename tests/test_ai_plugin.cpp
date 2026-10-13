@@ -650,7 +650,12 @@ TEST_CASE("the editor refines with its field, keeps the wish after a failure and
     REQUIRE(text != nullptr);
     REQUIRE(scope != nullptr);
     REQUIRE(button != nullptr);
-    CHECK(text->isVisible());
+    CHECK_FALSE(text->isVisible()); // the dock writes a new pattern until the user switches it to Change (D-252)
+    auto* mode = dynamic_cast<juce::TextButton*>(findById(*editor, "dock_mode"));
+    REQUIRE(mode != nullptr);
+    REQUIRE(pumpUntil([&] { return scope->getNumItems() > 1; })); // the slot is filled and shown
+    mode->triggerClick();
+    REQUIRE(pumpUntil([&] { return text->isVisible(); }));
     CHECK(scope->isVisible());
     CHECK(button->isVisible());
 
@@ -866,7 +871,10 @@ TEST_CASE("the status message uses the whole width, and only the room the shown 
     auto* retry = dynamic_cast<juce::TextButton*>(findById(*editor, "retry"));
     auto* settingsHelp = dynamic_cast<juce::TextButton*>(findById(*editor, "errorSettings"));
     REQUIRE((label != nullptr && retry != nullptr && settingsHelp != nullptr));
-    const int full = editor->getWidth() - 32;
+    auto* info = findById(*editor, "info");
+    REQUIRE(info != nullptr);
+    // the row holds the message and the info of the slot, and the grip of the size corner at the end
+    const int full = editor->getWidth() - 24 - 16 - info->getWidth();
     CHECK(label->getWidth() == full); // no error: nothing beside it
 
     auto provider = mock();
