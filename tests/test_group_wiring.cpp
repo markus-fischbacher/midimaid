@@ -2211,6 +2211,86 @@ TEST_CASE("from three voices on one roll is open and the others are strips (D-24
     CHECK(editor->getLocalBounds().contains(first->getScreenBounds().translated(-editor->getScreenX(), -editor->getScreenY())));
 }
 
+TEST_CASE("the voice bar shows the voices as dots, jumps to one and adds or removes the last (D-250)",
+          "[editor][voices]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    auto* hubEditor = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    REQUIRE(hubEditor != nullptr);
+    auto* bar = child<mm::plugin::VoiceBar>(*editor, "voice_bar");
+    auto* add = child<juce::TextButton>(*editor, "add_voice");
+    auto* remove = child<juce::TextButton>(*editor, "remove_voice");
+    REQUIRE((bar != nullptr && add != nullptr && remove != nullptr));
+    CHECK(bar->isVisible());
+
+    // an empty slot shows bass and melody, and the voices the next pattern will get
+    REQUIRE(waitFor([&] { return bar->voices().size() == 2; }));
+    CHECK(add->isEnabled());
+    CHECK_FALSE(remove->isEnabled()); // bass and melody stay
+    REQUIRE(solo.processor.addVoice(mm::core::VoiceRole::Stabs)); // the slot is empty: only remembered
+    REQUIRE(waitFor([&] { return bar->voices().size() == 3; }));
+    CHECK(bar->voices()[2] == mm::core::VoiceRole::Stabs);
+    CHECK(find(*editor, "roll_3") != nullptr);
+    CHECK(remove->isEnabled());
+
+    // a pattern with five voices: five filled dots, three empty ones
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+    REQUIRE(solo.processor.addVoice(mm::core::VoiceRole::Arp));
+    REQUIRE(solo.processor.addVoice(mm::core::VoiceRole::Counter));
+    REQUIRE(solo.processor.addVoice(mm::core::VoiceRole::Stabs));
+    REQUIRE(waitFor([&] { return bar->voices().size() == 5; }));
+    CHECK(bar->voices()[3] == mm::core::VoiceRole::Counter);
+    CHECK(bar->dotAt(bar->dotBounds(4).getCentreX()) == 4);
+    CHECK(bar->dotAt(bar->dotBounds(7).getCentreX()) == 7);
+    CHECK(bar->dotAt(-5) == -1);
+
+    // a click on a filled dot focuses that voice; a click on an empty one asks for the menu (no menu in a test)
+    bool asked = false;
+    bar->onAdd = [&] { asked = true; };
+    const auto click = [&](size_t dot) {
+        const auto centre = bar->dotBounds(dot).getCentre();
+        const juce::MouseEvent up(juce::Desktop::getInstance().getMainMouseSource(), centre.toFloat(), {}, 0.0f, 0.0f, 0.0f,
+                                  0.0f, 0.0f, bar, bar, juce::Time::getCurrentTime(), centre.toFloat(),
+                                  juce::Time::getCurrentTime(), 1, false);
+        bar->mouseUp(up);
+    };
+    click(3);
+    CHECK(hubEditor->focusedVoice() == 4); // the real handler: the voice has the whole height
+    CHECK_FALSE(asked);
+    click(6);
+    CHECK(asked);
+    CHECK(hubEditor->focusedVoice() == 4);
+
+    // the buttons: remove takes the last voice, at eight voices nothing can be added
+    remove->onClick();
+    REQUIRE(waitFor([&] { return bar->voices().size() == 4; }));
+    while (solo.processor.slotsSnapshot().slot(0)->pattern->voices.size() < static_cast<size_t>(mm::core::kMaxVoices)) {
+        REQUIRE(solo.processor.addVoice(mm::core::VoiceRole::Arp));
+    }
+    REQUIRE(waitFor([&] { return bar->voices().size() == static_cast<size_t>(mm::core::kMaxVoices); }));
+    CHECK_FALSE(add->isEnabled());
+    CHECK(child<juce::Label>(*editor, "status") != nullptr);
+}
+
+TEST_CASE("the rows carry the names of the roles of their voices (D-250)", "[editor][voices]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 42))); });
+    REQUIRE(solo.processor.addVoice(mm::core::VoiceRole::Counter));
+    REQUIRE(waitFor([&] { return find(*editor, "roll_3") != nullptr; }));
+    const auto views = solo.processor.playingVoices();
+    REQUIRE(views.size() == 3);
+    CHECK(views[0].displayName == "Bass");
+    CHECK(views[1].displayName == "Melodie");
+    CHECK(views[2].displayName == "Gegenmelodie");
+    CHECK(views[2].role == mm::core::VoiceRole::Counter);
+    CHECK(views[2].melody);
+    CHECK(mm::plugin::roleColour(mm::core::VoiceRole::Bass) != mm::plugin::roleColour(mm::core::VoiceRole::Melody));
+    CHECK(mm::plugin::roleColour(mm::core::VoiceRole::Stabs) != mm::plugin::roleColour(mm::core::VoiceRole::Arp));
+}
+
 TEST_CASE("a resize is cancelled when somebody else changes the length under it", "[roll][editor]") {
     RollRig rig;
     const auto edge = rig.roll.geometry().tickToX(960 + 480) - 1.0;

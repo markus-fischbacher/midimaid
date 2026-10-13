@@ -571,6 +571,40 @@ const Archetype* findArchetype(std::string_view id) {
     return nullptr;
 }
 
+bool archetypeFitsRole(const Archetype& archetype, VoiceRole role) {
+    return isBassRole(role) ? archetype.role == VoiceRole::Bass : archetype.role == VoiceRole::Melody;
+}
+
+namespace {
+
+/// The archetypes a role draws from by itself (D-250); a musician may still choose any other melodic one by hand.
+/// `Melody` takes every melodic archetype, as before.
+constexpr std::array<std::string_view, 2> kStabsFamily{"stabs", "aggro_stabs"};
+constexpr std::array<std::string_view, 3> kArpFamily{"arp", "chord_arp", "pluck_seq"};
+constexpr std::array<std::string_view, 4> kCounterFamily{"call_response", "sparse_hits", "lead_phrase",
+                                                         "hypnotic_motif"};
+
+template <size_t N> bool inFamily(const std::array<std::string_view, N>& family, std::string_view id) {
+    return std::find(family.begin(), family.end(), id) != family.end();
+}
+
+bool inRoleFamily(VoiceRole role, std::string_view id) {
+    switch (role) {
+    case VoiceRole::Stabs:
+        return inFamily(kStabsFamily, id);
+    case VoiceRole::Arp:
+        return inFamily(kArpFamily, id);
+    case VoiceRole::Counter:
+        return inFamily(kCounterFamily, id);
+    case VoiceRole::Bass:
+    case VoiceRole::Melody:
+        return true;
+    }
+    return true;
+}
+
+} // namespace
+
 std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energyPct, Pcg32& rng, int creativityPct) {
     const int energy = std::clamp(energyPct, 0, 100);
     const std::vector<WeightedId>& entries = role == VoiceRole::Bass ? style.bass.archetypes : style.melody.archetypes;
@@ -579,7 +613,8 @@ std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energ
     const int range = archetypeScatterRange(creativityPct);
     for (const WeightedId& entry : entries) {
         const Archetype* archetype = findArchetype(entry.id);
-        if (archetype == nullptr || archetype->role != role || entry.weight <= 0) {
+        if (archetype == nullptr || !archetypeFitsRole(*archetype, role) || !inRoleFamily(role, entry.id) ||
+            entry.weight <= 0) {
             continue;
         }
         const int factor = archetypeDensityFactor(archetype->density == ArchetypeDensity::Dense,
@@ -587,6 +622,15 @@ std::string chooseArchetype(const StyleProfile& style, VoiceRole role, int energ
         ids.push_back(entry.id);
         weights.push_back(static_cast<uint32_t>(entry.weight) * static_cast<uint32_t>(factor) *
                           static_cast<uint32_t>(archetypeScatterFactor(range, rng)));
+    }
+    if (ids.empty() && role != VoiceRole::Bass && role != VoiceRole::Melody) {
+        // the style names none of this role's archetypes: they all count the same (D-250)
+        for (const Archetype& archetype : allArchetypes()) {
+            if (inRoleFamily(role, archetype.id)) {
+                ids.emplace_back(archetype.id);
+                weights.push_back(1);
+            }
+        }
     }
     const size_t index = rng.weightedIndex(weights);
     return index < ids.size() ? ids[index] : std::string();
@@ -596,7 +640,7 @@ std::string resolveArchetype(const Track& track, const StyleProfile& style, int 
                              int creativityPct) {
     if (!track.archetypeAuto) {
         const Archetype* manual = findArchetype(track.archetypeId);
-        if (manual != nullptr && manual->role == track.role) {
+        if (manual != nullptr && archetypeFitsRole(*manual, track.role)) {
             return track.archetypeId;
         }
     }
@@ -607,7 +651,7 @@ bool generateVoice(Pattern& pattern, size_t voiceIndex, std::string_view archety
                    const ArchetypeSettings& settings, Pcg32& rng) {
     const Archetype* archetype = findArchetype(archetypeId);
     if (archetype == nullptr || voiceIndex >= pattern.voices.size() ||
-        archetype->role != pattern.voices[voiceIndex].role) {
+        !archetypeFitsRole(*archetype, pattern.voices[voiceIndex].role)) {
         return false;
     }
     Track& track = pattern.voices[voiceIndex];

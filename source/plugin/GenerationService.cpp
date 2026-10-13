@@ -39,6 +39,10 @@ mm::core::GenerationRequest requestFor(const GenerationJob& job, const std::atom
     if (job.references.profile.valid) {
         request.profile = job.references.profile;
     }
+    if (!job.settings.extraVoices.empty()) { // bass and melody first, then the extra roles (D-250)
+        request.voices = {mm::core::VoiceRole::Bass, mm::core::VoiceRole::Melody};
+        request.voices.insert(request.voices.end(), job.settings.extraVoices.begin(), job.settings.extraVoices.end());
+    }
     request.root = job.settings.root;
     request.scaleId = job.settings.scaleId;
     request.referenceSet = job.references.entries;
@@ -194,6 +198,19 @@ void GenerationService::request(const GenerationJob& job) {
                                                           result.inputTokens, result.outputTokens);
                 if (result.outcome == mm::ai::AiOutcome::Success && !cancel.cancelled()) {
                     pattern = std::move(result.pattern);
+                    if (!job.refine) { // the AI writes bass and melody; the other voices come from the generator (D-250)
+                        std::vector<mm::core::VoiceRole> extras = job.settings.extraVoices;
+                        if (job.lockedFrom && job.lockedFrom->voices.size() > 2) {
+                            extras.clear();
+                            for (size_t i = 2; i < job.lockedFrom->voices.size(); ++i) {
+                                extras.push_back(job.lockedFrom->voices[i].role);
+                            }
+                        }
+                        const auto request = requestFor(job, cancel.flag());
+                        for (size_t i = 0; i < extras.size(); ++i) {
+                            mm::core::addVoice(*pattern, extras[i], effective, request, job.seed + i + 1);
+                        }
+                    }
                     if (job.settings.chromaticPct) { // the pattern remembers it: variations keep to the same share
                         pattern->info.chromaticPct = static_cast<int16_t>(*job.settings.chromaticPct);
                     }

@@ -19,7 +19,11 @@ using detail::Reader;
 // ---------------------------------------------------------------------------------------------------------------
 // Enum tables (strings keep the format stable and readable)
 
-constexpr std::array<EnumName<VoiceRole>, 2> kVoiceRoles{{{VoiceRole::Bass, "bass"}, {VoiceRole::Melody, "melody"}}};
+constexpr std::array<EnumName<VoiceRole>, 5> kVoiceRoles{{{VoiceRole::Bass, "bass"},
+                                                          {VoiceRole::Melody, "melody"},
+                                                          {VoiceRole::Stabs, "stabs"},
+                                                          {VoiceRole::Arp, "arp"},
+                                                          {VoiceRole::Counter, "counter"}}};
 constexpr std::array<EnumName<PhraseRole>, 5> kPhraseRoles{{{PhraseRole::Main, "main"},
                                                             {PhraseRole::Variation, "variation"},
                                                             {PhraseRole::Build, "build"},

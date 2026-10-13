@@ -10,6 +10,34 @@
 
 namespace mm::plugin {
 
+/// The accent colour of a voice role (D-250): the bass is teal, the melodic roles have colours of their own.
+juce::Colour roleColour(mm::core::VoiceRole role);
+
+/// The strip of the eight voices above the rows (D-250): one dot per voice, filled where the pattern has a voice, in the
+/// colour of its role, the focused voice ringed. A click on a filled dot jumps to the voice; a click on an empty one asks
+/// the editor for the menu of roles to add.
+class VoiceBar : public juce::Component {
+public:
+    /// The roles of the voices of the pattern (at most `kMaxVoices`) and the focused voice (1-based, 0 for none).
+    void setVoices(std::vector<mm::core::VoiceRole> roles, int focused);
+    const std::vector<mm::core::VoiceRole>& voices() const { return roles_; }
+    /// Called with the 0-based voice when a filled dot is clicked.
+    std::function<void(size_t)> onJump;
+    /// Called when an empty dot is clicked.
+    std::function<void()> onAdd;
+
+    /// The dot at `x` (0-based), -1 for none.
+    int dotAt(int x) const;
+    juce::Rectangle<int> dotBounds(size_t index) const;
+
+    void paint(juce::Graphics& g) override;
+    void mouseUp(const juce::MouseEvent& event) override;
+
+private:
+    std::vector<mm::core::VoiceRole> roles_;
+    int focused_ = 0;
+};
+
 /// Grip area: dragging it starts an external drag of an exported file (no text, icon only). `voice` 0 drags the file of
 /// the output voice, 1 to `kMaxVoices` the file of that voice.
 class DragHandle : public juce::Component {

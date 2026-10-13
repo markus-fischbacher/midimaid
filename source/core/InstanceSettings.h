@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace mm::core {
 
@@ -39,12 +40,18 @@ struct GenerationSettings {
     std::optional<int> chromaticPct{}; ///< 0 to 100: the chromatic share of SPEC 3.8; none: the style's
     HatMode hatMode = HatMode::Free;   ///< melody rhythm relative to the hats of a drum reference (SPEC 3.14, D-228)
     int personalPct = 50;              ///< 0 to 100: how strongly the reference set acts (SPEC 3.20, v1.1, D-241)
+    std::vector<VoiceRole> extraVoices{}; ///< roles of the voices 3 and up that a new pattern gets (D-250); none: bass + melody
 
     bool operator==(const GenerationSettings&) const = default;
 };
 
 /// Brings every field into its valid range: an invalid length becomes 4 bars, percentages are clamped.
 GenerationSettings sanitize(GenerationSettings settings);
+
+/// The roles of the extra voices as text ("stabs,arp"), and back: unknown names are skipped, at most
+/// `kMaxVoices - 2` roles are kept (D-250).
+std::string formatVoiceRoles(const std::vector<VoiceRole>& roles);
+std::vector<VoiceRole> parseVoiceRoles(std::string_view text);
 
 /// Where a pattern switch may happen (SPEC 3.4, v1.1, D-247). `Beat` and everything off a bar line continue the position.
 enum class SwitchQuantize { Bar, Beat, Bars2, Bars4, Bars8, Bars16 };

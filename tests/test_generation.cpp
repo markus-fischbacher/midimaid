@@ -293,6 +293,50 @@ TEST_CASE("the generation settings are saved, and invalid ones are made valid on
     CHECK(loaded.styleId == "melodic_techno");
 }
 
+TEST_CASE("generate gives the extra voices of the settings, and the state keeps them", "[generation][voices]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    auto settings = processor.instanceSettings();
+    settings.generation.extraVoices = {mm::core::VoiceRole::Stabs, mm::core::VoiceRole::Counter};
+    processor.setInstanceSettings(settings);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return processor.generationStatus() != mm::plugin::GenerationStatus::Generating; }));
+    REQUIRE(processor.generationStatus() == mm::plugin::GenerationStatus::Done);
+    const auto bank = processor.slotsSnapshot();
+    REQUIRE(bank.slot(0)->pattern.has_value());
+    const auto& voices = bank.slot(0)->pattern->voices;
+    REQUIRE(voices.size() == 4);
+    CHECK(voices[0].role == mm::core::VoiceRole::Bass);
+    CHECK(voices[1].role == mm::core::VoiceRole::Melody);
+    CHECK(voices[2].role == mm::core::VoiceRole::Stabs);
+    CHECK(voices[3].role == mm::core::VoiceRole::Counter);
+    for (const auto& voice : voices) {
+        CHECK_FALSE(voice.notes.empty());
+    }
+
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    mm::plugin::InstrumentProcessor target("Test");
+    target.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    CHECK(target.instanceSettings().generation.extraVoices == settings.generation.extraVoices);
+
+    // a state of an older version has none, and an invalid text is skipped
+    auto root = juce::AudioProcessor::getXmlFromBinary(saved.getData(), static_cast<int>(saved.getSize()));
+    REQUIRE(root != nullptr);
+    root->setAttribute("genExtraVoices", "arp,drums");
+    juce::MemoryBlock odd;
+    juce::AudioProcessor::copyXmlToBinary(*root, odd);
+    mm::plugin::InstrumentProcessor other("Test");
+    other.setStateInformation(odd.getData(), static_cast<int>(odd.getSize()));
+    CHECK(other.instanceSettings().generation.extraVoices == std::vector<mm::core::VoiceRole>{mm::core::VoiceRole::Arp});
+    mm::plugin::InstrumentProcessor plain("Test");
+    juce::MemoryBlock plainState;
+    plain.getStateInformation(plainState);
+    auto plainRoot = juce::AudioProcessor::getXmlFromBinary(plainState.getData(), static_cast<int>(plainState.getSize()));
+    REQUIRE(plainRoot != nullptr);
+    CHECK_FALSE(plainRoot->hasAttribute("genExtraVoices")); // older states stay as they were
+}
+
 TEST_CASE("a state without generation settings loads the defaults", "[generation]") {
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor source("Test");

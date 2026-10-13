@@ -387,5 +387,16 @@
   "settings.language.auto": "Automatisch (Systemsprache)",
   "settings.language.de": "Deutsch",
   "settings.language.en": "English",
-  "settings.languageHint": "Gilt für Fenster, die du ab jetzt öffnest; öffne das Plug-in-Fenster neu"
+  "settings.languageHint": "Gilt für Fenster, die du ab jetzt öffnest; öffne das Plug-in-Fenster neu",
+  "voice.stabs": "Stabs",
+  "voice.arp": "Arpeggio",
+  "voice.counter": "Gegenmelodie",
+  "button.addVoice": "+ Stimme",
+  "button.removeVoice": "– Stimme",
+  "voicebar.empty": "leer – Rolle wählen",
+  "status.voiceAdded": "Stimme hinzugefügt, spielt ab dem nächsten Takt",
+  "status.voiceRemoved": "Letzte Stimme entfernt",
+  "status.voiceLimit": "Es gibt schon 8 Stimmen",
+  "status.voiceNoRemove": "Bass und Melodie bleiben: keine weitere Stimme zu entfernen",
+  "status.voiceRemoveLocked": "Die letzte Stimme ist gesperrt: nicht entfernt"
 }

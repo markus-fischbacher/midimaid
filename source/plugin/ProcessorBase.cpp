@@ -1664,6 +1664,147 @@ bool ProcessorBase::renewVoice(size_t voice, std::optional<uint64_t> seed, std::
     return done;
 }
 
+namespace {
+
+/// The roles of the voices 3 and up: what the settings keep as `extraVoices`.
+std::vector<mm::core::VoiceRole> extraRolesOf(const mm::core::Pattern& pattern) {
+    std::vector<mm::core::VoiceRole> roles;
+    for (size_t i = 2; i < pattern.voices.size(); ++i) {
+        roles.push_back(pattern.voices[i].role);
+    }
+    return roles;
+}
+
+} // namespace
+
+bool ProcessorBase::addVoice(mm::core::VoiceRole role, std::optional<size_t> slotChoice) {
+    mm::core::GenerationRequest request;
+    bool isVoice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+        request.settings.energyPct = settings_.generation.energyPct;
+        request.settings.creativityPct = settings_.generation.creativityPct;
+        request.settings.chromaticPct = settings_.generation.chromaticPct.value_or(-1);
+        request.settings.personalPct = settings_.generation.personalPct;
+    }
+    if (isVoice) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    const size_t slotIndex =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    evolveCommitBefore(slotIndex);
+    const uint64_t useSeed = static_cast<uint64_t>(juce::Random::getSystemRandom().nextInt64());
+    bool done = false;
+    bool full = false;
+    bool emptySlot = true;
+    std::vector<mm::core::VoiceRole> extras;
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto* slot = bank.slot(slotIndex);
+        if (slot == nullptr || !slot->pattern) {
+            return;
+        }
+        emptySlot = false;
+        const mm::core::Pattern& current = *slot->pattern;
+        if (current.voices.size() >= static_cast<size_t>(mm::core::kMaxVoices)) {
+            full = true;
+            return;
+        }
+        const auto* style = styles_.findOrFallback(current.styleId);
+        if (style == nullptr) {
+            return;
+        }
+        mm::core::Pattern added = current;
+        if (!mm::core::addVoice(added, role, *style, request, useSeed)) {
+            return;
+        }
+        added.info.source = "algorithm";
+        std::optional<mm::core::Pattern> before = current;
+        const size_t cursor = slot->cursor;
+        extras = extraRolesOf(added);
+        if (bank.setResult(slotIndex, std::move(added))) {
+            undo_.recordResult(slotIndex, std::move(before), cursor, *bank.slot(slotIndex)->pattern);
+            done = true;
+        }
+    });
+    if (emptySlot) {
+        const juce::ScopedLock lock(slotsLock_);
+        auto& list = settings_.generation.extraVoices;
+        if (list.size() < static_cast<size_t>(mm::core::kMaxVoices - 2)) {
+            list.push_back(role);
+            done = true;
+        } else {
+            full = true;
+        }
+    } else if (done) {
+        const juce::ScopedLock lock(slotsLock_);
+        settings_.generation.extraVoices = std::move(extras);
+    }
+    generationStatus_ = done ? GenerationStatus::VoiceAdded : full ? GenerationStatus::VoiceLimit : GenerationStatus::NoResult;
+    return done;
+}
+
+bool ProcessorBase::removeLastVoice(std::optional<size_t> slotChoice) {
+    bool isVoice;
+    {
+        const juce::ScopedLock lock(slotsLock_);
+        isVoice = settings_.role == mm::core::InstanceRole::Voice;
+    }
+    if (isVoice) {
+        generationStatus_ = GenerationStatus::UseHub;
+        return false;
+    }
+    const size_t slotIndex =
+        slotChoice ? *slotChoice
+                   : static_cast<size_t>(std::clamp(activeSlot(), 1, static_cast<int>(mm::core::kSlotCount)) - 1);
+    evolveCommitBefore(slotIndex);
+    bool done = false;
+    bool locked = false;
+    bool emptySlot = true;
+    std::vector<mm::core::VoiceRole> extras;
+    editSlots([&](mm::core::SlotBank& bank) {
+        const auto* slot = bank.slot(slotIndex);
+        if (slot == nullptr || !slot->pattern) {
+            return;
+        }
+        emptySlot = false;
+        const mm::core::Pattern& current = *slot->pattern;
+        if (current.voices.size() <= 2) {
+            return;
+        }
+        if (mm::core::isVoiceLocked(current.voices.back())) {
+            locked = true;
+            return;
+        }
+        mm::core::Pattern shorter = current;
+        shorter.voices.pop_back();
+        std::optional<mm::core::Pattern> before = current;
+        const size_t cursor = slot->cursor;
+        extras = extraRolesOf(shorter);
+        if (bank.setResult(slotIndex, std::move(shorter))) {
+            undo_.recordResult(slotIndex, std::move(before), cursor, *bank.slot(slotIndex)->pattern);
+            done = true;
+        }
+    });
+    if (emptySlot) {
+        const juce::ScopedLock lock(slotsLock_);
+        auto& list = settings_.generation.extraVoices;
+        if (!list.empty()) {
+            list.pop_back();
+            done = true;
+        }
+    } else if (done) {
+        const juce::ScopedLock lock(slotsLock_);
+        settings_.generation.extraVoices = std::move(extras);
+    }
+    generationStatus_ = done     ? GenerationStatus::VoiceRemoved
+                        : locked ? GenerationStatus::VoiceRemoveLocked
+                                 : GenerationStatus::VoiceNoRemove;
+    return done;
+}
+
 bool ProcessorBase::historyBack(std::optional<size_t> slot) {
     return browseHistory(true, slot);
 }
@@ -2294,7 +2435,18 @@ juce::String voiceDisplayName(const mm::core::Pattern& pattern, size_t voiceInde
             std::none_of(pattern.voices.begin(), pattern.voices.begin() + static_cast<std::ptrdiff_t>(voiceIndex),
                          [role](const mm::core::Track& track) { return track.role == role; });
         if (firstOfRole) {
-            return role == mm::core::VoiceRole::Melody ? "Melody" : "Bass";
+            switch (role) {
+            case mm::core::VoiceRole::Bass:
+                return "Bass";
+            case mm::core::VoiceRole::Melody:
+                return "Melody";
+            case mm::core::VoiceRole::Stabs:
+                return "Stabs";
+            case mm::core::VoiceRole::Arp:
+                return "Arp";
+            case mm::core::VoiceRole::Counter:
+                return "Counter";
+            }
         }
     }
     return "Voice " + juce::String(static_cast<int>(voiceIndex) + 1);
@@ -2370,7 +2522,8 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
     view.lengthTicks = rendered.lengthTicks;
     view.seed = rendered.seed;
     view.voiceName = voiceDisplayName(pattern, voiceIndex);
-    view.melody = view.voiceName == "Melody";
+    view.role = voiceIndex < pattern.voices.size() ? pattern.voices[voiceIndex].role : mm::core::VoiceRole::Bass;
+    view.melody = mm::core::isMelodicRole(view.role) && !view.voiceName.startsWith("Voice");
     view.locked = voiceIndex < pattern.voices.size() && mm::core::isVoiceLocked(pattern.voices[voiceIndex]);
     view.phraseStarts.clear();
     for (size_t i = 1; i < pattern.phrases.size(); ++i) {
@@ -2401,10 +2554,9 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
                  note.lock, note.chance, note.condA, note.condB});
         }
     }
-    view.displayName = view.melody ? tr(mm::core::text::kVoiceMelody)
-                       : view.voiceName == "Bass"
-                           ? tr(mm::core::text::kVoiceBass)
-                           : tr(mm::core::text::kVoiceN, {{"n", std::to_string(voiceIndex + 1)}});
+    view.displayName = view.voiceName.startsWith("Voice")
+                           ? tr(mm::core::text::kVoiceN, {{"n", std::to_string(voiceIndex + 1)}})
+                           : tr(mm::core::text::roleTextKey(view.role));
 }
 
 std::array<bool, mm::core::kSlotCount> ProcessorBase::slotUsage() const {
@@ -2606,6 +2758,10 @@ void ProcessorBase::getStateInformation(juce::MemoryBlock& destData) {
         if (settings_.generation.personalPct != 50) { // only when changed: older states stay as they were
             root.setAttribute("genPersonal", settings_.generation.personalPct);
         }
+        if (!settings_.generation.extraVoices.empty()) { // only when there are some: older states stay as they were
+            root.setAttribute("genExtraVoices",
+                              juce::String(mm::core::formatVoiceRoles(settings_.generation.extraVoices)));
+        }
         if (settings_.generation.hatMode != mm::core::HatMode::Free) { // only when chosen: older states stay as they were
             root.setAttribute("genHatMode", juce::String(std::string(mm::core::toString(settings_.generation.hatMode))));
         }
@@ -2686,6 +2842,7 @@ void ProcessorBase::setStateInformation(const void* data, int sizeInBytes) {
     }
     settings.generation.personalPct = root->getIntAttribute("genPersonal", defaults.personalPct);
     settings.generation.hatMode = mm::core::parseHatMode(root->getStringAttribute("genHatMode").toStdString());
+    settings.generation.extraVoices = mm::core::parseVoiceRoles(root->getStringAttribute("genExtraVoices").toStdString());
     // A state without key and scale comes from before they were settings: it keeps drawing them (D-149).
     settings.generation.root.reset();
     settings.generation.scaleId.reset();

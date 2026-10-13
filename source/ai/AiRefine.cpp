@@ -17,7 +17,7 @@ namespace {
 using namespace mm::core;
 
 const char* roleName(VoiceRole role) {
-    return role == VoiceRole::Bass ? "bass" : "melody";
+    return toString(role);
 }
 
 /// Everything the schema can say about a note; the rest (ticks off the grid, v1.1 fields, locks) comes from the

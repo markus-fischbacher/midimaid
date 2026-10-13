@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Pattern.h"
+
 #include <array>
 #include <string>
 #include <string_view>
@@ -15,6 +17,17 @@ namespace mm::core::text {
     X(kVoiceN, "voice.n")                                                                                              \
     X(kVoiceBass, "voice.bass")                                                                                        \
     X(kVoiceMelody, "voice.melody")                                                                                    \
+    X(kVoiceStabs, "voice.stabs")                                                                                      \
+    X(kVoiceArp, "voice.arp")                                                                                          \
+    X(kVoiceCounter, "voice.counter")                                                                                  \
+    X(kButtonAddVoice, "button.addVoice")                                                                              \
+    X(kButtonRemoveVoice, "button.removeVoice")                                                                        \
+    X(kVoiceBarEmpty, "voicebar.empty")                                                                                \
+    X(kStatusVoiceAdded, "status.voiceAdded")                                                                          \
+    X(kStatusVoiceRemoved, "status.voiceRemoved")                                                                      \
+    X(kStatusVoiceLimit, "status.voiceLimit")                                                                          \
+    X(kStatusVoiceNoRemove, "status.voiceNoRemove")                                                                    \
+    X(kStatusVoiceRemoveLocked, "status.voiceRemoveLocked")                                                            \
     X(kFollowHub, "follow.hub")                                                                                        \
     X(kFollowOwn, "follow.own")                                                                                        \
     X(kOutputVoice, "output.voice")                                                                                    \
@@ -402,6 +415,23 @@ inline constexpr auto kAllKeys = std::to_array<std::string_view>({
     MM_TEXT_KEYS(MM_TEXT_KEY_ENTRY)
 #undef MM_TEXT_KEY_ENTRY
 });
+
+/// The key of the name of a voice role ("voice.stabs"): the row names and the menus of the hub.
+inline std::string_view roleTextKey(VoiceRole role) {
+    switch (role) {
+    case VoiceRole::Bass:
+        return kVoiceBass;
+    case VoiceRole::Melody:
+        return kVoiceMelody;
+    case VoiceRole::Stabs:
+        return kVoiceStabs;
+    case VoiceRole::Arp:
+        return kVoiceArp;
+    case VoiceRole::Counter:
+        return kVoiceCounter;
+    }
+    return kVoiceMelody;
+}
 
 /// The key of the name of a scale ("scale.natural_minor"); every id of `allScales()` has one.
 inline std::string scaleKey(std::string_view scaleId) {

@@ -238,11 +238,96 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     addAndMakeVisible(drag_);
 }
 
+juce::Colour roleColour(mm::core::VoiceRole role) {
+    switch (role) {
+    case mm::core::VoiceRole::Bass:
+        return juce::Colour(0xff4fc3a1);
+    case mm::core::VoiceRole::Melody:
+        return juce::Colour(0xffe0a458);
+    case mm::core::VoiceRole::Stabs:
+        return juce::Colour(0xffe07a7a);
+    case mm::core::VoiceRole::Arp:
+        return juce::Colour(0xff7a9be0);
+    case mm::core::VoiceRole::Counter:
+        return juce::Colour(0xffb78ae0);
+    }
+    return juce::Colour(0xffe0a458);
+}
+
+namespace {
+constexpr int kDotSize = 22;
+constexpr int kDotGap = 8;
+} // namespace
+
+void VoiceBar::setVoices(std::vector<mm::core::VoiceRole> roles, int focused) {
+    if (roles == roles_ && focused == focused_) {
+        return;
+    }
+    roles_ = std::move(roles);
+    focused_ = focused;
+    repaint();
+}
+
+juce::Rectangle<int> VoiceBar::dotBounds(size_t index) const {
+    return {static_cast<int>(index) * (kDotSize + kDotGap), (getHeight() - kDotSize) / 2, kDotSize, kDotSize};
+}
+
+int VoiceBar::dotAt(int x) const {
+    for (int i = 0; i < mm::core::kMaxVoices; ++i) {
+        const auto bounds = dotBounds(static_cast<size_t>(i));
+        if (x >= bounds.getX() - kDotGap / 2 && x < bounds.getRight() + kDotGap / 2) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void VoiceBar::paint(juce::Graphics& g) {
+    g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+    for (size_t i = 0; i < static_cast<size_t>(mm::core::kMaxVoices); ++i) {
+        const auto bounds = dotBounds(i).toFloat();
+        const bool filled = i < roles_.size();
+        if (filled) {
+            g.setColour(roleColour(roles_[i]));
+            g.fillEllipse(bounds);
+            g.setColour(juce::Colours::black);
+        } else {
+            g.setColour(juce::Colours::white.withAlpha(0.25f));
+            g.drawEllipse(bounds.reduced(1.0f), 1.0f);
+            g.setColour(juce::Colours::white.withAlpha(0.35f));
+        }
+        g.drawText(juce::String(static_cast<int>(i) + 1), bounds.toNearestInt(), juce::Justification::centred);
+        if (filled && focused_ == static_cast<int>(i) + 1) {
+            g.setColour(juce::Colours::white);
+            g.drawEllipse(bounds.expanded(3.0f), 2.0f);
+        }
+    }
+}
+
+void VoiceBar::mouseUp(const juce::MouseEvent& event) {
+    if (!getLocalBounds().contains(event.getPosition()) || event.mouseWasDraggedSinceMouseDown()) {
+        return;
+    }
+    const int dot = dotAt(event.x);
+    if (dot < 0) {
+        return;
+    }
+    if (static_cast<size_t>(dot) < roles_.size()) {
+        if (onJump) {
+            onJump(static_cast<size_t>(dot));
+        }
+    } else if (onAdd) {
+        onAdd();
+    }
+}
+
 void VoiceRow::setView(const ProcessorBase::VoiceView* view, const juce::String& fallbackName, bool fallbackMelody) {
     const auto name = view != nullptr && view->displayName.isNotEmpty() ? view->displayName : fallbackName;
     nameLabel_.setText(name, juce::dontSendNotification);
     const bool melody = view != nullptr ? view->melody : fallbackMelody;
-    roll_.setAccent(melody ? juce::Colour(0xffe0a458) : juce::Colour(0xff4fc3a1));
+    roll_.setAccent(view != nullptr && view->hasPattern ? roleColour(view->role)
+                    : melody                           ? roleColour(mm::core::VoiceRole::Melody)
+                                                       : roleColour(mm::core::VoiceRole::Bass));
     if (view == nullptr || !view->hasPattern) {
         roll_.setContent(mm::core::layoutRoll({}, mm::core::kTicksPerQuarter * 4), {}, true);
     } else {

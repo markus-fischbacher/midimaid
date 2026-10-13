@@ -43,6 +43,32 @@ Pattern makeEmptyPattern(uint32_t lengthBars, std::string styleId) {
     return pattern;
 }
 
+const char* toString(VoiceRole role) {
+    switch (role) {
+    case VoiceRole::Bass:
+        return "bass";
+    case VoiceRole::Melody:
+        return "melody";
+    case VoiceRole::Stabs:
+        return "stabs";
+    case VoiceRole::Arp:
+        return "arp";
+    case VoiceRole::Counter:
+        return "counter";
+    }
+    return "melody";
+}
+
+std::optional<VoiceRole> parseVoiceRole(std::string_view text) {
+    for (const VoiceRole role :
+         {VoiceRole::Bass, VoiceRole::Melody, VoiceRole::Stabs, VoiceRole::Arp, VoiceRole::Counter}) {
+        if (text == toString(role)) {
+            return role;
+        }
+    }
+    return std::nullopt;
+}
+
 uint32_t allocateNoteId(Pattern& pattern) {
     return pattern.nextNoteId++;
 }

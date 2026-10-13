@@ -359,7 +359,7 @@ std::optional<Prompt> buildRefinePrompt(const PromptTemplates& templates, const 
 
     std::string scope = "the whole pattern";
     if (input.voice && *input.voice < pattern.voices.size()) {
-        scope = std::string("only the ") + (pattern.voices[*input.voice].role == VoiceRole::Bass ? "bass" : "melody") +
+        scope = std::string("only the ") + toString(pattern.voices[*input.voice].role) +
                 " voice; leave the other voice exactly as it is";
     } else if (input.phrase && *input.phrase < pattern.phrases.size()) {
         const auto& phrase = pattern.phrases[*input.phrase];
@@ -372,7 +372,7 @@ std::optional<Prompt> buildRefinePrompt(const PromptTemplates& templates, const 
     std::vector<std::string> lockedVoices;
     for (const auto& track : pattern.voices) {
         if (isVoiceLocked(track)) {
-            lockedVoices.push_back(track.role == VoiceRole::Bass ? "bass" : "melody");
+            lockedVoices.push_back(toString(track.role));
         }
     }
     std::string history;

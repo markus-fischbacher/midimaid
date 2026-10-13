@@ -114,6 +114,32 @@ TEST_CASE("with a provider generate asks the AI with the prompt and puts the ans
     CHECK(bank.slot(0)->history.size() == 1);
 }
 
+TEST_CASE("the AI writes bass and melody, the generator adds the extra voices", "[ai-plugin][voices]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    InstrumentProcessor processor("Test");
+    auto provider = mock();
+    provider->enqueueText(validAnswer(processor));
+    ScopedAiBackend backend(backendWith(provider));
+
+    auto settings = processor.instanceSettings();
+    settings.generation.extraVoices = {mm::core::VoiceRole::Arp, mm::core::VoiceRole::Stabs};
+    processor.setInstanceSettings(settings);
+    processor.generate();
+    REQUIRE(pumpUntil([&] { return finished(processor); }));
+    REQUIRE(processor.generationStatus() == GenerationStatus::Done);
+    REQUIRE(processor.lastReport().usedAi);
+    const auto bank = processor.slotsSnapshot();
+    REQUIRE(bank.slot(0)->pattern.has_value());
+    const auto& voices = bank.slot(0)->pattern->voices;
+    REQUIRE(voices.size() == 4);
+    CHECK(voices[2].role == mm::core::VoiceRole::Arp);
+    CHECK(voices[3].role == mm::core::VoiceRole::Stabs);
+    CHECK_FALSE(voices[2].notes.empty());
+    CHECK_FALSE(voices[3].notes.empty());
+    CHECK(voices[2].midiChannel == 3);
+    CHECK(voices[3].midiChannel == 4);
+}
+
 TEST_CASE("a provider error leaves the slot alone and says why", "[ai-plugin]") {
     juce::ScopedJuceInitialiser_GUI gui;
     InstrumentProcessor processor("Test");

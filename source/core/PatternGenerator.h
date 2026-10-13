@@ -74,6 +74,12 @@ SelectionResult generatePatternAroundLocks(const StyleProfile& style, const Gene
 /// quality score is set as `generatePattern` does.
 Pattern replayWinner(const StyleProfile& style, const GenerationRequest& request, uint64_t winnerSeed);
 
+/// Appends a voice of `role` to the pattern and generates only that voice; the others stay as they are (D-250, the
+/// "add voice" of the hub). It gets the next MIDI channel. False, with the pattern unchanged, when the pattern has
+/// `kMaxVoices` voices already or the voice cannot be generated.
+bool addVoice(Pattern& pattern, VoiceRole role, const StyleProfile& style, const GenerationRequest& request,
+              uint64_t seed);
+
 /// Replaces the notes of one voice by a new line for `seed` (manual archetype of the voice or automatic), keeping the
 /// harmony, the kick grid and the other voices. Then the constraint layer runs (it may adjust the other voice to the
 /// new line) and the quality score is updated. False, pattern untouched, for an unknown voice, a voice with all three

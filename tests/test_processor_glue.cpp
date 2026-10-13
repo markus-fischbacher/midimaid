@@ -1464,6 +1464,87 @@ TEST_CASE("renewing leaves a locked voice alone and says why nothing happened", 
     REQUIRE(processor.renewVoice(1, 1)); // the other voice is free
 }
 
+TEST_CASE("adding a voice generates only that voice, and removing takes the last one out", "[plugin][voices]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 5));
+    const auto base = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE(base.voices.size() == 2);
+
+    REQUIRE(processor.addVoice(mm::core::VoiceRole::Stabs));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::VoiceAdded);
+    auto pattern = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE(pattern.voices.size() == 3);
+    CHECK(pattern.voices[2].role == mm::core::VoiceRole::Stabs);
+    CHECK_FALSE(pattern.voices[2].notes.empty());
+    CHECK(pattern.voices[0] == base.voices[0]); // the others are not generated again
+    CHECK(pattern.voices[1] == base.voices[1]);
+    CHECK(processor.instanceSettings().generation.extraVoices ==
+          std::vector<mm::core::VoiceRole>{mm::core::VoiceRole::Stabs});
+    CHECK(processor.slotsSnapshot().slot(0)->history.size() == 2);
+
+    REQUIRE(processor.addVoice(mm::core::VoiceRole::Arp));
+    REQUIRE(processor.slotsSnapshot().slot(0)->pattern->voices.size() == 4);
+    CHECK(processor.instanceSettings().generation.extraVoices ==
+          (std::vector<mm::core::VoiceRole>{mm::core::VoiceRole::Stabs, mm::core::VoiceRole::Arp}));
+    REQUIRE(processor.playingVoices().size() == 4);
+    CHECK(processor.playingVoices()[3].role == mm::core::VoiceRole::Arp);
+    CHECK(processor.playingVoices()[3].displayName == "Arpeggio");
+
+    REQUIRE(processor.removeLastVoice());
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::VoiceRemoved);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices.size() == 3);
+    CHECK(processor.instanceSettings().generation.extraVoices ==
+          std::vector<mm::core::VoiceRole>{mm::core::VoiceRole::Stabs});
+    REQUIRE(processor.undo()); // the removed voice comes back
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices.size() == 4);
+
+    REQUIRE(processor.removeLastVoice());
+    REQUIRE(processor.removeLastVoice());
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices.size() == 2);
+    CHECK_FALSE(processor.removeLastVoice()); // bass and melody stay
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::VoiceNoRemove);
+    CHECK(processor.instanceSettings().generation.extraVoices.empty());
+}
+
+TEST_CASE("a pattern takes no ninth voice, and a locked last voice stays", "[plugin][voices]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    putInSlot(processor, generatedFor(processor, 6));
+    for (int i = 2; i < mm::core::kMaxVoices; ++i) {
+        REQUIRE(processor.addVoice(mm::core::VoiceRole::Arp));
+    }
+    const auto full = *processor.slotsSnapshot().slot(0)->pattern;
+    REQUIRE(full.voices.size() == static_cast<size_t>(mm::core::kMaxVoices));
+    CHECK_FALSE(processor.addVoice(mm::core::VoiceRole::Counter));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::VoiceLimit);
+    CHECK(*processor.slotsSnapshot().slot(0)->pattern == full);
+
+    REQUIRE(processor.setVoiceLocked(0, static_cast<size_t>(mm::core::kMaxVoices) - 1, true));
+    CHECK_FALSE(processor.removeLastVoice());
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::VoiceRemoveLocked);
+    CHECK(processor.slotsSnapshot().slot(0)->pattern->voices.size() == static_cast<size_t>(mm::core::kMaxVoices));
+}
+
+TEST_CASE("an empty slot only remembers the voices, a voice instance cannot change them", "[plugin][voices]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    mm::plugin::InstrumentProcessor processor("Test");
+    REQUIRE(processor.addVoice(mm::core::VoiceRole::Counter));
+    CHECK(processor.slotsSnapshot().isEmpty(0));
+    CHECK(processor.instanceSettings().generation.extraVoices ==
+          std::vector<mm::core::VoiceRole>{mm::core::VoiceRole::Counter});
+    REQUIRE(processor.removeLastVoice());
+    CHECK(processor.instanceSettings().generation.extraVoices.empty());
+
+    auto settings = processor.instanceSettings();
+    settings.role = mm::core::InstanceRole::Voice;
+    processor.setInstanceSettings(settings);
+    CHECK_FALSE(processor.addVoice(mm::core::VoiceRole::Stabs));
+    CHECK(processor.generationStatus() == mm::plugin::GenerationStatus::UseHub);
+    CHECK_FALSE(processor.removeLastVoice());
+    CHECK(processor.instanceSettings().generation.extraVoices.empty());
+}
+
 TEST_CASE("a voice instance neither renews nor browses", "[plugin][renew]") {
     juce::ScopedJuceInitialiser_GUI gui;
     mm::plugin::InstrumentProcessor processor("Voice");

@@ -387,5 +387,16 @@
   "settings.language.auto": "Automatic (system language)",
   "settings.language.de": "Deutsch",
   "settings.language.en": "English",
-  "settings.languageHint": "Applies to windows opened from now on; open the plug-in window again"
+  "settings.languageHint": "Applies to windows opened from now on; open the plug-in window again",
+  "voice.stabs": "Stabs",
+  "voice.arp": "Arp",
+  "voice.counter": "Counter-melody",
+  "button.addVoice": "+ Voice",
+  "button.removeVoice": "– Voice",
+  "voicebar.empty": "empty – choose a role",
+  "status.voiceAdded": "Voice added, plays from the next bar",
+  "status.voiceRemoved": "Last voice removed",
+  "status.voiceLimit": "There are 8 voices already",
+  "status.voiceNoRemove": "Bass and melody stay: no further voice to remove",
+  "status.voiceRemoveLocked": "The last voice is locked: not removed"
 }

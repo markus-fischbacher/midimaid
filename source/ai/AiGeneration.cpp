@@ -18,7 +18,7 @@ namespace {
 using namespace mm::core;
 
 const char* roleName(VoiceRole role) {
-    return role == VoiceRole::Bass ? "bass" : "melody";
+    return toString(role);
 }
 
 /// Reads one answer and turns it into a finished pattern, or says what was wrong with it.

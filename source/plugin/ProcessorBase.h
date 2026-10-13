@@ -50,6 +50,11 @@ enum class GenerationStatus {
     Renewed,
     NothingToRenew,
     RenewLocked,
+    VoiceAdded,          ///< a voice was added to the pattern (D-250)
+    VoiceRemoved,        ///< the last voice was taken out of the pattern
+    VoiceLimit,          ///< the pattern has `kMaxVoices` voices already
+    VoiceNoRemove,       ///< only bass and melody are left, or there is nothing to take out
+    VoiceRemoveLocked,   ///< the last voice is locked
     AiFailed,            ///< the AI request failed or gave nothing usable; `lastReport()` says why (SPEC 7.9)
     GenerationCancelled, ///< the musician cancelled the request
     Refined,             ///< a refinement was applied (SPEC 3.15)
@@ -130,7 +135,8 @@ public:
         uint64_t revision = 0;    ///< of the slot
         juce::String voiceName;   ///< Bass, Melody or Voice n: the names of the export files, never translated
         juce::String displayName; ///< the same in the language of the UI
-        bool melody = false;      ///< the voice has the melody role (accent colour)
+        mm::core::VoiceRole role = mm::core::VoiceRole::Bass; ///< what the voice plays (D-250)
+        bool melody = false;      ///< the voice has a melodic role and is the first of it (not "Voice n")
         bool locked = false;      ///< the voice is locked in every dimension (SPEC 3.5)
         mm::core::LockFlags lockFlags; ///< the locks of the voice per dimension (D-231)
         uint64_t seed = 0;                   ///< of the pattern: decides chances and conditions per pass (D-233)
@@ -364,6 +370,15 @@ public:
     /// three locks or when the voice cannot be generated.
     bool renewVoice(size_t voice, std::optional<uint64_t> seed = std::nullopt,
                     std::optional<size_t> slot = std::nullopt);
+    /// Message thread (D-250): adds a voice of `role` to the pattern of the slot and generates only that voice (the
+    /// others stay as they are, `addVoice` of the core); the settings remember the role, so that the next pattern has
+    /// the voice too. An empty slot only gets the setting. False, with the status telling why, for a voice instance,
+    /// a pattern with `kMaxVoices` voices or a voice that cannot be generated. History entry and undo step like
+    /// `renewVoice`.
+    bool addVoice(mm::core::VoiceRole role, std::optional<size_t> slot = std::nullopt);
+    /// Message thread: takes the last voice out of the pattern of the slot (not the bass and the melody) and out of
+    /// the settings. False, with the status, for a voice instance, a pattern of two voices or a locked last voice.
+    bool removeLastVoice(std::optional<size_t> slot = std::nullopt);
     /// Message thread: browses the results of the slot (SPEC 3.6): the entry becomes the current pattern and plays at
     /// the next bar line. Browsing is no undo step; it removes the undo and redo steps of the slot, which would no
     /// longer fit (D-160). False at the ends, for an empty history and in a voice instance.

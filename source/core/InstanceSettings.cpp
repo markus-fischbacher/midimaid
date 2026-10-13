@@ -67,7 +67,33 @@ SwitchQuantize switchQuantizeFromInt(int value) {
                                                                             : SwitchQuantize::Bar;
 }
 
+std::string formatVoiceRoles(const std::vector<VoiceRole>& roles) {
+    std::string text;
+    for (const VoiceRole role : roles) {
+        if (!text.empty()) {
+            text += ',';
+        }
+        text += toString(role);
+    }
+    return text;
+}
+
+std::vector<VoiceRole> parseVoiceRoles(std::string_view text) {
+    std::vector<VoiceRole> roles;
+    while (!text.empty() && roles.size() < static_cast<size_t>(kMaxVoices - 2)) {
+        const size_t comma = text.find(',');
+        if (const auto role = parseVoiceRole(text.substr(0, comma))) {
+            roles.push_back(*role);
+        }
+        text = comma == std::string_view::npos ? std::string_view{} : text.substr(comma + 1);
+    }
+    return roles;
+}
+
 GenerationSettings sanitize(GenerationSettings settings) {
+    if (settings.extraVoices.size() > static_cast<size_t>(kMaxVoices - 2)) {
+        settings.extraVoices.resize(static_cast<size_t>(kMaxVoices - 2));
+    }
     if (!isValidPatternLength(settings.lengthBars)) {
         settings.lengthBars = 4;
     }
