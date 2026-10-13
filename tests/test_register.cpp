@@ -83,6 +83,13 @@ TEST_CASE("the effective range depends on role and archetype", "[core][register]
     CHECK(effectiveRange(profile, VoiceRole::Melody, "hypnotic_motif", voicing, 0) == Range{55, 88});
     CHECK(effectiveRange(profile, VoiceRole::Melody, "", voicing, 0) == Range{55, 88});
     CHECK(effectiveRange(profile, VoiceRole::Melody, "stabs", voicing, 0) == Range{55, 79});
+    // the other melodic roles have the register of the melody; stabs keep their own window (D-250)
+    for (const VoiceRole role : {VoiceRole::Stabs, VoiceRole::Arp, VoiceRole::Counter}) {
+        CHECK(effectiveRange(profile, role, "hypnotic_motif", voicing, 0) == Range{55, 88});
+        CHECK(effectiveRange(profile, role, "", voicing, 0) == Range{55, 88});
+        CHECK(effectiveRange(profile, role, "aggro_stabs", voicing, 0) == Range{55, 79});
+        CHECK(effectiveRange(profile, role, "hypnotic_motif", voicing, 1) == Range{67, 100});
+    }
     CHECK(effectiveRange(profile, VoiceRole::Melody, "aggro_stabs", voicing, 1) == Range{67, 91});
 
     VoicingSettings custom;

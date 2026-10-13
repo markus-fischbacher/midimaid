@@ -641,9 +641,9 @@ bool applyStructural(StructuralOperator op, std::vector<Note>& notes, Pattern& p
     case StructuralOperator::Density:
         return changeDensity(notes, pattern, lock, context, rng);
     case StructuralOperator::InvertOrMirror:
-        return context.role == VoiceRole::Melody && !lock.pitch && invertOrMirror(notes, context, rng);
+        return isMelodicRole(context.role) && !lock.pitch && invertOrMirror(notes, context, rng);
     case StructuralOperator::CallResponse:
-        return context.role == VoiceRole::Melody && !lock.pitch && !lock.rhythm &&
+        return isMelodicRole(context.role) && !lock.pitch && !lock.rhythm &&
                context.patternEnd >= 2 * kTicksPerBar && swapCallAndResponse(notes, context, rng);
     }
     return false;
@@ -752,7 +752,7 @@ size_t applyVariation(Pattern& pattern, const StyleProfile& style, const Archety
         const size_t structural = structuralEditCount(request.strengthPct);
         size_t applied = 0;
         for (size_t attempt = 0; applied < structural && attempt < 12; ++attempt) {
-            const auto& ops = track.role == VoiceRole::Melody ? kStructuralOperators : kBassStructuralOperators;
+            const auto& ops = isMelodicRole(track.role) ? kStructuralOperators : kBassStructuralOperators;
             const auto op = ops[rng.bounded(static_cast<uint32_t>(ops.size()))];
             if (applyStructural(op, track.notes, next, track.lock, context, rng)) {
                 ++applied;

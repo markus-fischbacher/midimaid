@@ -28,7 +28,7 @@ bool ignoresKickArchetype(std::string_view archetypeId) {
 std::optional<Range> effectiveRange(const RegisterProfile& profile, VoiceRole role, std::string_view archetypeId,
                                     const VoicingSettings& voicing, int octaveOffset) {
     Range base = profile.bass;
-    if (role == VoiceRole::Melody) {
+    if (isMelodicRole(role)) {
         base = isVoicingArchetype(archetypeId) ? Range{voicing.lowNote, voicing.highNote} : profile.melody;
     }
     const Range shifted = applyOctaveOffset(base, octaveOffset);

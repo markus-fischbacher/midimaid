@@ -111,7 +111,7 @@ void shapePhrasesByRole(Pattern& pattern, const StyleProfile& style, const Arche
             break;
         case PhraseRole::Answer: {
             const auto melody = std::find_if(pattern.voices.begin(), pattern.voices.end(),
-                                             [](const Track& track) { return track.role == VoiceRole::Melody; });
+                                             [](const Track& track) { return isMelodicRole(track.role); });
             if (melody != pattern.voices.end()) {
                 varyPhrase(pattern, phrase, index, style, settings, kAnswerPhraseStrength,
                            static_cast<size_t>(melody - pattern.voices.begin()));

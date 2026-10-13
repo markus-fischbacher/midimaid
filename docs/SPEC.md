@@ -1342,6 +1342,9 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
   Bearbeiten und die Stimmen mit der ganzen restlichen Höhe; rechts eine Seitenleiste (300 Punkte) in Abschnitten
   Generator, Wünsche und Verfeinern, Wechsel (Experte), Evolve; die Statuszeile über die ganze Breite. Ab der
   dritten Stimme ist nur eine Roll offen, die übrigen sind Leisten (Vorbereitung für bis zu 8 Stimmen).
+- [v1.1, umgesetzt, D-250] **Stimmen-Leiste und Rollen:** über den Stimmen acht Punkte (gefüllt = Stimme im Pattern, Farbe
+  nach Rolle, Klick springt zur Stimme), „+ Stimme“ (Menü: Stabs, Arpeggio, Gegenmelodie) erzeugt nur die neue Stimme,
+  „– Stimme“ nimmt die letzte heraus (nie Bass und Melodie). Bis zu 8 Stimmen je Pattern (§3.1a).
 - Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Knopf „Fokus“
   je Zeile (die anderen Zeilen klappen zu Leisten zusammen, D-159); ein Kürzel gibt es nur als belegbare Aktion ab v1.1 (§8.3, D-126)
 - **Voice-Oberfläche** (kompakt, ca. 600 × 320 px): Gruppe und Stimme wählen, Spur der eigenen Stimme

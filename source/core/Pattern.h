@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace mm::core {
@@ -39,9 +40,22 @@ struct Note {
     bool operator==(const Note&) const = default;
 };
 
-enum class VoiceRole { Bass, Melody /* later e.g. Stabs, Arp, Counter */ };
+/// What a voice plays (SPEC 3.1a, D-250). Everything that is not `Bass` is melodic for the rules of the generator
+/// (register, intervals, chord memory); the roles differ in the archetypes they draw from.
+enum class VoiceRole { Bass, Melody, Stabs, Arp, Counter };
 
-constexpr int kMaxVoices = 8; // architecture limit; v1 uses exactly 2
+constexpr bool isBassRole(VoiceRole role) {
+    return role == VoiceRole::Bass;
+}
+constexpr bool isMelodicRole(VoiceRole role) {
+    return role != VoiceRole::Bass;
+}
+/// "bass", "melody", "stabs", "arp", "counter": the names of files, JSON and prompts.
+const char* toString(VoiceRole role);
+/// Unknown text gives nullopt.
+std::optional<VoiceRole> parseVoiceRole(std::string_view text);
+
+constexpr int kMaxVoices = 8; // architecture limit (D-52)
 
 struct GrooveSettings {
     float swing = 0.5f; ///< 0.50-0.75

@@ -90,7 +90,7 @@ VoiceConstraints rangeOf(const Pattern& pattern, const Track& track,
 /// A stab voice in chord memory mode (STYLES.md 1.10): the shape moves in parallel, so its tones are not snapped to the
 /// scale and a stab that clashes with the bass moves to the next 16th instead of changing a tone.
 bool isChordMemoryVoice(const Pattern& pattern, const Track& track) {
-    return pattern.voicing.chordMemory && track.role == VoiceRole::Melody &&
+    return pattern.voicing.chordMemory && isMelodicRole(track.role) &&
            (track.archetypeId == "stabs" || track.archetypeId == "aggro_stabs");
 }
 

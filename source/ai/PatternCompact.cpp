@@ -156,7 +156,7 @@ std::optional<CompactPattern> patternToSchemaJson(const Pattern& pattern, const 
             return std::nullopt;
         }
         json voice;
-        voice["role"] = track.role == VoiceRole::Bass ? "bass" : "melody";
+        voice["role"] = toString(track.role);
         if (!track.archetypeId.empty()) {
             voice["archetype"] = track.archetypeId;
         }

@@ -61,7 +61,7 @@ PlaybackNotes renderVoiceForPlayback(const Pattern& pattern, const StyleProfile&
         info.rangeLow = static_cast<uint8_t>(std::clamp(constraints.voices[voiceIndex].rangeLow, 0, 127));
         info.rangeHigh = static_cast<uint8_t>(std::clamp(constraints.voices[voiceIndex].rangeHigh, 0, 127));
     }
-    info.melody = voiceIndex < pattern.voices.size() && pattern.voices[voiceIndex].role == VoiceRole::Melody;
+    info.melody = voiceIndex < pattern.voices.size() && isMelodicRole(pattern.voices[voiceIndex].role);
     if (!result.notes.empty()) {
         const auto [lowest, highest] = std::minmax_element(
             result.notes.begin(), result.notes.end(),

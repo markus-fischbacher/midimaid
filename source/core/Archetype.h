@@ -52,6 +52,10 @@ struct ArchetypeSettings {
 /// SPEC 3.8 works with, so the generators, the constraint layer and the quality criteria all agree.
 StyleProfile withChromatic(const StyleProfile& style, int chromaticPct);
 
+/// Whether the archetype is one a voice of `role` may play: a bass voice plays the bass archetypes, every other role
+/// the melodic ones (D-250).
+bool archetypeFitsRole(const Archetype& archetype, VoiceRole role);
+
 /// Chooses an archetype of the profile for `role` at random, weighted by the profile weights moved by the energy
 /// (calm: x(150 - energy)/100, dense: x(50 + energy)/100). Ids without an implementation or for another role are
 /// skipped. The creativity scatters every weight by a random factor (`archetypeScatterRange`, SPEC 7.6); at 0 (the

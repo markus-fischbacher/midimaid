@@ -61,6 +61,10 @@ private:
     /// The hub UI: fields, slot strip, rows of the playing slot, info line.
     void updateFullView();
     void updateRefineControls();
+    /// The menu of the roles a voice can be added with (D-250), under the "+ Voice" button.
+    void showAddVoiceMenu();
+    /// The roles of the voices the rows show: the pattern's, or the settings' while the slot is empty.
+    std::vector<mm::core::VoiceRole> shownRoles(const std::vector<ProcessorBase::VoiceView>& views) const;
     void startRefine();
     void syncFields(const mm::core::InstanceSettings& settings);
     void rebuildRows(size_t count);
@@ -113,6 +117,9 @@ private:
     juce::ComboBox snapBox_;
     juce::ToggleButton expertButton_;
     juce::TextButton varyAllButton_;
+    VoiceBar voiceBar_;              ///< the eight voices as dots above the rows (D-250)
+    juce::TextButton addVoiceButton_;    ///< "+ Voice": the menu of the roles to add
+    juce::TextButton removeVoiceButton_; ///< takes the last voice out (never bass and melody)
     juce::Label strengthLabel_;
     juce::Slider strengthSlider_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};
     juce::TextButton previewButton_; // hub and solo: plays the slot with the internal clock while the host stands still

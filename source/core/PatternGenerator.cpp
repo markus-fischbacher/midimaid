@@ -285,7 +285,10 @@ Pattern generateCandidate(const StyleProfile& style, const GenerationRequest& re
                                     settings.personalPct));
     applyStyleGroove(pattern, style);
     for (Track& track : pattern.voices) {
-        setManualArchetype(track, track.role == VoiceRole::Bass ? request.bassArchetype : request.melodyArchetype);
+        // the manual choices belong to the bass and the melody; the other roles draw their own (D-250)
+        setManualArchetype(track, track.role == VoiceRole::Bass     ? request.bassArchetype
+                                  : track.role == VoiceRole::Melody ? request.melodyArchetype
+                                                                    : std::optional<std::string>{});
     }
     std::vector<Phrase> phrases = generateFormPlan(style, request.lengthBars, rng);
     if (request.formPlan.has_value() && isValidFormPlan(request.lengthBars, *request.formPlan)) {
@@ -450,6 +453,23 @@ bool regenerateVoice(Pattern& pattern, size_t voiceIndex, const StyleProfile& ba
     applyChances(next, voiceIndex, style, settings.energyPct, seed, 0, next.lengthBars);
     applyConstraints(next, constraintSettingsFor(next, style));
     next.qualityScore = static_cast<uint8_t>(std::clamp(scoreOf(next, style, settings), 0, 100));
+    pattern = std::move(next);
+    return true;
+}
+
+bool addVoice(Pattern& pattern, VoiceRole role, const StyleProfile& style, const GenerationRequest& request,
+              uint64_t seed) {
+    if (pattern.voices.size() >= static_cast<size_t>(kMaxVoices)) {
+        return false;
+    }
+    Pattern next = pattern;
+    Track track;
+    track.role = role;
+    track.midiChannel = static_cast<uint8_t>(next.voices.size() + 1);
+    next.voices.push_back(std::move(track));
+    if (!regenerateVoice(next, next.voices.size() - 1, style, request, seed)) {
+        return false;
+    }
     pattern = std::move(next);
     return true;
 }

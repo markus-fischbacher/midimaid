@@ -242,6 +242,8 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Legato-Einsatz (SPEC §3.4, D-236; dabei „Neustart“ für Patterns über einen Takt korrigiert; einstellbare Quantisierung: D-247)
 - [x] Einstellbare Wechsel-Quantisierung: Schlag, Takt, 2/4/8/16 Takte (SPEC §3.4, D-247)
 - [x] Hub-UI umgebaut: Seitenleiste mit Abschnitten, Stimmen mit voller Höhe, ab drei Stimmen eine offene Roll (SPEC §8.1, D-249; Schritt 1 von 3 für bis zu 8 Stimmen)
+- [x] Stimmen-Rollen Stabs/Arp/Gegenmelodie, bis zu 8 Stimmen je Pattern, Stimmen-Leiste und „+ Stimme“ (SPEC §3.1a, §8.1, D-250; Schritt 2 von 3)
+- [ ] Generator-Inhalt für die neuen Rollen (Archetypen und Stilregeln je Stil; Schritt 3 von 3)
 - [x] Geschmacks-Zusammenfassung im KI-Prompt, ohne Noten auch ohne Zustimmung (SPEC §3.20, §7.4, D-248)
 - [x] Trigger-Parameter Generieren/Variation (SPEC §3.13, D-218)
 - [ ] Session-Ansicht: Slot per Clip-Hüllkurve, Beispiele in der Live-Vorlage

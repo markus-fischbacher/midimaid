@@ -193,6 +193,22 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     varyAllButton_.setButtonText(tr(keys::kButtonVaryAll));
     varyAllButton_.onClick = [this] { varyVoice(std::nullopt, std::nullopt); };
     addChildComponent(varyAllButton_);
+    voiceBar_.setComponentID("voice_bar");
+    voiceBar_.onJump = [this](size_t index) { setFocusedVoice(static_cast<int>(index) + 1); };
+    voiceBar_.onAdd = [this] { showAddVoiceMenu(); };
+    addChildComponent(voiceBar_);
+    addVoiceButton_.setComponentID("add_voice");
+    addVoiceButton_.setButtonText(tr(keys::kButtonAddVoice));
+    addVoiceButton_.onClick = [this] { showAddVoiceMenu(); };
+    addChildComponent(addVoiceButton_);
+    removeVoiceButton_.setComponentID("remove_voice");
+    removeVoiceButton_.setButtonText(tr(keys::kButtonRemoveVoice));
+    removeVoiceButton_.onClick = [this] {
+        processor_.removeLastVoice();
+        updateStatus();
+        updateFullView();
+    };
+    addChildComponent(removeVoiceButton_);
     strengthLabel_.setText(tr(keys::kLabelStrength), juce::dontSendNotification);
     strengthLabel_.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.7f));
     addChildComponent(strengthLabel_);
@@ -852,6 +868,21 @@ void PlaceholderEditor::updateStatus() {
     case GenerationStatus::Renewed:
         statusLabel_.setText(tr(keys::kStatusRenewed), juce::dontSendNotification);
         break;
+    case GenerationStatus::VoiceAdded:
+        statusLabel_.setText(tr(keys::kStatusVoiceAdded), juce::dontSendNotification);
+        break;
+    case GenerationStatus::VoiceRemoved:
+        statusLabel_.setText(tr(keys::kStatusVoiceRemoved), juce::dontSendNotification);
+        break;
+    case GenerationStatus::VoiceLimit:
+        statusLabel_.setText(tr(keys::kStatusVoiceLimit), juce::dontSendNotification);
+        break;
+    case GenerationStatus::VoiceNoRemove:
+        statusLabel_.setText(tr(keys::kStatusVoiceNoRemove), juce::dontSendNotification);
+        break;
+    case GenerationStatus::VoiceRemoveLocked:
+        statusLabel_.setText(tr(keys::kStatusVoiceRemoveLocked), juce::dontSendNotification);
+        break;
     case GenerationStatus::NothingToRenew:
         statusLabel_.setText(tr(keys::kStatusNothingToRenew), juce::dontSendNotification);
         break;
@@ -1005,7 +1036,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
              &keyBox_, &referenceSetBox_, &scaleBox_, &barsBox_, &energySlider_, &creativitySlider_, &energyLabel_, &creativityLabel_,
              &infoLabel_, &ratingBox_, &promptEditor_, &refineEditor_, &refineScopeBox_, &refineButton_, &settingsButton_, &referencesButton_, &libraryButton_,
              &expertButton_, &previewButton_, &undoButton_, &redoButton_, &drumsButton_, &historyBackButton_, &historyForwardButton_, &historyLabel_, &evolveButton_, &evolveBackButton_,
-             &evolveStageLabel_, &evolveKeepButton_}) {
+             &evolveStageLabel_, &evolveKeepButton_, &voiceBar_, &addVoiceButton_, &removeVoiceButton_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -1444,9 +1475,10 @@ void PlaceholderEditor::updateRefineControls() {
     refineScopeBox_.clear(juce::dontSendNotification);
     refineScopeBox_.addItem(tr(keys::kRefineScopeAll), 1);
     for (size_t i = 0; i < targets.voices.size(); ++i) {
-        refineScopeBox_.addItem(
-            tr(targets.voices[i] == mm::core::VoiceRole::Bass ? keys::kVoiceBass : keys::kVoiceMelody),
-            100 + static_cast<int>(i));
+        if (i >= 2) {
+            break; // the AI writes bass and melody: the other voices are not part of a refinement (D-250)
+        }
+        refineScopeBox_.addItem(tr(mm::core::text::roleTextKey(targets.voices[i])), 100 + static_cast<int>(i));
     }
     if (targets.phrases.size() > 1) { // one phrase over the whole pattern is the whole pattern
         for (size_t i = 0; i < targets.phrases.size(); ++i) {
@@ -1458,6 +1490,39 @@ void PlaceholderEditor::updateRefineControls() {
     }
     const bool stillThere = before != 0 && refineScopeBox_.indexOfItemId(before) >= 0;
     refineScopeBox_.setSelectedId(stillThere ? before : 1, juce::dontSendNotification);
+}
+
+std::vector<mm::core::VoiceRole> PlaceholderEditor::shownRoles(const std::vector<ProcessorBase::VoiceView>& views) const {
+    std::vector<mm::core::VoiceRole> roles;
+    if (views.empty()) { // an empty slot: bass, melody and the voices the next pattern will get
+        roles = {mm::core::VoiceRole::Bass, mm::core::VoiceRole::Melody};
+        const auto& extra = processor_.instanceSettings().generation.extraVoices;
+        roles.insert(roles.end(), extra.begin(), extra.end());
+    } else {
+        for (const auto& view : views) {
+            roles.push_back(view.role);
+        }
+    }
+    return roles;
+}
+
+void PlaceholderEditor::showAddVoiceMenu() {
+    juce::PopupMenu menu;
+    const auto roles = {mm::core::VoiceRole::Stabs, mm::core::VoiceRole::Arp, mm::core::VoiceRole::Counter};
+    int id = 1;
+    for (const auto role : roles) {
+        menu.addItem(id++, tr(mm::core::text::roleTextKey(role)));
+    }
+    const std::vector<mm::core::VoiceRole> choice(roles);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addVoiceButton_),
+                       [this, safe = juce::Component::SafePointer<PlaceholderEditor>(this), choice](int result) {
+                           if (safe == nullptr || result < 1 || static_cast<size_t>(result) > choice.size()) {
+                               return;
+                           }
+                           processor_.addVoice(choice[static_cast<size_t>(result) - 1]);
+                           updateStatus();
+                           updateFullView();
+                       });
 }
 
 void PlaceholderEditor::updateFullView() {
@@ -1479,10 +1544,14 @@ void PlaceholderEditor::updateFullView() {
 
     // One row per voice of the playing slot (two, bass and melody, while the slot is empty).
     const auto views = processor_.playingVoices();
-    const size_t count = views.empty() ? size_t{2} : views.size();
+    const auto roles = shownRoles(views);
+    const size_t count = roles.size();
     if (rows_.size() != count) {
         rebuildRows(count);
     }
+    voiceBar_.setVoices(roles, focusedVoice_);
+    addVoiceButton_.setEnabled(count < static_cast<size_t>(mm::core::kMaxVoices));
+    removeVoiceButton_.setEnabled(count > 2);
     bool changed = shownVoices_.size() != views.size();
     for (size_t i = 0; !changed && i < views.size(); ++i) {
         changed = !views[i].sameSource(shownVoices_[i]);
@@ -1491,7 +1560,7 @@ void PlaceholderEditor::updateFullView() {
         shownVoices_ = views;
         for (size_t i = 0; i < rows_.size(); ++i) {
             rows_[i]->setView(i < views.size() ? &views[i] : nullptr,
-                              i == 0 ? tr(keys::kVoiceBass) : tr(keys::kVoiceMelody), i != 0);
+                              tr(mm::core::text::roleTextKey(roles[i])), mm::core::isMelodicRole(roles[i]));
         }
         if (!rows_.empty() && rows_.front()->roll().patternTicks() > 0) { // the first roll holds the shared window
             const auto& window = rows_.front()->roll().viewport();
@@ -1812,6 +1881,12 @@ void PlaceholderEditor::resized() {
     tripletButton_.setBounds(editBar.removeFromLeft(90));
     editBar.removeFromLeft(8);
     snapBox_.setBounds(editBar.removeFromLeft(190));
+    auto voiceBarRow = area.removeFromTop(32).reduced(16, 2);
+    voiceBar_.setBounds(voiceBarRow.removeFromLeft(8 * 30));
+    voiceBarRow.removeFromLeft(8);
+    addVoiceButton_.setBounds(voiceBarRow.removeFromLeft(110));
+    voiceBarRow.removeFromLeft(8);
+    removeVoiceButton_.setBounds(voiceBarRow.removeFromLeft(110));
     auto variationBar = area.removeFromTop(32).reduced(16, 2);
     strengthLabel_.setBounds(variationBar.removeFromLeft(60));
     varyAllButton_.setBounds(variationBar.removeFromRight(140));
