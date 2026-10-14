@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include "plugin/AiConnection.h"
 #include "plugin/GlobalSettingsStore.h"
 #include "plugin/MidiMaidLookAndFeel.h"
@@ -27,6 +28,11 @@ public:
     bool keyPressed(const juce::KeyPress& press) override;
     bool capturing() const { return capturing_; }
 
+    /// The pages of the dialog (D-257): one tab each, so the window fits on a screen.
+    enum class Page { Ai, Transpose, General, Shortcuts };
+    Page page() const { return page_; }
+    void setPage(Page page);
+
     /// Opens the dialog in a window of its own, or brings the open one to the front. Message thread.
     static void show();
 
@@ -40,7 +46,11 @@ private:
         bool section = false; ///< starts a new group: more space and a thin line above
         int stretch = -1;     ///< the control that takes the rest of the width; -1: the last one
         int fixedWidth = 0;   ///< > 0: the last control has this width instead of the rest
+        Page page = Page::Ai; ///< the tab the row belongs to
+        int needs = 0;        ///< 1: only with a provider chosen, 2: and in expert mode
     };
+    bool shown(const Row& row) const;
+    int pageHeight(Page page) const;
 
     const mm::ai::ProviderEntry* entry() const;
     std::string selectedId() const { return selected_; }
@@ -98,6 +108,8 @@ private:
     bool keyKnown_ = false; ///< the keychain said there is a key for the selected provider
     bool updating_ = false; ///< the fields are being filled: no changes to save
     std::vector<Row> rows_;
+    Page page_ = Page::Ai;
+    std::array<juce::TextButton, 4> tabs_;
     std::vector<int> dividers_; ///< y of the lines between the groups, set by `resized`
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsDialog)

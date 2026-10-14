@@ -397,6 +397,7 @@ TEST_CASE("the aids of the piano roll are switched here and saved", "[settings-d
     auto& fold = part<juce::ToggleButton>(*dialog, "rollFold");
     auto& guides = part<juce::ToggleButton>(*dialog, "rollGuides");
     auto& markers = part<juce::ToggleButton>(*dialog, "rollMarkers");
+    dialog->setPage(SettingsDialog::Page::General);
     CHECK(fold.isVisible());
     CHECK_FALSE(fold.getToggleState()); // the defaults of D-232
     CHECK(guides.getToggleState());
@@ -427,6 +428,7 @@ TEST_CASE("a key is assigned to an action by pressing it", "[settings-dialog][sh
     auto& assign = part<juce::TextButton>(*dialog, "shortcutAssign");
     auto& remove = part<juce::TextButton>(*dialog, "shortcutRemove");
     CHECK(actions.getNumItems() == static_cast<int>(mm::core::shortcutActions().size()));
+    dialog->setPage(SettingsDialog::Page::Shortcuts);
     CHECK(actions.isVisible());
     CHECK(key.getText() == "keine"); // nothing is assigned in advance
     CHECK_FALSE(remove.isEnabled());
@@ -517,6 +519,7 @@ TEST_CASE("the export of all notes is switched here and saved", "[settings-dialo
     Env env;
     const auto dialog = env.dialog();
     auto& toggle = part<juce::ToggleButton>(*dialog, "exportAllNotes");
+    dialog->setPage(SettingsDialog::Page::General);
     CHECK(toggle.isVisible());
     CHECK_FALSE(toggle.getToggleState()); // by default the passes are resolved (D-233)
     toggle.setToggleState(true, juce::dontSendNotification);
@@ -534,6 +537,7 @@ TEST_CASE("the groove of the export is switched here and saved", "[settings-dial
     Env env;
     const auto dialog = env.dialog();
     auto& toggle = part<juce::ToggleButton>(*dialog, "exportGroove");
+    dialog->setPage(SettingsDialog::Page::General);
     CHECK(toggle.isVisible());
     CHECK(toggle.getToggleState()); // by default the groove is exported (SPEC 3.9)
     toggle.setToggleState(false, juce::dontSendNotification);
@@ -764,6 +768,7 @@ TEST_CASE("the transposition settings are in the dialog, show the saved values a
         CHECK(part<juce::ComboBox>(*dialog, "transposeChannel").getSelectedId() == 1);
         CHECK(part<juce::ToggleButton>(*dialog, "transposeExport").getToggleState());
         CHECK_FALSE(part<juce::ToggleButton>(*dialog, "midiThru").getToggleState());
+        dialog->setPage(SettingsDialog::Page::Transpose);
         CHECK(part<juce::ComboBox>(*dialog, "transposeMode").isVisible());
         CHECK(part<juce::ComboBox>(*dialog, "transposeMode").getText() == tr(keys::kTransposeModeChromatic));
 
@@ -827,6 +832,7 @@ TEST_CASE("the dialog with the transposition stays within a screen and nothing o
                            "transposeReference", "transposeChannel", "transposeExport", "midiThru", "transposeHint"}) {
         parts.add(&part<juce::Component>(*dialog, id));
     }
+    dialog->setPage(SettingsDialog::Page::Transpose);
     for (auto* one : parts) {
         INFO(one->getComponentID().toStdString());
         CHECK(one->isVisible());
@@ -873,6 +879,7 @@ TEST_CASE("the favorites toggle is on by default, switched here and saved", "[se
     Env env;
     const auto dialog = env.dialog();
     auto& toggle = part<juce::ToggleButton>(*dialog, "favoritesToActiveSet");
+    dialog->setPage(SettingsDialog::Page::General);
     CHECK(toggle.isVisible());
     CHECK(toggle.getToggleState());
     toggle.setToggleState(false, juce::dontSendNotification);
@@ -883,4 +890,63 @@ TEST_CASE("the favorites toggle is on by default, switched here and saved", "[se
     toggle.setToggleState(true, juce::dontSendNotification);
     toggle.onClick();
     CHECK(env.store.get().favoritesToActiveSet);
+}
+
+
+TEST_CASE("the settings sit on four tabs, the AI tab first, and each tab shows only its own controls (D-257)",
+          "[settings-dialog][layout][tabs]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    CHECK(dialog->page() == SettingsDialog::Page::Ai);
+    for (int i = 0; i < 4; ++i) {
+        CHECK(part<juce::TextButton>(*dialog, "settings_tab_" + juce::String(i)).isVisible());
+    }
+    const std::vector<std::pair<SettingsDialog::Page, std::vector<const char*>>> pages{
+        {SettingsDialog::Page::Ai, {"provider", "logPrompts"}},
+        {SettingsDialog::Page::Transpose, {"transposeMode", "midiThru"}},
+        {SettingsDialog::Page::General, {"language", "rollFold", "exportGroove", "favoritesToActiveSet"}},
+        {SettingsDialog::Page::Shortcuts, {"shortcutAction", "shortcutAssign"}}};
+    for (const auto& [page, ids] : pages) {
+        dialog->setPage(page);
+        CHECK(dialog->page() == page);
+        for (const auto& [other, otherIds] : pages) {
+            for (const char* id : otherIds) {
+                INFO(id);
+                CHECK(part<juce::Component>(*dialog, id).isVisible() == (other == page));
+            }
+        }
+        CHECK(part<juce::TextButton>(*dialog, "close").isVisible()); // on every tab
+    }
+}
+
+TEST_CASE("a click on a tab switches the page and the window keeps its height", "[settings-dialog][layout][tabs]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    choose(*dialog, "Anthropic (Claude)");
+    const int height = dialog->getHeight();
+    CHECK(height < 800); // fits a laptop screen
+    auto& tab = part<juce::TextButton>(*dialog, "settings_tab_2");
+    tab.triggerClick();
+    REQUIRE(pumpUntil([&] { return dialog->page() == SettingsDialog::Page::General; }));
+    CHECK(tab.getToggleState());
+    CHECK_FALSE(part<juce::TextButton>(*dialog, "settings_tab_0").getToggleState());
+    CHECK(dialog->getHeight() == height);
+    dialog->setPage(SettingsDialog::Page::Shortcuts);
+    CHECK(dialog->getHeight() == height);
+}
+
+TEST_CASE("the AI tab hides what needs a provider and the expert level as before", "[settings-dialog][tabs]") {
+    juce::ScopedJuceInitialiser_GUI gui;
+    Env env;
+    const auto dialog = env.dialog();
+    CHECK_FALSE(part<juce::TextEditor>(*dialog, "key").isVisible());
+    choose(*dialog, "Anthropic (Claude)");
+    CHECK(part<juce::TextEditor>(*dialog, "key").isVisible());
+    dialog->setPage(SettingsDialog::Page::General); // the provider rows go with the tab ...
+    CHECK_FALSE(part<juce::TextEditor>(*dialog, "key").isVisible());
+    dialog->setPage(SettingsDialog::Page::Ai); // ... and come back with it
+    CHECK(part<juce::TextEditor>(*dialog, "key").isVisible());
+    CHECK_FALSE(part<juce::ComboBox>(*dialog, "level").isVisible());
 }
