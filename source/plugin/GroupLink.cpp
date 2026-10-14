@@ -171,4 +171,9 @@ mm::core::SlotSnapshot GroupLink::currentSlots() {
     return std::make_shared<const mm::core::SlotBank>();
 }
 
+bool GroupLink::followsHub() const {
+    const juce::ScopedLock lock(lock_);
+    return owner_ == nullptr || owner_->instanceSettings().slotFollow == mm::core::SlotFollow::Hub;
+}
+
 } // namespace mm::plugin

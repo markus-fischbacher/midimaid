@@ -843,6 +843,14 @@ size_t ProcessorBase::groupVoices() const {
     return groupLink_->voices();
 }
 
+std::vector<mm::core::MemberInfo> ProcessorBase::groupMembers() const {
+    return processGroup().members();
+}
+
+mm::core::MemberId ProcessorBase::groupMemberId() const {
+    return groupLink_->id();
+}
+
 void ProcessorBase::acceptHubOffer() {
     groupLink_->acceptOffer();
 }

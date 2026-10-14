@@ -672,8 +672,10 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     inspectorButton_.setClickingTogglesState(true);
     inspectorButton_.onClick = [this] { setInspectorOpen(inspectorButton_.getToggleState()); };
     addChildComponent(inspectorButton_);
-    const std::array<std::string_view, 4> tabKeys{keys::kInspectorInstance, keys::kSectionGenerator,
-                                                  keys::kInspectorEdit, keys::kSectionEvolve};
+    groupPanel_.setComponentID("group_panel");
+    addChildComponent(groupPanel_);
+    const std::array<std::string_view, 5> tabKeys{keys::kInspectorInstance, keys::kSectionGenerator,
+                                                  keys::kInspectorEdit, keys::kSectionEvolve, keys::kInspectorGroup};
     for (size_t i = 0; i < inspectorTabs_.size(); ++i) {
         auto& tab = inspectorTabs_[i];
         tab.setComponentID("inspector_tab_" + juce::String(static_cast<int>(i)));
@@ -751,6 +753,9 @@ void PlaceholderEditor::updateStatus() {
     followBox_.setVisible(isVoice);
     openHubButton_.setEnabled(processor_.groupStatus() == GroupStatus::VoiceConnected);
     applyPanels();
+    if (!voiceLayout_) {
+        updateGroupPage();
+    }
     if (role != mm::core::InstanceRole::Solo && processor_.otherFormatInProcess()) {
         group += tr(keys::kGroupMixedFormats);
     }
@@ -1364,6 +1369,68 @@ void PlaceholderEditor::applyFocus() {
     resized();
 }
 
+void PlaceholderEditor::updateGroupPage() {
+    using Info = mm::core::MemberInfo;
+    const auto fill = [this](std::vector<GroupPanel::Row> rows, juce::String message, juce::StringArray warnings) {
+        groupPanel_.setContent(std::move(rows), std::move(message), std::move(warnings), tr(keys::kGroupWarnOk));
+    };
+    if (processor_.instanceSettings().role != mm::core::InstanceRole::Hub) {
+        fill({}, tr(keys::kGroupPageNotHub), {});
+        return;
+    }
+    const auto roles = shownRoles(processor_.playingVoices());
+    if (roles.empty()) {
+        fill({}, tr(keys::kGroupPageNoVoices), {});
+        return;
+    }
+    // The voice instances in order of age: "Instance n" counts them like the registry does.
+    std::vector<Info> voices;
+    for (const auto& member : processor_.groupMembers()) {
+        if (member.role == mm::core::InstanceRole::Voice) {
+            voices.push_back(member);
+        }
+    }
+    std::vector<GroupPanel::Row> rows;
+    juce::StringArray warnings;
+    for (size_t i = 0; i < roles.size(); ++i) {
+        const int voice = static_cast<int>(i) + 1;
+        GroupPanel::Row row;
+        row.role = roles[i];
+        row.name = tr(mm::core::text::roleTextKey(roles[i]));
+        std::vector<size_t> playing;
+        for (size_t v = 0; v < voices.size(); ++v) {
+            if (voices[v].outputVoice == voice) {
+                playing.push_back(v);
+            }
+        }
+        if (playing.empty()) {
+            row.assigned = tr(keys::kGroupRowNone);
+            row.warn = true;
+            warnings.add(tr(keys::kGroupWarnMissing, {{"voice", std::to_string(voice)}}));
+        } else if (playing.size() == 1) {
+            row.assigned = tr(keys::kGroupRowInstance, {{"n", std::to_string(playing.front() + 1)}});
+            if (!voices[playing.front()].followsHub) {
+                row.follow = tr(keys::kGroupRowOwnSlot);
+            }
+        } else {
+            row.assigned = tr(keys::kGroupRowDuplicate, {{"n", std::to_string(playing.size())}});
+            row.warn = true;
+            warnings.add(tr(keys::kGroupWarnDuplicate, {{"voice", std::to_string(voice)}, {"n", std::to_string(playing.size())}}));
+        }
+        rows.push_back(std::move(row));
+    }
+    for (size_t v = 0; v < voices.size(); ++v) {
+        if (voices[v].outputVoice > static_cast<int>(roles.size())) {
+            warnings.add(tr(keys::kGroupWarnExtra, {{"n", std::to_string(v + 1)},
+                                                    {"voice", std::to_string(voices[v].outputVoice)}}));
+        }
+    }
+    if (processor_.otherFormatInProcess()) {
+        warnings.add(tr(keys::kGroupMixedFormats).trim().trimCharactersAtStart("|").trim());
+    }
+    fill(std::move(rows), {}, std::move(warnings));
+}
+
 void PlaceholderEditor::setInspectorOpen(bool open) {
     inspectorOpen_ = open;
     inspectorButton_.setToggleState(open, juce::dontSendNotification);
@@ -1398,6 +1465,7 @@ void PlaceholderEditor::applyPanels() {
     for (auto& tab : inspectorTabs_) {
         tab.setVisible(open);
     }
+    groupPanel_.setVisible(open && inspectorPage_ == Page::Group);
     page(Page::Instance, {&voiceBar_, &removeVoiceButton_, &referencesButton_, &libraryButton_, &expertButton_}, {});
     page(Page::Pattern, {&referenceSetBox_, &ratingBox_},
          {&seedEditor_, &randomButton_, &chromaticLabel_, &chromaticSlider_, &personalLabel_, &personalSlider_,
@@ -1948,6 +2016,7 @@ void PlaceholderEditor::resized() {
             evolveOriginalButton_.setBounds(next(rest));
             pair(next(rest), evolveStrengthLabel_, evolveStrengthSlider_, 110);
         }
+        groupPanel_.setBounds(page);
     }
 
     // The status line: the message, the info of the slot and, after an error, the buttons that belong to it.

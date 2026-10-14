@@ -76,6 +76,39 @@ private:
     int focused_ = 0;
 };
 
+/// The group page of the hub's inspector (D-255): one line per voice of the pattern with the mute switch (the hub's own
+/// mute parameter, which the voices obey), the instance that plays it and whether that one follows the hub's slot; under
+/// the lines the warnings of the group in one place.
+class GroupPanel : public juce::Component {
+public:
+    struct Row {
+        mm::core::VoiceRole role = mm::core::VoiceRole::Bass;
+        juce::String name;
+        juce::String assigned; ///< the instance that plays the voice ("Instance 2", "no instance", "2 instances")
+        juce::String follow;   ///< "own slot" when the instance keeps its slot, else empty
+        bool warn = false;     ///< not exactly one instance
+    };
+
+    explicit GroupPanel(ProcessorBase& processor);
+    /// `message` replaces the table (this instance is not the hub, no voices); `warnings` one per line, empty for none.
+    void setContent(std::vector<Row> rows, juce::String message, juce::StringArray warnings, juce::String allFine);
+    const std::vector<Row>& rows() const { return rows_; }
+    const juce::StringArray& warnings() const { return warnings_; }
+    static constexpr int kRowHeight = 30;
+
+    void resized() override;
+    void visibilityChanged() override { resized(); }
+    void paint(juce::Graphics& g) override;
+
+private:
+    std::vector<Row> rows_;
+    juce::String message_;
+    juce::StringArray warnings_;
+    juce::String allFine_;
+    std::vector<std::unique_ptr<juce::ToggleButton>> muteButtons_;
+    std::vector<std::unique_ptr<juce::ButtonParameterAttachment>> attachments_;
+};
+
 /// Grip area: dragging it starts an external drag of an exported file (no text, icon only). `voice` 0 drags the file of
 /// the output voice, 1 to `kMaxVoices` the file of that voice.
 class DragHandle : public juce::Component {

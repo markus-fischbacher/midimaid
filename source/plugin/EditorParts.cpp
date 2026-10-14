@@ -828,4 +828,81 @@ void SlotButton::itemDropped(const SourceDetails& details) {
     }
 }
 
+GroupPanel::GroupPanel(ProcessorBase& processor) {
+    for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
+        auto button = std::make_unique<juce::ToggleButton>();
+        button->setComponentID("group_mute_" + juce::String(voice));
+        button->setButtonText({});
+        button->setTooltip(tr(mm::core::text::kGroupMuteTip));
+        addChildComponent(*button);
+        if (auto* parameter = processor.parameters().getParameter(mm::core::muteParameterId(voice))) {
+            attachments_.push_back(std::make_unique<juce::ButtonParameterAttachment>(*parameter, *button));
+        }
+        muteButtons_.push_back(std::move(button));
+    }
+}
+
+void GroupPanel::setContent(std::vector<Row> rows, juce::String message, juce::StringArray warnings,
+                            juce::String allFine) {
+    const auto same = [](const Row& a, const Row& b) {
+        return a.role == b.role && a.name == b.name && a.assigned == b.assigned && a.follow == b.follow && a.warn == b.warn;
+    };
+    if (message == message_ && warnings == warnings_ && allFine == allFine_ &&
+        std::equal(rows.begin(), rows.end(), rows_.begin(), rows_.end(), same)) {
+        return; // nothing to show anew (the editor asks several times a second)
+    }
+    rows_ = std::move(rows);
+    message_ = std::move(message);
+    warnings_ = std::move(warnings);
+    allFine_ = std::move(allFine);
+    for (size_t i = 0; i < muteButtons_.size(); ++i) {
+        muteButtons_[i]->setVisible(isVisible() && message_.isEmpty() && i < rows_.size());
+    }
+    resized();
+    repaint();
+}
+
+void GroupPanel::resized() {
+    for (size_t i = 0; i < muteButtons_.size(); ++i) {
+        muteButtons_[i]->setVisible(isVisible() && message_.isEmpty() && i < rows_.size());
+        muteButtons_[i]->setBounds(getLocalBounds().withHeight(kRowHeight).translated(0, static_cast<int>(i) * kRowHeight)
+                                       .removeFromLeft(26));
+    }
+}
+
+void GroupPanel::paint(juce::Graphics& g) {
+    g.setFont(13.0f);
+    if (!message_.isEmpty()) {
+        g.setColour(juce::Colours::white.withAlpha(0.6f));
+        g.drawFittedText(message_, getLocalBounds().withHeight(2 * kRowHeight), juce::Justification::topLeft, 3);
+        return;
+    }
+    int y = 0;
+    for (const auto& row : rows_) {
+        auto line = juce::Rectangle<int>(0, y, getWidth(), kRowHeight);
+        line.removeFromLeft(28); // the mute switch
+        g.setColour(roleColour(row.role));
+        g.fillEllipse(line.removeFromLeft(14).toFloat().withSizeKeepingCentre(10.0f, 10.0f));
+        line.removeFromLeft(6);
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        g.drawText(row.name, line.removeFromLeft(78), juce::Justification::centredLeft);
+        g.setColour(row.warn ? juce::Colour(0xffe5645a) : juce::Colours::white.withAlpha(0.7f));
+        const int assignedWidth = row.follow.isEmpty() ? line.getWidth() : line.getWidth() / 2;
+        g.drawText(row.assigned, line.removeFromLeft(assignedWidth), juce::Justification::centredLeft);
+        g.setColour(juce::Colours::white.withAlpha(0.45f));
+        g.drawText(row.follow, line, juce::Justification::centredLeft);
+        y += kRowHeight;
+    }
+    auto rest = getLocalBounds().withTrimmedTop(y + 10);
+    if (warnings_.isEmpty()) {
+        g.setColour(juce::Colour(0xff4fc3a1));
+        g.drawText(allFine_, rest.removeFromTop(kRowHeight), juce::Justification::centredLeft);
+        return;
+    }
+    g.setColour(juce::Colour(0xffe5645a));
+    for (const auto& warning : warnings_) {
+        g.drawFittedText(warning, rest.removeFromTop(2 * 16), juce::Justification::topLeft, 2);
+    }
+}
+
 } // namespace mm::plugin
