@@ -2587,6 +2587,21 @@ std::vector<ProcessorBase::VoiceName> ProcessorBase::playingVoiceNames() const {
     for (size_t index = 0; index < count; ++index) {
         names.push_back({pattern.voices[index].role, localisedVoiceName(pattern, index)});
     }
+    // The voices of the group, not of one slot: a stopped voice shows its own slot while the hub plays one with more
+    // voices, so the names that the slot lacks come from the first other slot that has them.
+    for (size_t index = count; index < static_cast<size_t>(mm::core::kMaxVoices); ++index) {
+        const mm::core::Pattern* other = nullptr;
+        for (size_t i = 0; i < mm::core::kSlotCount && other == nullptr; ++i) {
+            const auto* candidate = slots_.slot(i);
+            if (candidate != nullptr && candidate->pattern && index < candidate->pattern->voices.size()) {
+                other = &*candidate->pattern;
+            }
+        }
+        if (other == nullptr) {
+            break;
+        }
+        names.push_back({other->voices[index].role, localisedVoiceName(*other, index)});
+    }
     return names;
 }
 

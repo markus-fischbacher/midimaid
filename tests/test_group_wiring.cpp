@@ -7996,3 +7996,82 @@ TEST_CASE("the voice box names the voices like the lanes of the hub (D-258)", "[
     box->setSelectedId(2, juce::dontSendNotification);
     CHECK(waitFor([&] { return box->getText() == "2 \xc2\xb7 Melodie"; }));
 }
+
+TEST_CASE("the voice box names extra voices by their role (D-259)", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    mm::core::Pattern five = markedTwoVoices(41, 71);
+    const mm::core::VoiceRole extra[] = {mm::core::VoiceRole::Arp, mm::core::VoiceRole::Counter, mm::core::VoiceRole::Stabs};
+    for (size_t i = 0; i < 3; ++i) {
+        five.voices.push_back(five.voices[1]);
+        five.voices.back().role = extra[i];
+        five.voices.back().midiChannel = static_cast<int>(3 + i);
+        for (auto& note : five.voices.back().notes) {
+            note.id = mm::core::allocateNoteId(five);
+        }
+    }
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, five)); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* box = dynamic_cast<juce::ComboBox*>(find(*editor, "voice"));
+    REQUIRE(box != nullptr);
+    CHECK(waitFor([&] { return box->getItemText(0) == "1 \xc2\xb7 Bass"; }));
+    CHECK(box->getItemText(2) == "3 \xc2\xb7 Arpeggio");
+    CHECK(box->getItemText(3) == "4 \xc2\xb7 Gegenmelodie");
+    CHECK(box->getItemText(4) == "5 \xc2\xb7 Stabs");
+}
+
+TEST_CASE("the voice box of a voice instance names the hub's extra voices (D-259)", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    mm::core::Pattern five = markedTwoVoices(41, 71);
+    const mm::core::VoiceRole extra[] = {mm::core::VoiceRole::Arp, mm::core::VoiceRole::Counter, mm::core::VoiceRole::Stabs};
+    for (size_t i = 0; i < 3; ++i) {
+        five.voices.push_back(five.voices[1]);
+        five.voices.back().role = extra[i];
+        five.voices.back().midiChannel = static_cast<int>(3 + i);
+        for (auto& note : five.voices.back().notes) {
+            note.id = mm::core::allocateNoteId(five);
+        }
+    }
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, five)); });
+    runTo({&hub, &voice}, 2.0);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* box = dynamic_cast<juce::ComboBox*>(find(*editor, "voice"));
+    REQUIRE(box != nullptr);
+    CHECK(waitFor([&] { return box->getItemText(0) == "1 \xc2\xb7 Bass"; }));
+    CHECK(box->getItemText(2) == "3 \xc2\xb7 Arpeggio");
+    CHECK(box->getItemText(4) == "5 \xc2\xb7 Stabs");
+}
+
+TEST_CASE("a stopped voice names the voices of the group, not only those of its own slot (D-259)",
+          "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    mm::core::Pattern five = markedTwoVoices(41, 71);
+    const mm::core::VoiceRole extra[] = {mm::core::VoiceRole::Arp, mm::core::VoiceRole::Counter, mm::core::VoiceRole::Stabs};
+    for (size_t i = 0; i < 3; ++i) {
+        five.voices.push_back(five.voices[1]);
+        five.voices.back().role = extra[i];
+        five.voices.back().midiChannel = static_cast<int>(3 + i);
+        for (auto& note : five.voices.back().notes) {
+            note.id = mm::core::allocateNoteId(five);
+        }
+    }
+    hub.processor.editSlots([&](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(0, markedTwoVoices(41, 71)));
+        REQUIRE(bank.setResult(1, five));
+    });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* box = dynamic_cast<juce::ComboBox*>(find(*editor, "voice"));
+    REQUIRE(box != nullptr);
+    CHECK(waitFor([&] { return box->getItemText(0) == "1 \xc2\xb7 Bass"; }));
+    CHECK(box->getItemText(2) == "3 \xc2\xb7 Arpeggio");
+    CHECK(box->getItemText(3) == "4 \xc2\xb7 Gegenmelodie");
+    CHECK(box->getItemText(4) == "5 \xc2\xb7 Stabs");
+    CHECK(box->getItemText(5) == "Stimme 6");
+}
