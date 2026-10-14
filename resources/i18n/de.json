@@ -364,6 +364,7 @@
   "group.mixedFormats": "  |  Achtung: In diesem Projekt laufen AU- und VST3-Instanzen. Hub und Voices müssen dasselbe Format haben",
   "group.sandboxHint": " (liegt der Hub in diesem Projekt: der Host startet Plug-ins evtl. in getrennten Prozessen)",
   "inspector.group": "Gruppe",
+  "row.focusTip": "Klick auf den Namen: Spur in voller Höhe (nochmals klicken: alle)",
   "group.page.notHub": "Diese Instanz ist nicht der Hub. Die Gruppe verwaltet der Hub.",
   "group.page.noVoices": "Der Hub hat noch keine Stimmen.",
   "group.row.none": "keine Instanz",

@@ -123,6 +123,13 @@ public:
     /// What this instance plays now, for the editor's roll and the export: the pattern of the playing slot (the slot of
     /// the audio thread, before the first block the slot parameter) rendered for its voice with the octave. Message
     /// thread.
+    /// A voice of the pattern that plays: its role and the name the lanes show ("Bass", "Voice 3"), without the notes.
+    struct VoiceName {
+        mm::core::VoiceRole role = mm::core::VoiceRole::Bass;
+        juce::String name;
+    };
+    std::vector<VoiceName> playingVoiceNames() const;
+
     struct VoiceView {
         bool hasPattern = false;
         std::vector<mm::core::PatternNote> notes;

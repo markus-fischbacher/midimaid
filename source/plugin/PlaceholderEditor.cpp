@@ -738,6 +738,7 @@ void PlaceholderEditor::updateStatus() {
     }
     const bool isVoice = role == mm::core::InstanceRole::Voice;
     applyStoredSettings(); // until the file is read
+    updateVoiceNames();
     if (followButton_.getToggleState() != processor_.followPlayhead()) { // e.g. a state that was loaded later
         followButton_.setToggleState(processor_.followPlayhead(), juce::dontSendNotification);
     }
@@ -1369,6 +1370,21 @@ void PlaceholderEditor::applyFocus() {
     resized();
 }
 
+void PlaceholderEditor::updateVoiceNames() {
+    const auto names = processor_.playingVoiceNames();
+    for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
+        const auto plain = tr(keys::kVoiceN, {{"n", std::to_string(voice)}});
+        juce::String text = plain;
+        const auto index = static_cast<size_t>(voice) - 1;
+        if (index < names.size() && names[index].name != plain) {
+            text = juce::String(voice) + " \xc2\xb7 " + names[index].name; // the middle dot
+        }
+        if (voiceBox_.getItemText(voice - 1) != text) {
+            voiceBox_.changeItemText(voice, text);
+        }
+    }
+}
+
 void PlaceholderEditor::updateGroupPage() {
     using Info = mm::core::MemberInfo;
     const auto fill = [this](std::vector<GroupPanel::Row> rows, juce::String message, juce::StringArray warnings) {
@@ -1378,7 +1394,14 @@ void PlaceholderEditor::updateGroupPage() {
         fill({}, tr(keys::kGroupPageNotHub), {});
         return;
     }
-    const auto roles = shownRoles(processor_.playingVoices());
+    const auto names = processor_.playingVoiceNames();
+    std::vector<mm::core::VoiceRole> roles;
+    for (const auto& name : names) {
+        roles.push_back(name.role);
+    }
+    if (names.empty()) { // an empty slot: the voices of the settings
+        roles = shownRoles({});
+    }
     if (roles.empty()) {
         fill({}, tr(keys::kGroupPageNoVoices), {});
         return;
@@ -1396,7 +1419,7 @@ void PlaceholderEditor::updateGroupPage() {
         const int voice = static_cast<int>(i) + 1;
         GroupPanel::Row row;
         row.role = roles[i];
-        row.name = tr(mm::core::text::roleTextKey(roles[i]));
+        row.name = i < names.size() ? names[i].name : tr(mm::core::text::roleTextKey(roles[i]));
         std::vector<size_t> playing;
         for (size_t v = 0; v < voices.size(); ++v) {
             if (voices[v].outputVoice == voice) {

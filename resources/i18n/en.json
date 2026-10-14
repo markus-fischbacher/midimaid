@@ -364,6 +364,7 @@
   "group.mixedFormats": "  |  Warning: this project runs AU and VST3 instances. Hub and voices must have the same format",
   "group.sandboxHint": " (if the hub is in this project: the host may run plug-ins in separate processes)",
   "inspector.group": "Group",
+  "row.focusTip": "Click the name: lane in full height (click again: all)",
   "group.page.notHub": "This instance is not the hub. The hub manages the group.",
   "group.page.noVoices": "The hub has no voices yet.",
   "group.row.none": "no instance",

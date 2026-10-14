@@ -1344,7 +1344,7 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
   dritten Stimme ist nur eine Roll offen, die übrigen sind Leisten (Vorbereitung für bis zu 8 Stimmen).
 - [v1.1, umgesetzt, D-252] **Neue Aufteilung (ersetzt D-249):** Kopfzeile (Stil, Tonart, Skala, Takte, Rückgängig,
   Wiederholen, Details, Einstellungen), Slot-Leiste, Spuren mit Streifen (Name, Stumm, Sperre, Neu, Menü „…“ mit
-  Variation, Duplizieren; Fokus bleibt außen) und Geisterspur „+ Stimme“, unten das Dock (Neu/Ändern: Prompt, Energie, Kreativität,
+  Variation, Duplizieren; Fokus per Klick auf den Namen, D-258) und Geisterspur „+ Stimme“, unten das Dock (Neu/Ändern: Prompt, Energie, Kreativität,
   Erzeugen oder Verfeinern). Alles andere steht im Inspektor (standardmäßig zu) mit den Seiten Instanz, Muster,
   Bearbeiten und Evolve; der Experten-Schalter sitzt auf Instanz.
 - [v1.1, umgesetzt, D-255] **Seite „Gruppe“:** fünfte Inspektor-Seite (nur im Hub-Fenster): je Stimme Mute, spielende
@@ -1355,7 +1355,7 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
 - [v1.1, umgesetzt, D-250] **Stimmen-Leiste und Rollen:** über den Stimmen acht Punkte (gefüllt = Stimme im Pattern, Farbe
   nach Rolle, Klick springt zur Stimme), „+ Stimme“ (Menü: Stabs, Arpeggio, Gegenmelodie) erzeugt nur die neue Stimme,
   „– Stimme“ nimmt die letzte heraus (nie Bass und Melodie). Bis zu 8 Stimmen je Pattern (§3.1a).
-- Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Knopf „Fokus“
+- Piano-Roll: beide Spuren übereinander **oder** Fokus auf eine Spur (volle Höhe), umschaltbar per Klick auf den Namen
   je Zeile (die anderen Zeilen klappen zu Leisten zusammen, D-159); ein Kürzel gibt es nur als belegbare Aktion ab v1.1 (§8.3, D-126)
 - **Voice-Oberfläche** (kompakt, ca. 600 × 320 px): Gruppe und Stimme wählen, Spur der eigenen Stimme
   (nur lesend, Bearbeitung im Hub), Mute, Oktave, Schalter „Slot: folgt Hub / eigen“ (§6.1a), Drag & Drop, Ablage für Drum-Referenzen,

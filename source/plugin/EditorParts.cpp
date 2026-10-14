@@ -138,14 +138,13 @@ VoiceRow::VoiceRow(ProcessorBase& processor, int voice)
     addAndMakeVisible(lockButton_);
     lockButton_.addMouseListener(this, false); // a right click opens the menu of the dimensions
 
-    focusButton_.setComponentID("focus_" + juce::String(voice));
-    focusButton_.setButtonText(tr(mm::core::text::kRollFocus));
-    focusButton_.onClick = [this] {
+    nameLabel_.onClick = [this] {
         if (onFocusClicked) {
             onFocusClicked(voice_);
         }
     };
-    addAndMakeVisible(focusButton_); // always in reach: it is what the user works with most (D-253)
+    nameLabel_.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    nameLabel_.setTooltip(tr(mm::core::text::kRowFocusTip));
 
     renewButton_.setComponentID("renew_" + juce::String(voice));
     renewButton_.setButtonText(tr(mm::core::text::kButtonRenew));
@@ -506,8 +505,14 @@ void VoiceRow::setCollapsed(bool collapsed) {
     resized();
 }
 
+void FocusName::setFocused(bool focused) {
+    focused_ = focused;
+    setColour(juce::Label::textColourId, focused ? juce::Colour(0xff4fc3a1) : juce::Colours::white.withAlpha(0.85f));
+    setFont(juce::FontOptions(15.0f, focused ? juce::Font::bold : juce::Font::plain));
+}
+
 void VoiceRow::setFocused(bool focused) {
-    focusButton_.setToggleState(focused, juce::dontSendNotification);
+    nameLabel_.setFocused(focused);
 }
 
 void VoiceRow::paintOverChildren(juce::Graphics& g) {
@@ -665,16 +670,15 @@ void CommandPalette::listBoxItemClicked(int row, const juce::MouseEvent&) {
 
 void VoiceRow::resized() {
     // A lane: the strip on the left (name, the actions of every voice, the grip) and the roll; the rarer actions
-    // (Variation, Duplicate) are in the menu of the strip, Focus stays outside (D-252, D-253).
+    // (Variation, Duplicate) are in the menu of the strip; a click on the name focuses the lane (D-258).
     auto area = getLocalBounds().reduced(12, 2);
     constexpr int kStripWidth = 180;
     if (collapsed_) {
         auto strip = area.removeFromLeft(kCollapsedStripWidth);
-        nameLabel_.setBounds(strip.removeFromLeft(80));
+        nameLabel_.setBounds(strip.removeFromLeft(100));
         muteButton_.setBounds(strip.removeFromLeft(60).reduced(0, 4));
         lockButton_.setBounds(strip.removeFromLeft(70).reduced(0, 4));
         renewButton_.setBounds(strip.removeFromLeft(44).reduced(2, 4));
-        focusButton_.setBounds(strip.removeFromLeft(64).reduced(2, 4));
         moreButton_.setBounds(strip.removeFromLeft(32).reduced(2, 4));
         drag_.setBounds(area.removeFromLeft(60).withHeight(area.getHeight()));
         roll_.setBounds({});
@@ -693,8 +697,7 @@ void VoiceRow::resized() {
     lockButton_.setBounds(actions);
     left.removeFromTop(4);
     actions = left.removeFromTop(28);
-    renewButton_.setBounds(actions.removeFromLeft(actions.getWidth() / 2));
-    focusButton_.setBounds(actions);
+    renewButton_.setBounds(actions);
     drag_.setBounds(left.removeFromBottom(40));
     roll_.setBounds(area);
     // The groove controls sit in the title strip of the roll, at its right end (the name stands at the left).
