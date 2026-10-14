@@ -508,10 +508,15 @@ TEST_CASE("hub and voices on their own threads, with members coming and going, s
     std::atomic<bool> stop{false};
     std::atomic<long> violations{0};
     std::atomic<long> plans{0};
+    std::atomic<int> ready{0}; // all three audio threads start together: a late thread must not miss every plan
 
     const auto audioThread = [&](bool isHub, unsigned seed) {
         const int id = channel.acquire();
         GroupSync sync(channel, id);
+        ++ready;
+        while (ready.load() < 3) {
+            std::this_thread::yield();
+        }
         std::mt19937 random(seed);
         double ppq = 0.0;
         int slot = 1;

@@ -49,6 +49,8 @@ public:
     InspectorPage inspectorPage() const { return inspectorPage_; }
     void setInspectorPage(InspectorPage page);
     /// True while the dock refines the pattern of the slot instead of generating a new one.
+    /// Opens the command palette over the hub window (D-254); the voice window has none.
+    void openPalette();
     bool refining() const { return refineMode_ && shownInfo_.filled; }
 
 private:
@@ -129,6 +131,8 @@ private:
     juce::TextButton addVoiceButton_;    ///< "+ Voice": the menu of the roles to add
     juce::TextButton removeVoiceButton_; ///< takes the last voice out (never bass and melody)
     juce::TextButton inspectorButton_;   ///< opens and closes the inspector
+    juce::TextButton commandsButton_;    ///< opens the command palette (D-254)
+    CommandPalette palette_;             ///< the search for every rare action
     std::array<juce::TextButton, 4> inspectorTabs_; ///< one per `InspectorPage`
     juce::TextButton modeButton_;        ///< the dock: write a new pattern or change the one of the slot
     bool inspectorOpen_ = false;

@@ -1347,6 +1347,8 @@ Variationen per Knopf, Bearbeitung, Drum-Referenz, Referenzen, Transponieren und
   Variation, Duplizieren; Fokus bleibt außen) und Geisterspur „+ Stimme“, unten das Dock (Neu/Ändern: Prompt, Energie, Kreativität,
   Erzeugen oder Verfeinern). Alles andere steht im Inspektor (standardmäßig zu) mit den Seiten Instanz, Muster,
   Bearbeiten und Evolve; der Experten-Schalter sitzt auf Instanz.
+- [v1.1, umgesetzt, D-254] **Befehlspalette:** Knopf „Befehle“ in der Kopfzeile (und die belegbare Kürzel-Aktion
+  `palette`) öffnet ein Suchfeld mit allen Aktionen der Tastenkürzel; Return oder Klick führt aus. Nur im Hub.
 - [v1.1, umgesetzt, D-250] **Stimmen-Leiste und Rollen:** über den Stimmen acht Punkte (gefüllt = Stimme im Pattern, Farbe
   nach Rolle, Klick springt zur Stimme), „+ Stimme“ (Menü: Stabs, Arpeggio, Gegenmelodie) erzeugt nur die neue Stimme,
   „– Stimme“ nimmt die letzte heraus (nie Bass und Melodie). Bis zu 8 Stimmen je Pattern (§3.1a).

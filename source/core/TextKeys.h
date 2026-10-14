@@ -380,6 +380,10 @@ namespace mm::core::text {
     X(kShortcutAccent, "shortcut.accent")                                                                          \
     X(kShortcutSlide, "shortcut.slide")                                                                            \
     X(kShortcutRatchetOff, "shortcut.ratchetOff")                                                                  \
+    X(kShortcutPalette, "shortcut.palette")                                                                        \
+    X(kButtonCommands, "button.commands")                                                                          \
+    X(kPaletteSearch, "palette.search")                                                                            \
+    X(kPaletteEmpty, "palette.empty")                                                                              \
     X(kLabelShortcuts, "settings.shortcuts")                                                                       \
     X(kShortcutAction, "settings.shortcutAction")                                                                  \
     X(kShortcutAssign, "settings.shortcutAssign")                                                                  \
