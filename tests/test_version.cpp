@@ -4,5 +4,5 @@
 #include <string>
 
 TEST_CASE("core reports a version", "[core]") {
-    REQUIRE(std::string(mm::core::version()) == "0.0.1");
+    REQUIRE(std::string(mm::core::version()) == "1.0.0-rc1");
 }

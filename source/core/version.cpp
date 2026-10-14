@@ -3,7 +3,7 @@
 namespace mm::core {
 
 const char* version() {
-    return "0.0.1";
+    return "1.0.0-rc1";
 }
 
 } // namespace mm::core
