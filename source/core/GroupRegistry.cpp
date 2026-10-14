@@ -31,6 +31,15 @@ size_t GroupRegistry::voiceCount() const {
                                              [](const Entry& entry) { return entry.role == InstanceRole::Voice; }));
 }
 
+std::vector<MemberInfo> GroupRegistry::members() const {
+    std::vector<MemberInfo> out;
+    out.reserve(members_.size());
+    for (const auto& entry : members_) {
+        out.push_back({entry.id, entry.role, entry.outputVoice, statusOf(entry), entry.member->followsHub()});
+    }
+    return out;
+}
+
 GroupStatus GroupRegistry::statusOf(const Entry& entry) const {
     switch (entry.role) {
     case InstanceRole::Hub:

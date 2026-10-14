@@ -67,9 +67,20 @@ public:
     }
     /// The slot set of this member as it is now (the registry asks when a member becomes hub).
     virtual SlotSnapshot currentSlots() = 0;
+    /// Whether this member follows the hub's slot (D-255; false: it keeps its own slot). Informational, for the group page.
+    virtual bool followsHub() const { return true; }
 };
 
 using MemberId = uint64_t;
+
+/// What the group page shows of one member (D-255): a read-only copy, taken on the message thread.
+struct MemberInfo {
+    MemberId id = 0;
+    InstanceRole role = InstanceRole::Solo;
+    int outputVoice = 1;
+    GroupStatus status = GroupStatus::Solo;
+    bool followsHub = true;
+};
 
 /// The group of instances that share one process (SPEC 6.5, D-141): v1.0 knows one group with at most one hub.
 /// Message thread only, no JUCE, no audio thread. The plugin owns the one process-wide registry; the class itself has
@@ -108,6 +119,8 @@ public:
     size_t memberCount() const { return members_.size(); }
     /// The hub, or 0.
     MemberId hub() const { return hub_; }
+    /// All members in order of id (oldest first).
+    std::vector<MemberInfo> members() const;
 
 private:
     struct Entry {

@@ -52,6 +52,7 @@ public:
         return true;
     }
     SlotSnapshot currentSlots() override { return std::make_shared<const SlotBank>(bank); }
+    bool followsHub() const override { return follows; }
 
     GroupStatus status() const { return statuses.empty() ? GroupStatus::Solo : statuses.back(); }
     /// The first pitch of slot 1 in the last snapshot received, or -1.
@@ -71,6 +72,7 @@ public:
     std::vector<OverlayPtr> overlays;
     std::vector<std::optional<double>> overlayStamps;
     size_t voices = 0;
+    bool follows = true;
     std::function<void()> onSnapshotHook;
 };
 
@@ -457,4 +459,34 @@ TEST_CASE("a voice's variation trigger goes to the hub with the voice it names",
     registry.remove(hubId);
     CHECK_FALSE(registry.forwardVary(voiceId, 1)); // no hub, nobody to ask
     CHECK(hub->varied.size() == 3);
+}
+
+TEST_CASE("members lists every member oldest first with role, voice, status and slot follow", "[group]") {
+    GroupRegistry registry;
+    CHECK(registry.members().empty());
+    auto hub = std::make_shared<FakeMember>();
+    auto first = std::make_shared<FakeMember>();
+    auto second = std::make_shared<FakeMember>();
+    second->follows = false;
+    const auto voiceA = registry.add(first, InstanceRole::Voice, 3);
+    const auto hubId = registry.add(hub, InstanceRole::Hub);
+    const auto voiceB = registry.add(second, InstanceRole::Voice, 2);
+
+    const auto members = registry.members();
+    REQUIRE(members.size() == 3);
+    CHECK(members[0].id == voiceA);
+    CHECK(members[0].role == InstanceRole::Voice);
+    CHECK(members[0].outputVoice == 3);
+    CHECK(members[0].status == GroupStatus::VoiceConnected);
+    CHECK(members[0].followsHub);
+    CHECK(members[1].id == hubId);
+    CHECK(members[1].status == GroupStatus::Hub);
+    CHECK(members[2].id == voiceB);
+    CHECK_FALSE(members[2].followsHub);
+
+    registry.remove(hubId);
+    const auto after = registry.members();
+    REQUIRE(after.size() == 2);
+    CHECK(after[0].status == GroupStatus::HubOffered);
+    CHECK(after[1].status == GroupStatus::HubMissing);
 }

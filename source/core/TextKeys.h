@@ -66,6 +66,7 @@ namespace mm::core::text {
     X(kSectionEvolve, "section.evolve")                                                                                \
     X(kInspectorInstance, "inspector.instance")                                                                       \
     X(kInspectorEdit, "inspector.edit")                                                                               \
+    X(kInspectorGroup, "inspector.group")                                                                             \
     X(kButtonInspector, "button.inspector")                                                                           \
     X(kModeNew, "dock.new")                                                                                           \
     X(kModeRefine, "dock.refine")                                                                                     \
@@ -412,7 +413,18 @@ namespace mm::core::text {
     X(kUsageTokens, "status.usageTokens")                                                                              \
     X(kUsageCost, "status.usageCost")                                                                                  \
     X(kGroupMixedFormats, "group.mixedFormats")                                                                        \
-    X(kGroupSandboxHint, "group.sandboxHint")
+    X(kGroupSandboxHint, "group.sandboxHint")                                                                          \
+    X(kGroupPageNotHub, "group.page.notHub")                                                                           \
+    X(kGroupPageNoVoices, "group.page.noVoices")                                                                       \
+    X(kGroupRowNone, "group.row.none")                                                                                 \
+    X(kGroupRowInstance, "group.row.instance")                                                                         \
+    X(kGroupRowDuplicate, "group.row.duplicate")                                                                       \
+    X(kGroupRowOwnSlot, "group.row.ownSlot")                                                                           \
+    X(kGroupWarnMissing, "group.warn.missing")                                                                         \
+    X(kGroupWarnDuplicate, "group.warn.duplicate")                                                                     \
+    X(kGroupWarnExtra, "group.warn.extra")                                                                             \
+    X(kGroupWarnOk, "group.warn.ok")                                                                                   \
+    X(kGroupMuteTip, "group.mute.tip")
 
 #define MM_TEXT_KEY_CONSTANT(name, key) inline constexpr std::string_view name = key;
 MM_TEXT_KEYS(MM_TEXT_KEY_CONSTANT)

@@ -43,7 +43,7 @@ public:
     int variationStrength() const { return static_cast<int>(strengthSlider_.getValue()); }
 
     /// The pages of the inspector, the column of details that is closed by default (D-252).
-    enum class InspectorPage { Instance, Pattern, Edit, Evolve };
+    enum class InspectorPage { Instance, Pattern, Edit, Evolve, Group };
     bool inspectorOpen() const { return inspectorOpen_; }
     void setInspectorOpen(bool open);
     InspectorPage inspectorPage() const { return inspectorPage_; }
@@ -73,6 +73,8 @@ private:
     void updateVoiceView();
     /// The hub UI: fields, slot strip, rows of the playing slot, info line.
     void updateFullView();
+    /// Fills the group page from the registry (message thread).
+    void updateGroupPage();
     void updateRefineControls();
     /// The menu of the roles a voice can be added with (D-250), under the "+ Voice" button.
     void showAddVoiceMenu();
@@ -127,13 +129,14 @@ private:
     juce::ComboBox snapBox_;
     juce::ToggleButton expertButton_;
     juce::TextButton varyAllButton_;
+    GroupPanel groupPanel_{processor_}; ///< the group page of the inspector (D-255)
     VoiceBar voiceBar_;              ///< the eight voices as dots above the rows (D-250)
     juce::TextButton addVoiceButton_;    ///< "+ Voice": the menu of the roles to add
     juce::TextButton removeVoiceButton_; ///< takes the last voice out (never bass and melody)
     juce::TextButton inspectorButton_;   ///< opens and closes the inspector
     juce::TextButton commandsButton_;    ///< opens the command palette (D-254)
     CommandPalette palette_;             ///< the search for every rare action
-    std::array<juce::TextButton, 4> inspectorTabs_; ///< one per `InspectorPage`
+    std::array<juce::TextButton, 5> inspectorTabs_; ///< one per `InspectorPage`
     juce::TextButton modeButton_;        ///< the dock: write a new pattern or change the one of the slot
     bool inspectorOpen_ = false;
     InspectorPage inspectorPage_ = InspectorPage::Pattern;

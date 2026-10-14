@@ -47,6 +47,9 @@ public:
     bool onAction(mm::core::GroupAction action) override;
     bool onVary(int voice) override;
     mm::core::SlotSnapshot currentSlots() override;
+    bool followsHub() const override;
+    /// Message thread: this instance's id in the registry, or 0 while it has none.
+    mm::core::MemberId id() const { return id_; }
 
 private:
     explicit GroupLink(ProcessorBase& owner);

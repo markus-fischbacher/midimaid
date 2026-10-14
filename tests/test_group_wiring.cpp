@@ -7861,3 +7861,91 @@ TEST_CASE("the palette opens with its shortcut, only in the hub window", "[edito
     CHECK_FALSE(child<mm::plugin::CommandPalette>(*voiceEditor, "palette")->isOpen());
     CHECK_FALSE(find(*voiceEditor, "commands")->isVisible());
 }
+
+TEST_CASE("the group page lists the voices of the hub with their instances and warns about gaps (D-255)",
+          "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    REQUIRE(panel != nullptr);
+    auto* group = child<mm::plugin::GroupPanel>(*editor, "group_panel");
+    REQUIRE(group != nullptr);
+
+    // closed by default, and shown on its own tab only
+    CHECK_FALSE(group->isVisible());
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Pattern);
+    CHECK_FALSE(group->isVisible());
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Group);
+    CHECK(group->isVisible());
+    CHECK(find(*editor, "inspector_tab_4")->isVisible());
+
+    // no instance yet: both voices are missing
+    REQUIRE(waitFor([&] { return group->rows().size() == 2; }));
+    CHECK(group->rows()[0].warn);
+    CHECK(group->warnings().size() == 2);
+
+    Instance bass("Bass");
+    Instance lead("Lead");
+    bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    lead.setRole(InstanceRole::Voice, SlotFollow::Own, 2);
+    REQUIRE(waitFor([&] { return group->warnings().isEmpty() && group->rows().size() == 2; }));
+    CHECK_FALSE(group->rows()[0].warn);
+    CHECK(group->rows()[0].follow.isEmpty());
+    CHECK(group->rows()[1].follow.isNotEmpty()); // the second keeps its own slot
+
+    // two instances on voice 2, and one on a voice the pattern does not have
+    Instance twin("Twin");
+    Instance far("Far");
+    twin.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+    far.setRole(InstanceRole::Voice, SlotFollow::Hub, 5);
+    REQUIRE(waitFor([&] { return group->warnings().size() == 2; }));
+    CHECK(group->rows()[1].warn);
+    far.setRole(InstanceRole::Solo);
+    twin.setRole(InstanceRole::Solo);
+    REQUIRE(waitFor([&] { return group->warnings().isEmpty(); }));
+
+    // the mute switch is the hub's mute parameter of that voice
+    auto* mute = child<juce::ToggleButton>(*group, "group_mute_2");
+    REQUIRE(mute != nullptr);
+    CHECK(mute->isVisible());
+    CHECK_FALSE(child<juce::ToggleButton>(*group, "group_mute_3")->isVisible()); // the pattern has two voices
+    hub.setMute(2, true);
+    CHECK(waitFor([&] { return mute->getToggleState(); }));
+    hub.setMute(2, false);
+    CHECK(waitFor([&] { return !mute->getToggleState(); }));
+}
+
+TEST_CASE("the group page of an instance that is not the hub says so", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance solo("Solo");
+    std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
+    auto* group = child<mm::plugin::GroupPanel>(*editor, "group_panel");
+    REQUIRE(group != nullptr);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Group);
+    CHECK(group->isVisible());
+    CHECK(group->rows().empty());
+    CHECK_FALSE(child<juce::ToggleButton>(*group, "group_mute_1")->isVisible());
+}
+
+TEST_CASE("the group page lists the mixed formats among its warnings", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.processor.setFormatTag("au");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
+    Instance bass("Bass");
+    Instance lead("Lead");
+    bass.setRole(InstanceRole::Voice, SlotFollow::Hub, 1);
+    lead.setRole(InstanceRole::Voice, SlotFollow::Hub, 2);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* group = child<mm::plugin::GroupPanel>(*editor, "group_panel");
+    REQUIRE(group != nullptr);
+    showInspector(*editor, mm::plugin::PlaceholderEditor::InspectorPage::Group);
+    REQUIRE(waitFor([&] { return group->rows().size() == 2; }));
+    CHECK(waitFor([&] { return group->warnings().isEmpty(); }));
+    bass.processor.setFormatTag("vst3");
+    CHECK(waitFor([&] { return group->warnings().size() == 1 && group->warnings()[0].contains("VST3"); }));
+}

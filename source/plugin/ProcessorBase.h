@@ -470,6 +470,9 @@ public:
     /// lost hub. Safe to read from any thread; `acceptHubOffer` is for the message thread.
     mm::core::GroupStatus groupStatus() const;
     size_t groupVoices() const;
+    /// Message thread: the members of the process-wide group (oldest first) and this instance's id in it (0: none yet).
+    std::vector<mm::core::MemberInfo> groupMembers() const;
+    mm::core::MemberId groupMemberId() const;
     /// Instances of another plug-in format (AU and VST3) run in this process: a group cannot span them (D-222).
     bool otherFormatInProcess() const;
     /// Counts this instance under another format tag (tests: a test host has no wrapper type).
