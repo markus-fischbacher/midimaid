@@ -548,6 +548,25 @@ SettingsDialog::SettingsDialog(AiConnection& connection, std::function<GlobalSet
              {nullptr, {&drumMapHint_}, {}, 40, true},
              {nullptr, {&closeButton_}, {}, kControl, false, true}};
 
+    // The pages (D-257): the rows are listed in order of the old single column; the ranges below cut it into tabs.
+    for (size_t i = 0; i < rows_.size(); ++i) {
+        auto& row = rows_[i];
+        row.page = i < 14 ? Page::Ai : i < 19 ? Page::Transpose : i < 22 || i >= 25 ? Page::General : Page::Shortcuts;
+        row.needs = (i >= 1 && i <= 11 && i != 8) ? 1 : (i == 8 ? 2 : 0);
+    }
+    const std::array<std::string_view, 4> tabKeys{keys::kSettingsTabAi, keys::kSettingsTabTranspose,
+                                                  keys::kSettingsTabGeneral, keys::kSettingsTabShortcuts};
+    for (size_t i = 0; i < tabs_.size(); ++i) {
+        auto& tab = tabs_[i];
+        tab.setComponentID("settings_tab_" + juce::String(static_cast<int>(i)));
+        tab.setButtonText(tr(tabKeys[i]));
+        tab.setRadioGroupId(711);
+        tab.setClickingTogglesState(true);
+        tab.setToggleState(static_cast<Page>(i) == page_, juce::dontSendNotification);
+        tab.onClick = [this, i] { setPage(static_cast<Page>(i)); };
+        addAndMakeVisible(tab);
+    }
+
     fillProviders();
     selectProvider(selected_);
     setSize(kWidth, 100);
@@ -766,19 +785,33 @@ void SettingsDialog::updateConsent() {
     updating_ = false;
 }
 
-void SettingsDialog::updateVisibility() {
-    const bool any = entry() != nullptr;
-    const bool expert = settings_().get().expert;
-    for (auto* component : std::initializer_list<juce::Component*>{
-             &keyLabel_,    &keyEditor_,    &keySaveButton_, &keyRemoveButton_, &keyStatus_,
-             &urlLabel_,    &urlEditor_,    &modelLabel_,    &modelBox_,        &loadModelsButton_,
-             &modelStatus_, &timeoutLabel_, &timeoutEditor_, &tokensLabel_,     &tokensEditor_,
-             &testButton_,  &testStatus_,   &consentLabel_,  &consentToggle_,   &consentList_}) {
-        component->setVisible(any);
+bool SettingsDialog::shown(const Row& row) const {
+    if (row.page != page_) {
+        return false;
     }
-    levelLabel_.setVisible(any && expert);
-    levelBox_.setVisible(any && expert);
+    const bool any = entry() != nullptr;
+    return row.needs == 0 || (any && (row.needs == 1 || settings_().get().expert));
+}
+
+void SettingsDialog::updateVisibility() {
+    for (const auto& row : rows_) {
+        const bool visible = shown(row);
+        if (row.label != nullptr) {
+            row.label->setVisible(visible);
+        }
+        for (auto* control : row.controls) {
+            control->setVisible(visible || control == &closeButton_);
+        }
+    }
     layoutRows();
+}
+
+void SettingsDialog::setPage(Page page) {
+    page_ = page;
+    for (size_t i = 0; i < tabs_.size(); ++i) {
+        tabs_[i].setToggleState(static_cast<Page>(i) == page, juce::dontSendNotification);
+    }
+    updateVisibility();
 }
 
 void SettingsDialog::changeProvider(const std::function<void(mm::core::AiProviderSettings&)>& change) {
@@ -794,27 +827,47 @@ void SettingsDialog::changeAi(const std::function<void(mm::core::AiSettings&)>& 
     connection_.refresh();
 }
 
-void SettingsDialog::layoutRows() {
-    int height = kPad;
+int SettingsDialog::pageHeight(Page page) const {
+    int height = 0;
     bool first = true;
-    for (auto& row : rows_) {
-        if (!row.controls.front()->isVisible()) {
+    const auto saved = page_;
+    const_cast<SettingsDialog*>(this)->page_ = page; // `shown` reads the page; restored below
+    for (const auto& row : rows_) {
+        if (!shown(row) || row.controls.front() == &closeButton_) {
             continue;
         }
         height += (row.section && !first ? kSectionGap : 0) + row.height + kRowGap;
         first = false;
     }
-    setSize(kWidth, height - kRowGap + kPad);
+    const_cast<SettingsDialog*>(this)->page_ = saved;
+    return height;
+}
+
+void SettingsDialog::layoutRows() {
+    // One height for every page, so the window does not jump when the tab changes; the close button sits below.
+    int tallest = 0;
+    for (const auto page : {Page::Ai, Page::Transpose, Page::General, Page::Shortcuts}) {
+        tallest = std::max(tallest, pageHeight(page));
+    }
+    setSize(kWidth, kPad + kControl + kSectionGap + tallest + kControl + kPad);
     resized();
 }
 
 void SettingsDialog::resized() {
     // One column of labels and one of controls; every control is 34 px high, hints 22 px, groups are set apart by a line.
     dividers_.clear();
-    int y = kPad;
+    auto tabArea = juce::Rectangle<int>(kPad, kPad, getWidth() - 2 * kPad, kControl);
+    const int tabWidth = tabArea.getWidth() / static_cast<int>(tabs_.size());
+    for (auto& tab : tabs_) {
+        tab.setBounds(tabArea.removeFromLeft(tabWidth).reduced(2, 0));
+    }
+    int y = kPad + kControl + kSectionGap;
     bool first = true;
     for (auto& row : rows_) {
-        if (!row.controls.front()->isVisible()) {
+        if (row.controls.front() == &closeButton_) {
+            continue; // placed below
+        }
+        if (!shown(row)) {
             continue;
         }
         if (row.section && !first) {
@@ -823,11 +876,6 @@ void SettingsDialog::resized() {
         }
         first = false;
         juce::Rectangle<int> area(kPad, y, getWidth() - 2 * kPad, row.height);
-        if (row.controls.front() == &closeButton_) {
-            closeButton_.setBounds(area.removeFromRight(120));
-            y += row.height + kRowGap;
-            continue;
-        }
         if (row.label != nullptr) {
             row.label->setBounds(area.removeFromLeft(kLabelWidth));
         } else if (row.indent) {
@@ -857,6 +905,7 @@ void SettingsDialog::resized() {
         }
         y += row.height + kRowGap;
     }
+    closeButton_.setBounds(getLocalBounds().reduced(kPad).removeFromBottom(kControl).removeFromRight(120));
 }
 
 void SettingsDialog::paint(juce::Graphics& g) {

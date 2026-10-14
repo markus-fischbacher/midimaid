@@ -22,7 +22,6 @@ namespace mm::core::text {
     X(kVoiceCounter, "voice.counter")                                                                                  \
     X(kButtonAddVoice, "button.addVoice")                                                                              \
     X(kButtonRemoveVoice, "button.removeVoice")                                                                        \
-    X(kVoiceBarEmpty, "voicebar.empty")                                                                                \
     X(kStatusVoiceAdded, "status.voiceAdded")                                                                          \
     X(kStatusVoiceRemoved, "status.voiceRemoved")                                                                      \
     X(kStatusVoiceLimit, "status.voiceLimit")                                                                          \
@@ -61,12 +60,14 @@ namespace mm::core::text {
     X(kLabelPersonal, "label.personal")                                                                                \
     X(kStartRestart, "start.restart")                                                                                  \
     X(kSectionGenerator, "section.generator")                                                                          \
-    X(kSectionWishes, "section.wishes")                                                                                \
-    X(kSectionSwitch, "section.switch")                                                                                \
     X(kSectionEvolve, "section.evolve")                                                                                \
     X(kInspectorInstance, "inspector.instance")                                                                       \
     X(kInspectorEdit, "inspector.edit")                                                                               \
     X(kInspectorGroup, "inspector.group")                                                                             \
+    X(kSettingsTabAi, "settings.tab.ai")                                                                               \
+    X(kSettingsTabTranspose, "settings.tab.transpose")                                                                 \
+    X(kSettingsTabGeneral, "settings.tab.general")                                                                     \
+    X(kSettingsTabShortcuts, "settings.tab.shortcuts")                                                                 \
     X(kButtonInspector, "button.inspector")                                                                           \
     X(kModeNew, "dock.new")                                                                                           \
     X(kModeRefine, "dock.refine")                                                                                     \
