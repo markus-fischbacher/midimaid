@@ -1372,6 +1372,7 @@ void PlaceholderEditor::applyFocus() {
 
 void PlaceholderEditor::updateVoiceNames() {
     const auto names = processor_.playingVoiceNames();
+    bool renamed = false;
     for (int voice = 1; voice <= mm::core::kMaxVoices; ++voice) {
         const auto plain = tr(keys::kVoiceN, {{"n", std::to_string(voice)}});
         juce::String text = plain;
@@ -1381,7 +1382,11 @@ void PlaceholderEditor::updateVoiceNames() {
         }
         if (voiceBox_.getItemText(voice - 1) != text) {
             voiceBox_.changeItemText(voice, text);
+            renamed = true;
         }
+    }
+    if (renamed) { // the box keeps the old text of the chosen item until it is chosen again
+        voiceBox_.setSelectedId(processor_.instanceSettings().outputVoice, juce::dontSendNotification);
     }
 }
 

@@ -8075,3 +8075,36 @@ TEST_CASE("a stopped voice names the voices of the group, not only those of its 
     CHECK(box->getItemText(4) == "5 \xc2\xb7 Stabs");
     CHECK(box->getItemText(5) == "Stimme 6");
 }
+
+TEST_CASE("the closed voice box shows the new name of the chosen voice at once (D-260)", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* box = dynamic_cast<juce::ComboBox*>(find(*editor, "voice"));
+    REQUIRE(box != nullptr);
+    auto settings = hub.processor.instanceSettings();
+    settings.outputVoice = 2;
+    hub.processor.setInstanceSettings(settings);
+    CHECK(waitFor([&] { return box->getText() == "Stimme 2"; }));
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 71))); });
+    CHECK(waitFor([&] { return box->getText() == "2 \xc2\xb7 Melodie"; }));
+}
+
+TEST_CASE("a reopened voice window shows the name of the chosen voice (D-260)", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(0, markedTwoVoices(41, 71))); });
+    runTo({&hub, &voice}, 2.0);
+    auto settings = voice.processor.instanceSettings();
+    settings.outputVoice = 2;
+    voice.processor.setInstanceSettings(settings);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(voice.processor.createEditor());
+    auto* box = dynamic_cast<juce::ComboBox*>(find(*editor, "voice"));
+    REQUIRE(box != nullptr);
+    CHECK(waitFor([&] { return box->getItemText(1) == "2 \xc2\xb7 Melodie"; }));
+    CHECK(waitFor([&] { return box->getText() == "2 \xc2\xb7 Melodie"; }));
+}
