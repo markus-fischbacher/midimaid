@@ -2512,7 +2512,14 @@ const mm::core::Slot* ProcessorBase::playingSlotLocked(VoiceView& view) const {
     // The audio thread names the playing slot (a switch waits for its bar line), but only while the transport runs: a
     // stopped host may not call processBlock at all, and the view must show the slot that was just chosen or edited.
     const bool running = playheadPpq().has_value();
-    const int playing = running && handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
+    int playing = running && handover_.activeVersion() != 0 ? handover_.activeSlot() : activeSlot();
+    if (!running && slotMode_.load(std::memory_order_acquire) == static_cast<int>(mm::engine::SlotMode::FollowHub)) {
+        // A stopped voice that follows the hub shows the slot of the hub, not its own stored one (D-261).
+        const auto hub = mm::engine::processGroupChannel().hubState();
+        if (hub.valid && hub.slot >= 1) {
+            playing = hub.slot;
+        }
+    }
     const int slotIndex = std::clamp(playing, 1, static_cast<int>(mm::core::kSlotCount)) - 1;
     view.slot = slotIndex + 1;
     view.origin = slots_.origin();
