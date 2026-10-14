@@ -661,6 +661,12 @@ PlaceholderEditor::PlaceholderEditor(ProcessorBase& processor)
     statusLabel_.setMinimumHorizontalScale(1.0f); // the hub hint is long: wrap instead of squeezing
     addAndMakeVisible(statusLabel_);
 
+    commandsButton_.setComponentID("commands");
+    commandsButton_.setButtonText(tr(keys::kButtonCommands));
+    commandsButton_.onClick = [this] { openPalette(); };
+    addChildComponent(commandsButton_);
+    palette_.onRun = [this](const std::string& action) { runShortcut(action); };
+    addChildComponent(palette_);
     inspectorButton_.setComponentID("inspector");
     inspectorButton_.setButtonText(tr(keys::kButtonInspector));
     inspectorButton_.setClickingTogglesState(true);
@@ -1051,6 +1057,7 @@ void PlaceholderEditor::syncZoomBox() {
 
 void PlaceholderEditor::applyLayout(bool voiceLayout) {
     voiceLayout_ = voiceLayout;
+    palette_.close();
     styleBox_.setVisible(!voiceLayout);
     muteButton_.setVisible(voiceLayout);
     octaveBox_.setVisible(voiceLayout);
@@ -1059,7 +1066,7 @@ void PlaceholderEditor::applyLayout(bool voiceLayout) {
     dragHandle_->setVisible(voiceLayout);
     for (auto* component : std::initializer_list<juce::Component*>{&keyBox_, &scaleBox_, &barsBox_, &infoLabel_,
                                                                    &settingsButton_, &undoButton_, &redoButton_,
-                                                                   &addVoiceButton_, &inspectorButton_}) {
+                                                                   &addVoiceButton_, &inspectorButton_, &commandsButton_}) {
         component->setVisible(!voiceLayout);
     }
     applyLevel();
@@ -1168,7 +1175,24 @@ bool PlaceholderEditor::keyPressed(const juce::KeyPress& press) {
     return true; // the key was assigned to an action: the host does not get it
 }
 
+void PlaceholderEditor::openPalette() {
+    if (voiceLayout_) {
+        return;
+    }
+    const int width = std::min(420, getWidth() - 40);
+    const int height = std::min(340, getHeight() - 80);
+    palette_.setBounds((getWidth() - width) / 2, 56, width, height);
+    palette_.open();
+}
+
 bool PlaceholderEditor::runShortcut(const std::string& action) {
+    if (action == "palette") {
+        if (voiceLayout_) {
+            return false;
+        }
+        openPalette();
+        return true;
+    }
     const auto press = [](juce::Button& button) {
         if (!button.isEnabled()) {
             return false;
@@ -1832,6 +1856,8 @@ void PlaceholderEditor::resized() {
     settingsButton_.setBounds(header.removeFromRight(90));
     header.removeFromRight(6);
     inspectorButton_.setBounds(header.removeFromRight(90));
+    header.removeFromRight(6);
+    commandsButton_.setBounds(header.removeFromRight(90));
     header.removeFromRight(6);
     redoButton_.setBounds(header.removeFromRight(90));
     header.removeFromRight(6);

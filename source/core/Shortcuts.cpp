@@ -9,7 +9,7 @@ namespace mm::core {
 
 namespace {
 
-constexpr std::array<ShortcutAction, 35> kActions{{
+constexpr std::array<ShortcutAction, 36> kActions{{
     {"undo", "shortcut.undo"},
     {"redo", "shortcut.redo"},
     {"duplicate", "shortcut.duplicate"},
@@ -45,6 +45,7 @@ constexpr std::array<ShortcutAction, 35> kActions{{
     {"accent", "shortcut.accent"},
     {"slide", "shortcut.slide"},
     {"ratchet_off", "shortcut.ratchetOff"},
+    {"palette", "shortcut.palette"},
 }};
 
 bool isNamedKey(const std::string& key) {

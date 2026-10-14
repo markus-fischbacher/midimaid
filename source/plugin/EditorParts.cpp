@@ -4,6 +4,7 @@
 #include "core/ParameterRegister.h"
 #include "core/TextKeys.h"
 #include "plugin/EmbeddedTranslation.h"
+#include "core/Shortcuts.h"
 #include "plugin/MidiMaidLookAndFeel.h"
 #include "plugin/UserGrooveStore.h"
 
@@ -536,6 +537,130 @@ void VoiceRow::filesDropped(const juce::StringArray& files, int, int) {
     if (const auto file = firstMidiFile(files); file != juce::File() && onMidiDropped) {
         onMidiDropped(voice_, file);
     }
+}
+
+CommandPalette::CommandPalette() : list_("commands", this) {
+    setComponentID("palette");
+    search_.setComponentID("palette_search");
+    search_.setTextToShowWhenEmpty(tr(mm::core::text::kPaletteSearch), juce::Colours::white.withAlpha(0.4f));
+    search_.addListener(this);
+    addAndMakeVisible(search_);
+    list_.setComponentID("palette_list");
+    list_.setRowHeight(28);
+    list_.setColour(juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
+    addAndMakeVisible(list_);
+    setWantsKeyboardFocus(false);
+    setVisible(false);
+}
+
+void CommandPalette::open() {
+    search_.clear();
+    refill();
+    setVisible(true);
+    toFront(true);
+    search_.grabKeyboardFocus();
+}
+
+void CommandPalette::close() {
+    if (!isVisible()) {
+        return;
+    }
+    setVisible(false);
+    if (auto* parent = getParentComponent()) {
+        parent->grabKeyboardFocus();
+    }
+}
+
+void CommandPalette::setSearch(const juce::String& text) {
+    search_.setText(text, juce::dontSendNotification);
+    refill();
+}
+
+void CommandPalette::refill() {
+    listed_.clear();
+    names_.clear();
+    const auto needle = search_.getText().trim().toLowerCase();
+    for (const auto& action : mm::core::shortcutActions()) {
+        if (action.id == "palette") {
+            continue;
+        }
+        const auto name = tr(action.textKey);
+        if (needle.isEmpty() || name.toLowerCase().contains(needle)) {
+            listed_.emplace_back(action.id);
+            names_.push_back(name);
+        }
+    }
+    list_.updateContent();
+    list_.repaint();
+    if (!listed_.empty()) {
+        list_.selectRow(0);
+    }
+}
+
+void CommandPalette::moveSelection(int delta) {
+    if (listed_.empty()) {
+        return;
+    }
+    const int row = std::clamp(list_.getSelectedRow() + delta, 0, static_cast<int>(listed_.size()) - 1);
+    list_.selectRow(row);
+}
+
+bool CommandPalette::runSelected() {
+    const int row = list_.getSelectedRow();
+    if (row < 0 || static_cast<size_t>(row) >= listed_.size()) {
+        return false;
+    }
+    const auto action = listed_[static_cast<size_t>(row)];
+    close();
+    if (onRun) {
+        onRun(action);
+    }
+    return true;
+}
+
+void CommandPalette::paint(juce::Graphics& g) {
+    g.setColour(juce::Colour(MidiMaidLookAndFeel::kSurface));
+    g.fillRoundedRectangle(getLocalBounds().toFloat(), 8.0f);
+    if (listed_.empty()) {
+        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.drawText(tr(mm::core::text::kPaletteEmpty), list_.getBounds(), juce::Justification::centred);
+    }
+}
+
+void CommandPalette::resized() {
+    auto area = getLocalBounds().reduced(10);
+    search_.setBounds(area.removeFromTop(32));
+    area.removeFromTop(6);
+    list_.setBounds(area);
+}
+
+bool CommandPalette::keyPressed(const juce::KeyPress& press) {
+    if (press == juce::KeyPress::escapeKey) {
+        close();
+        return true;
+    }
+    if (press == juce::KeyPress::downKey || press == juce::KeyPress::upKey) {
+        moveSelection(press == juce::KeyPress::downKey ? 1 : -1);
+        return true;
+    }
+    return false;
+}
+
+void CommandPalette::paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected) {
+    if (row < 0 || static_cast<size_t>(row) >= names_.size()) {
+        return;
+    }
+    if (selected) {
+        g.setColour(juce::Colour(MidiMaidLookAndFeel::kAccent).withAlpha(0.25f));
+        g.fillRoundedRectangle(0.0f, 1.0f, static_cast<float>(width), static_cast<float>(height - 2), 4.0f);
+    }
+    g.setColour(juce::Colours::white.withAlpha(selected ? 1.0f : 0.8f));
+    g.drawText(names_[static_cast<size_t>(row)], 10, 0, width - 20, height, juce::Justification::centredLeft);
+}
+
+void CommandPalette::listBoxItemClicked(int row, const juce::MouseEvent&) {
+    list_.selectRow(row);
+    runSelected();
 }
 
 void VoiceRow::resized() {

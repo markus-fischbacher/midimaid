@@ -7803,3 +7803,61 @@ TEST_CASE("a lane keeps Focus in reach and puts the rare actions behind a menu",
         CHECK_FALSE(find(*editor, id)->isVisible());
     }
 }
+
+// --- The command palette (D-254) ---------------------------------------------------------------------------------------
+
+TEST_CASE("the command palette lists the actions, filters them and runs the chosen one", "[editor][palette]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    auto* palette = child<mm::plugin::CommandPalette>(*editor, "palette");
+    auto* button = dynamic_cast<juce::Button*>(find(*editor, "commands"));
+    REQUIRE((panel != nullptr && palette != nullptr && button != nullptr));
+    pumpMessages(60);
+    CHECK_FALSE(palette->isOpen());
+    CHECK(button->isVisible());
+    CHECK(button->getButtonText() == "Befehle");
+
+    button->triggerClick();
+    REQUIRE(waitFor([&] { return palette->isOpen(); }));
+    CHECK(editor->getLocalBounds().contains(palette->getBounds()));
+    CHECK(palette->listed().size() == mm::core::shortcutActions().size() - 1); // all but the palette itself
+    CHECK(std::find(palette->listed().begin(), palette->listed().end(), "palette") == palette->listed().end());
+
+    palette->setSearch("spurfokus stimme 2");
+    REQUIRE(palette->listed().size() == 1);
+    CHECK(palette->listed().front() == "focus_2");
+    palette->setSearch("gibt es nicht");
+    CHECK(palette->listed().empty());
+    CHECK_FALSE(palette->runSelected());
+    CHECK(palette->isOpen());
+
+    palette->setSearch("Spurfokus Stimme 2");
+    CHECK(palette->runSelected());
+    CHECK_FALSE(palette->isOpen()); // closed before the action runs
+    CHECK(panel->focusedVoice() == 2);
+}
+
+TEST_CASE("the palette opens with its shortcut, only in the hub window", "[editor][palette]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* panel = dynamic_cast<mm::plugin::PlaceholderEditor*>(editor.get());
+    auto* palette = child<mm::plugin::CommandPalette>(*editor, "palette");
+    REQUIRE((panel != nullptr && palette != nullptr));
+    CHECK(panel->runShortcut("palette"));
+    CHECK(palette->isOpen());
+    CHECK(palette->listed().size() > 10);
+
+    Instance voice("Voice");
+    voice.setRole(InstanceRole::Voice);
+    std::unique_ptr<juce::AudioProcessorEditor> voiceEditor(voice.processor.createEditor());
+    auto* voicePanel = dynamic_cast<mm::plugin::PlaceholderEditor*>(voiceEditor.get());
+    REQUIRE(voicePanel != nullptr);
+    CHECK_FALSE(voicePanel->runShortcut("palette"));
+    CHECK_FALSE(child<mm::plugin::CommandPalette>(*voiceEditor, "palette")->isOpen());
+    CHECK_FALSE(find(*voiceEditor, "commands")->isVisible());
+}

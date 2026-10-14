@@ -13,6 +13,44 @@ namespace mm::plugin {
 /// The accent colour of a voice role (D-250): the bass is teal, the melodic roles have colours of their own.
 juce::Colour roleColour(mm::core::VoiceRole role);
 
+/// The command palette (D-254): a search field and the list of the actions the keyboard shortcuts know (SPEC 8.3). A
+/// click or Return runs the chosen one; Escape or a click outside closes it. It keeps the rare actions off the surface.
+class CommandPalette : public juce::Component, private juce::ListBoxModel, private juce::TextEditor::Listener {
+public:
+    CommandPalette();
+    /// Opens with an empty search; the field takes the keyboard focus.
+    void open();
+    void close();
+    bool isOpen() const { return isVisible(); }
+    /// The ids of the actions the current search lists, best first.
+    const std::vector<std::string>& listed() const { return listed_; }
+    void setSearch(const juce::String& text);
+    /// Moves the selection (+1 down, -1 up) and runs the selected action: close first, then `onRun`.
+    void moveSelection(int delta);
+    bool runSelected();
+    /// Called with the id of the chosen action, after the palette has closed.
+    std::function<void(const std::string&)> onRun;
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+    bool keyPressed(const juce::KeyPress& press) override;
+    void mouseDown(const juce::MouseEvent&) override {}
+
+private:
+    int getNumRows() override { return static_cast<int>(listed_.size()); }
+    void paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected) override;
+    void listBoxItemClicked(int row, const juce::MouseEvent&) override;
+    void textEditorTextChanged(juce::TextEditor&) override { refill(); }
+    void textEditorReturnKeyPressed(juce::TextEditor&) override { runSelected(); }
+    void textEditorEscapeKeyPressed(juce::TextEditor&) override { close(); }
+    void refill();
+
+    juce::TextEditor search_;
+    juce::ListBox list_;
+    std::vector<std::string> listed_;
+    std::vector<juce::String> names_; ///< the shown name of each listed action
+};
+
 /// The strip of the eight voices above the rows (D-250): one dot per voice, filled where the pattern has a voice, in the
 /// colour of its role, the focused voice ringed. A click on a filled dot jumps to the voice; a click on an empty one asks
 /// the editor for the menu of roles to add.

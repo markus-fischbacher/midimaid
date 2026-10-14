@@ -246,6 +246,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Stilregeln für die neuen Rollen: eigene Archetypen-Listen je Stil für Stabs, Arp und Gegenmelodie (STYLES.md, D-251; Schritt 3 von 3)
 - [x] Hub-UI radikal neu: Kopfzeile, Spuren mit Streifen und „…“-Menü, Geisterspur, Dock Neu/Ändern, Inspektor mit vier Seiten, standardmäßig zu (SPEC §8.1, D-252; Befehlspalette Cmd-K und Voice-Fenster folgen)
 - [x] Fokus-Knopf wieder außen, Voice-Fenster im Stil des Hubs (SPEC §8.1, D-253)
+- [x] Befehlspalette mit Suche für alle Kürzel-Aktionen, Knopf „Befehle“ und belegbares Kürzel (SPEC §8.1, §8.3, D-254)
 - [x] Geschmacks-Zusammenfassung im KI-Prompt, ohne Noten auch ohne Zustimmung (SPEC §3.20, §7.4, D-248)
 - [x] Trigger-Parameter Generieren/Variation (SPEC §3.13, D-218)
 - [ ] Session-Ansicht: Slot per Clip-Hüllkurve, Beispiele in der Live-Vorlage

@@ -16,7 +16,7 @@ TEST_CASE("the actions have unique ids and texts and cover the list of the spec"
     for (const char* id : {"undo", "redo", "duplicate", "select_all", "delete", "pitch_up", "pitch_down", "octave_up",
                            "octave_down", "move_left", "move_right", "longer", "shorter", "grid_finer", "grid_coarser",
                            "triplets", "snap_toggle", "fold_toggle", "focus_1", "focus_8", "focus_all", "generate",
-                           "refine_send", "vary", "history_back", "history_forward"}) {
+                           "refine_send", "vary", "history_back", "history_forward", "palette"}) {
         CHECK(findShortcutAction(id) != nullptr);
     }
     CHECK(findShortcutAction("") == nullptr);
