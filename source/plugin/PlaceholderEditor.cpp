@@ -1901,12 +1901,12 @@ void PlaceholderEditor::layoutVoiceWindow() {
     auto area = getLocalBounds();
 
     auto header = area.removeFromTop(44).reduced(kPad, 5);
-    takeOverButton_.setBounds(header.removeFromRight(130));
-    roleBox_.setBounds(header.removeFromLeft(110));
+    takeOverButton_.setBounds(header.removeFromRight(120));
+    roleBox_.setBounds(header.removeFromLeft(100));
     header.removeFromLeft(kGap);
-    voiceBox_.setBounds(header.removeFromLeft(110));
+    voiceBox_.setBounds(header.removeFromLeft(180)); // "4 · Gegenmelodie" on one line
     header.removeFromLeft(kGap);
-    followBox_.setBounds(header.removeFromLeft(170));
+    followBox_.setBounds(header.removeFromLeft(150));
     outputBox_.setBounds(followBox_.getBounds()); // never visible together
 
     auto dock = area.removeFromBottom(48).reduced(kPad, 7);

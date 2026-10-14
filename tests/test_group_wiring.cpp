@@ -8108,3 +8108,25 @@ TEST_CASE("a reopened voice window shows the name of the chosen voice (D-260)", 
     CHECK(waitFor([&] { return box->getItemText(1) == "2 \xc2\xb7 Melodie"; }));
     CHECK(waitFor([&] { return box->getText() == "2 \xc2\xb7 Melodie"; }));
 }
+
+TEST_CASE("a stopped voice that follows the hub shows the slot of the hub (D-261)", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    Instance voice("Voice");
+    hub.setRole(InstanceRole::Hub);
+    voice.setRole(InstanceRole::Voice);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) {
+        REQUIRE(bank.setResult(0, markedTwoVoices(41, 71)));
+        REQUIRE(bank.setResult(1, markedTwoVoices(42, 72)));
+    });
+    hub.setPlaying(false);
+    voice.setPlaying(false);
+    REQUIRE(waitFor([&] { return voice.processor.groupStatus() == GroupStatus::VoiceConnected; }));
+    hub.setSlotParameter(2);
+    CHECK(waitFor([&] {
+        hub.step(); // the hub reports its slot even though the transport stands still
+        voice.step();
+        const auto view = voice.processor.playingVoice();
+        return view.slot == 2 && view.hasPattern;
+    }));
+}
