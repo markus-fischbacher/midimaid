@@ -193,6 +193,28 @@ private:
 /// The first MIDI file (.mid, .midi) of a drag, or an empty file.
 juce::File firstMidiFile(const juce::StringArray& files);
 
+/// The name of a voice in its lane: a click on it gives the voice the whole height (D-258). The focused name has the
+/// accent colour and is bold.
+class FocusName : public juce::Label {
+public:
+    std::function<void()> onClick;
+    void triggerClick() {
+        if (onClick) {
+            onClick();
+        }
+    }
+    bool focused() const { return focused_; }
+    void setFocused(bool focused);
+    void mouseUp(const juce::MouseEvent& event) override {
+        if (event.mouseWasClicked() && getLocalBounds().contains(event.getPosition())) {
+            triggerClick();
+        }
+    }
+
+private:
+    bool focused_ = false;
+};
+
 /// One voice of the hub UI (SPEC 8.1): name, Mute (host parameter `mute_<voice>`), the piano roll and the grip to
 /// drag the voice's file into the host, the lock of the voice (SPEC 3.5) and the action buttons: "Neu" (renews the
 /// voice), "Variation" (varies it with the strength the editor holds) and "Duplizieren" (the selection of the roll).
@@ -247,13 +269,12 @@ private:
     ProcessorBase& processor_;
     int voice_;
     bool dropHighlight_ = false;
-    juce::Label nameLabel_;
+    FocusName nameLabel_;
     juce::ToggleButton muteButton_;
     juce::ToggleButton lockButton_;
     mm::core::LockFlags lockFlags_; ///< what the view showed last: the menu ticks follow it
-    static constexpr int kCollapsedStripWidth = 352; ///< a folded lane's strip: name, five buttons and the menu
+    static constexpr int kCollapsedStripWidth = 308; ///< a folded lane's strip: name, three buttons and the menu
     juce::TextButton moreButton_; ///< the menu of Variation and Duplicate
-    juce::ToggleButton focusButton_;
     juce::TextButton renewButton_;
     juce::TextButton varyButton_;
     juce::TextButton duplicateButton_;

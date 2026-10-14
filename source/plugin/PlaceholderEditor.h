@@ -75,6 +75,8 @@ private:
     void updateFullView();
     /// Fills the group page from the registry (message thread).
     void updateGroupPage();
+    /// The items of the voice box carry the names of the lanes: "1 · Bass", "2 · Melody", "Voice 3" (D-258).
+    void updateVoiceNames();
     void updateRefineControls();
     /// The menu of the roles a voice can be added with (D-250), under the "+ Voice" button.
     void showAddVoiceMenu();

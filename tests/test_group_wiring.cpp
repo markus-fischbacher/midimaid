@@ -3215,12 +3215,12 @@ struct FocusRig {
         REQUIRE(waitFor([&] { return roll2->source().size() == 1; }));
     }
     juce::Component& row(int voice) { return *find(*editor, "row_" + juce::String(voice)); }
-    juce::Button& focusButton(int voice) {
-        return *dynamic_cast<juce::Button*>(find(*editor, "focus_" + juce::String(voice)));
+    mm::plugin::FocusName& focusName(int voice) {
+        return *dynamic_cast<mm::plugin::FocusName*>(find(*editor, "name_" + juce::String(voice)));
     }
     /// The click is posted to the message queue: wait until the editor has the focus it should have.
     void click(int voice, int expectedFocus) {
-        focusButton(voice).triggerClick();
+        focusName(voice).triggerClick();
         REQUIRE(waitFor([&] { return panel->focusedVoice() == expectedFocus; }));
     }
 
@@ -3237,7 +3237,7 @@ struct FocusRig {
 TEST_CASE("the focus switch gives one voice the whole height and folds the others into strips", "[focus][editor]") {
     FocusRig rig;
     CHECK(rig.panel->focusedVoice() == 0);
-    CHECK(rig.focusButton(1).getButtonText() == "Fokus");
+    CHECK(rig.focusName(1).getText() == "Bass");
     const int half = rig.row(1).getHeight();
     CHECK(std::abs(half - rig.row(2).getHeight()) <= 1);
     CHECK(rig.roll1->isVisible());
@@ -3245,8 +3245,8 @@ TEST_CASE("the focus switch gives one voice the whole height and folds the other
 
     rig.click(1, 1);
     CHECK(rig.panel->focusedVoice() == 1);
-    CHECK(rig.focusButton(1).getToggleState());
-    CHECK_FALSE(rig.focusButton(2).getToggleState());
+    CHECK(rig.focusName(1).focused());
+    CHECK_FALSE(rig.focusName(2).focused());
     CHECK(rig.row(2).getHeight() == 36);
     CHECK(rig.row(1).getHeight() == 2 * half - 36);
     CHECK(rig.roll1->isVisible());
@@ -3266,7 +3266,7 @@ TEST_CASE("the focus switch gives one voice the whole height and folds the other
 
     rig.click(1, 0); // the same switch again: back to all
     CHECK(rig.panel->focusedVoice() == 0);
-    CHECK_FALSE(rig.focusButton(1).getToggleState());
+    CHECK_FALSE(rig.focusName(1).focused());
     CHECK(rig.roll2->isVisible());
     CHECK(rig.row(1).getHeight() == half);
     CHECK(rig.row(2).getHeight() == half);
@@ -3274,8 +3274,8 @@ TEST_CASE("the focus switch gives one voice the whole height and folds the other
     rig.click(1, 1);
     rig.click(2, 2); // another voice takes the focus
     CHECK(rig.panel->focusedVoice() == 2);
-    CHECK_FALSE(rig.focusButton(1).getToggleState());
-    CHECK(rig.focusButton(2).getToggleState());
+    CHECK_FALSE(rig.focusName(1).focused());
+    CHECK(rig.focusName(2).focused());
     CHECK(rig.row(1).getHeight() == 36);
     CHECK_FALSE(rig.roll1->isVisible());
     CHECK(rig.roll2->isVisible());
@@ -3328,7 +3328,7 @@ TEST_CASE("the focus goes back to all when the focused voice is gone", "[focus][
     three.voices.back().notes[0].id = mm::core::allocateNoteId(three);
     rig.solo.processor.editSlots([&](mm::core::SlotBank& bank) { REQUIRE(bank.setResult(1, three)); });
     rig.solo.processor.selectSlot(2);
-    REQUIRE(waitFor([&] { return find(*rig.editor, "focus_3") != nullptr; }));
+    REQUIRE(waitFor([&] { return find(*rig.editor, "name_3") != nullptr; }));
 
     rig.click(3, 3);
     REQUIRE(rig.panel->focusedVoice() == 3);
@@ -3336,11 +3336,11 @@ TEST_CASE("the focus goes back to all when the focused voice is gone", "[focus][
     CHECK(rig.row(2).getHeight() == 36);
 
     rig.solo.processor.selectSlot(1); // two voices again
-    REQUIRE(waitFor([&] { return find(*rig.editor, "focus_3") == nullptr; }));
+    REQUIRE(waitFor([&] { return find(*rig.editor, "name_3") == nullptr; }));
     CHECK(rig.panel->focusedVoice() == 0);
     CHECK(rig.row(1).getHeight() > 36);
     CHECK(std::abs(rig.row(1).getHeight() - rig.row(2).getHeight()) <= 1);
-    CHECK_FALSE(rig.focusButton(1).getToggleState());
+    CHECK_FALSE(rig.focusName(1).focused());
 }
 
 TEST_CASE("a focus on a voice that still exists survives another pattern", "[focus][editor]") {
@@ -3351,7 +3351,7 @@ TEST_CASE("a focus on a voice that still exists survives another pattern", "[foc
     REQUIRE(waitFor([&] { return rig.roll2->source().front().pitch == 44; }));
     CHECK(rig.panel->focusedVoice() == 2);
     CHECK(rig.row(1).getHeight() == 36);
-    CHECK(rig.focusButton(2).getToggleState());
+    CHECK(rig.focusName(2).focused());
 }
 
 TEST_CASE("the strip of a folded row still mutes and locks its voice", "[focus][editor]") {
@@ -3616,12 +3616,12 @@ TEST_CASE("Duplizieren rounds the offset up to the grid of the roll", "[buttons]
 
 TEST_CASE("the strip of a folded row keeps its action buttons", "[buttons][editor][focus]") {
     ActionRig rig;
-    rig.button("focus_1").triggerClick();
+    dynamic_cast<mm::plugin::FocusName*>(find(*rig.editor, "name_1"))->triggerClick();
     REQUIRE(waitFor([&] { return rig.panel->focusedVoice() == 1; }));
     auto& row = *find(*rig.editor, "row_2");
     REQUIRE(row.getHeight() == 36);
     // Variation, Duplicate and Focus sit in the menu of "..." (D-252); the strip keeps what is used all the time
-    for (const char* id : {"renew_2", "focus_2", "more_2", "mute_2", "lock_2", "drag_2"}) {
+    for (const char* id : {"renew_2", "name_2", "more_2", "mute_2", "lock_2", "drag_2"}) {
         auto* component = find(*rig.editor, id);
         REQUIRE(component != nullptr);
         INFO(id);
@@ -7791,7 +7791,7 @@ TEST_CASE("a lane keeps Focus in reach and puts the rare actions behind a menu",
     Instance solo("Solo");
     std::unique_ptr<juce::AudioProcessorEditor> editor(solo.processor.createEditor());
     pumpMessages(60);
-    for (const char* id : {"more_1", "more_2", "mute_1", "lock_1", "renew_1", "focus_1", "focus_2", "drag_1"}) {
+    for (const char* id : {"more_1", "more_2", "mute_1", "lock_1", "renew_1", "name_1", "name_2", "drag_1"}) {
         INFO(id);
         REQUIRE(find(*editor, id) != nullptr);
         CHECK(find(*editor, id)->isVisible());
@@ -7948,4 +7948,51 @@ TEST_CASE("the group page lists the mixed formats among its warnings", "[group-w
     CHECK(waitFor([&] { return group->warnings().isEmpty(); }));
     bass.processor.setFormatTag("vst3");
     CHECK(waitFor([&] { return group->warnings().size() == 1 && group->warnings()[0].contains("VST3"); }));
+}
+
+
+TEST_CASE("there is no focus button: the name of a lane is the switch and shows the focus (D-258)", "[focus][editor]") {
+    FocusRig rig;
+    CHECK(find(*rig.editor, "focus_1") == nullptr);
+    CHECK(find(*rig.editor, "focus_2") == nullptr);
+    CHECK(find(*rig.editor, "renew_1")->getWidth() >= 120); // Renew has the row that Focus left
+    const auto accent = juce::Colour(0xff4fc3a1);
+    const auto colour = [&](int voice) { return rig.focusName(voice).findColour(juce::Label::textColourId); };
+    CHECK(colour(1) != accent);
+    rig.click(1, 1);
+    CHECK(rig.focusName(1).focused());
+    CHECK(colour(1) == accent);
+    CHECK(colour(2) != accent);
+    rig.click(1, 0); // the same name again: all voices
+    CHECK_FALSE(rig.focusName(1).focused());
+    CHECK(colour(1) != accent);
+}
+
+TEST_CASE("a real mouse click on the name of a lane changes the focus", "[focus][editor]") {
+    FocusRig rig;
+    auto& name = rig.focusName(2);
+    const auto at = juce::Point<float>(5.0f, 5.0f);
+    const auto now = juce::Time::getCurrentTime();
+    auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+    const auto up = juce::MouseEvent(mouse, at, juce::ModifierKeys(), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, &name, &name, now, at, now,
+                                     1, false);
+    name.mouseUp(up);
+    CHECK(waitFor([&] { return rig.panel->focusedVoice() == 2; }));
+}
+
+TEST_CASE("the voice box names the voices like the lanes of the hub (D-258)", "[group-wiring][editor]") {
+    Quiet quiet;
+    Instance hub("Hub");
+    hub.setRole(InstanceRole::Hub);
+    hub.processor.editSlots([](mm::core::SlotBank& bank) { bank.setResult(0, markedTwoVoices(41, 71)); });
+    std::unique_ptr<juce::AudioProcessorEditor> editor(hub.processor.createEditor());
+    auto* box = dynamic_cast<juce::ComboBox*>(find(*editor, "voice"));
+    REQUIRE(box != nullptr);
+    CHECK(waitFor([&] { return box->getItemText(0) == "1 \xc2\xb7 Bass"; }));
+    CHECK(box->getItemText(1) == "2 \xc2\xb7 Melodie");
+    CHECK(box->getItemText(2) == "Stimme 3"); // the pattern has no third voice
+    CHECK(box->getNumItems() == mm::core::kMaxVoices);
+    // the shown text of the chosen voice follows too
+    box->setSelectedId(2, juce::dontSendNotification);
+    CHECK(waitFor([&] { return box->getText() == "2 \xc2\xb7 Melodie"; }));
 }

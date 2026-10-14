@@ -64,6 +64,7 @@ namespace mm::core::text {
     X(kInspectorInstance, "inspector.instance")                                                                       \
     X(kInspectorEdit, "inspector.edit")                                                                               \
     X(kInspectorGroup, "inspector.group")                                                                             \
+    X(kRowFocusTip, "row.focusTip")                                                                                    \
     X(kSettingsTabAi, "settings.tab.ai")                                                                               \
     X(kSettingsTabTranspose, "settings.tab.transpose")                                                                 \
     X(kSettingsTabGeneral, "settings.tab.general")                                                                     \

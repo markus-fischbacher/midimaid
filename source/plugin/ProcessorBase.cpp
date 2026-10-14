@@ -2460,6 +2460,15 @@ juce::String voiceDisplayName(const mm::core::Pattern& pattern, size_t voiceInde
     return "Voice " + juce::String(static_cast<int>(voiceIndex) + 1);
 }
 
+
+/// What the lanes of the hub call the voice: the role for the first voice of it, "Voice n" for the others.
+juce::String localisedVoiceName(const mm::core::Pattern& pattern, size_t voiceIndex) {
+    if (voiceIndex < pattern.voices.size() && !voiceDisplayName(pattern, voiceIndex).startsWith("Voice")) {
+        return tr(mm::core::text::roleTextKey(pattern.voices[voiceIndex].role));
+    }
+    return tr(mm::core::text::kVoiceN, {{"n", std::to_string(voiceIndex + 1)}});
+}
+
 } // namespace
 
 ProcessorBase::VoiceView ProcessorBase::playingVoice() const {
@@ -2562,9 +2571,23 @@ void ProcessorBase::fillVoiceLocked(VoiceView& view, const mm::core::Pattern& pa
                  note.lock, note.chance, note.condA, note.condB});
         }
     }
-    view.displayName = view.voiceName.startsWith("Voice")
-                           ? tr(mm::core::text::kVoiceN, {{"n", std::to_string(voiceIndex + 1)}})
-                           : tr(mm::core::text::roleTextKey(view.role));
+    view.displayName = localisedVoiceName(pattern, voiceIndex);
+}
+
+std::vector<ProcessorBase::VoiceName> ProcessorBase::playingVoiceNames() const {
+    std::vector<VoiceName> names;
+    const juce::ScopedLock lock(slotsLock_);
+    VoiceView base;
+    const auto* slot = playingSlotLocked(base);
+    if (slot == nullptr || !slot->pattern) {
+        return names;
+    }
+    const mm::core::Pattern& pattern = *slot->pattern;
+    const size_t count = std::min<size_t>(pattern.voices.size(), mm::core::kMaxVoices);
+    for (size_t index = 0; index < count; ++index) {
+        names.push_back({pattern.voices[index].role, localisedVoiceName(pattern, index)});
+    }
+    return names;
 }
 
 std::array<bool, mm::core::kSlotCount> ProcessorBase::slotUsage() const {

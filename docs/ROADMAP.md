@@ -247,6 +247,7 @@ Reihenfolge nach Nutzen im Live-Einsatz. Jeder Block ist eine eigene kleine Phas
 - [x] Hub-UI radikal neu: Kopfzeile, Spuren mit Streifen und „…“-Menü, Geisterspur, Dock Neu/Ändern, Inspektor mit Seiten, standardmäßig zu (SPEC §8.1, D-252; Voice-Fenster D-253, Befehlspalette D-254, Seite „Gruppe“ D-255)
 - [x] Fokus-Knopf wieder außen, Voice-Fenster im Stil des Hubs (SPEC §8.1, D-253)
 - [x] Befehlspalette mit Suche für alle Kürzel-Aktionen, Knopf „Befehle“ und belegbares Kürzel (SPEC §8.1, §8.3, D-254)
+- [x] Fokus per Klick auf den Namen (kein Knopf mehr), Stimmenauswahl mit den Namen des Hubs (SPEC §8.1, D-258)
 - [x] Einstellungen auf vier Reitern (KI, Transposition, Allgemein, Tastenkürzel), gleiche Fensterhöhe (SPEC §8.2, D-257)
 - [x] Seite „Gruppe“ im Inspektor: Stimmen mit Mute, Instanz und Slot-Folgen, Warnungen an einer Stelle (SPEC §8.1, D-255)
 - [x] Geschmacks-Zusammenfassung im KI-Prompt, ohne Noten auch ohne Zustimmung (SPEC §3.20, §7.4, D-248)
